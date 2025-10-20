@@ -1,0 +1,14 @@
+version: "2"
+sql:
+  - engine: "sqlite"
+    queries: "pkg/sqlite/queries"
+    schema: "pkg/sqlite/schema"
+    gen:
+      go:
+        package: "sqlcgen"
+        out: "pkg/sqlite/sqlcgen"
+        emit_json_tags: true
+        emit_prepared_queries: true
+        emit_interface: true
+        emit_exact_table_names: false
+        emit_empty_slices: true

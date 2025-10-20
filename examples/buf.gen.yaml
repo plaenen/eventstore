@@ -1,0 +1,21 @@
+version: v2
+managed:
+  enabled: false
+plugins:
+  # Generate protobuf messages
+  - remote: buf.build/protocolbuffers/go
+    out: pb
+    opt:
+      - paths=source_relative
+
+  # Generate Connect RPC
+  - remote: buf.build/connectrpc/go
+    out: pb
+    opt:
+      - paths=source_relative
+
+  # Generate Event Sourcing boilerplate using go run
+  - local: ["go", "run", "github.com/plaenen/eventsourcing/cmd/protoc-gen-eventsourcing"]
+    out: pb
+    opt:
+      - paths=source_relative

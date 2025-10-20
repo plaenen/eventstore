@@ -1,0 +1,253 @@
+version: '3'
+
+vars:
+  EXAMPLES_DIR: examples
+  CMD_DIR: cmd
+  PKG_DIR: pkg
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+
+  # Installation tasks
+  install:deps:
+    desc: Install all required dependencies
+    cmds:
+      - go install github.com/bufbuild/buf/cmd/buf@latest
+      - go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+      - go install github.com/vektra/mockery/v2@latest
+      - go mod download
+
+  install:plugin:
+    desc: Install protoc-gen-eventsourcing plugin
+    dir: "{{.CMD_DIR}}/protoc-gen-eventsourcing"
+    cmds:
+      - go install .
+
+  # Code generation tasks
+  generate:
+    desc: Generate all proto code and SQLC
+    deps: [generate:proto, generate:sqlc]
+
+  generate:sqlc:
+    desc: Generate SQLC code from SQL queries
+    cmds:
+      - sqlc generate
+    sources:
+      - pkg/sqlite/schema/*.sql
+      - pkg/sqlite/queries/*.sql
+      - sqlc.yaml
+    generates:
+      - pkg/sqlite/sqlcgen/*.go
+
+  generate:proto:
+    desc: Generate protobuf code using workspace
+    cmds:
+      - task: generate:proto:copy-options
+      - task: generate:proto:buf
+
+  generate:proto:copy-options:
+    desc: Copy eventsourcing options.proto to examples
+    cmds:
+      - mkdir -p examples/proto/eventsourcing
+      - cp proto/eventsourcing/options.proto examples/proto/eventsourcing/options.proto
+    sources:
+      - proto/eventsourcing/options.proto
+    generates:
+      - examples/proto/eventsourcing/options.proto
+
+  generate:proto:buf:
+    desc: Run buf generate for examples
+    dir: examples
+    cmds:
+      - rm -f .task/checksum/generate-proto-buf
+      - buf generate
+    sources:
+      - proto/**/*.proto
+      - buf.yaml
+      - buf.gen.yaml
+    generates:
+      - pb/*.pb.go
+      - pb/*connect/*.go
+
+  generate:mocks:
+    desc: Generate mock implementations for testing
+    cmds:
+      - mockery --all --dir pkg --output pkg/mocks
+
+  # Build tasks
+  build:
+    desc: Build all binaries
+    deps: [build:plugin]
+
+  build:plugin:
+    desc: Build protoc-gen-eventsourcing plugin
+    dir: "{{.CMD_DIR}}/protoc-gen-eventsourcing"
+    cmds:
+      - go build -o ../../bin/protoc-gen-eventsourcing .
+    sources:
+      - "*.go"
+      - "**/*.go"
+    generates:
+      - ../../bin/protoc-gen-eventsourcing
+
+  # Linting and formatting tasks
+  lint:
+    desc: Run all linters
+    deps: [lint:go, lint:proto]
+
+  lint:go:
+    desc: Run golangci-lint on Go code
+    cmds:
+      - golangci-lint run ./...
+
+  lint:proto:
+    desc: Lint proto files with buf
+    dir: "{{.EXAMPLES_DIR}}"
+    cmds:
+      - buf lint
+
+  fmt:
+    desc: Format all code
+    deps: [fmt:go, fmt:proto]
+
+  fmt:go:
+    desc: Format Go code with gofmt
+    cmds:
+      - gofmt -w -s .
+
+  fmt:proto:
+    desc: Format proto files with buf
+    dir: "{{.EXAMPLES_DIR}}"
+    cmds:
+      - buf format -w
+
+  # Testing tasks
+  test:
+    desc: Run all tests
+    cmds:
+      - go test -v -race -coverprofile=coverage.out ./...
+
+  test:unit:
+    desc: Run unit tests only
+    cmds:
+      - go test -v -race -short ./...
+
+  test:integration:
+    desc: Run integration tests
+    dir: "{{.EXAMPLES_DIR}}/bankaccount"
+    cmds:
+      - go test -v -race ./integration_test.go
+
+  test:examples:
+    desc: Run all example tests
+    dir: "{{.EXAMPLES_DIR}}/bankaccount"
+    cmds:
+      - go test -v -race ./...
+
+  test:coverage:
+    desc: Run tests and show coverage report
+    cmds:
+      - go test -v -race -coverprofile=coverage.out ./...
+      - go tool cover -html=coverage.out -o coverage.html
+      - echo "Coverage report generated at coverage.html"
+
+  # Clean tasks
+  clean:
+    desc: Clean all generated files and build artifacts
+    deps: [clean:proto, clean:build]
+
+  clean:proto:
+    desc: Clean generated proto files
+    dir: "{{.EXAMPLES_DIR}}"
+    cmds:
+      - rm -rf pb/*.pb.go
+      - rm -rf pb/*connect/
+
+  clean:build:
+    desc: Clean build artifacts
+    cmds:
+      - rm -rf bin/
+      - go clean -cache
+      - go clean -testcache
+
+  # Development workflow tasks
+  dev:setup:
+    desc: Complete setup for new developers
+    cmds:
+      - task: install:deps
+      - task: generate
+      - task: test
+
+  dev:check:
+    desc: Run all checks before committing
+    cmds:
+      - task: fmt
+      - task: lint
+      - task: test
+
+  # Breaking change detection
+  breaking:
+    desc: Check for breaking changes in proto definitions
+    dir: "{{.EXAMPLES_DIR}}"
+    cmds:
+      - buf breaking --against '.git#branch=main'
+
+  # Database migration tasks
+  migrate:up:
+    desc: Run all pending migrations
+    dir: pkg/sqlite
+    cmds:
+      - echo "Migrations are embedded and run automatically with AutoMigrate=true"
+      - echo "To run migrations manually, use store.RunMigrations() in your code"
+
+  migrate:create:
+    desc: Create a new migration file
+    cmds:
+      - |
+        if [ -z "{{.NAME}}" ]; then
+          echo "Usage: task migrate:create NAME=migration_name"
+          exit 1
+        fi
+        TIMESTAMP=$(date +%s)
+        UP_FILE="pkg/sqlite/migrations/${TIMESTAMP}_{{.NAME}}.up.sql"
+        DOWN_FILE="pkg/sqlite/migrations/${TIMESTAMP}_{{.NAME}}.down.sql"
+        echo "-- Migration: {{.NAME}}" > "$UP_FILE"
+        echo "-- Add your UP migration here" >> "$UP_FILE"
+        echo "" >> "$UP_FILE"
+        echo "-- Migration: {{.NAME}}" > "$DOWN_FILE"
+        echo "-- Add your DOWN migration here" >> "$DOWN_FILE"
+        echo "" >> "$DOWN_FILE"
+        echo "Created migration files:"
+        echo "  $UP_FILE"
+        echo "  $DOWN_FILE"
+
+  # Dependency management
+  tidy:
+    desc: Tidy and verify go.mod
+    cmds:
+      - go mod tidy
+      - go mod verify
+
+  # Watch tasks (requires entr or similar)
+  watch:test:
+    desc: Watch for changes and run tests
+    cmds:
+      - find . -name '*.go' | entr -c task test
+
+  # Example-specific tasks
+  example:run:
+    desc: Run bank account example
+    dir: "{{.EXAMPLES_DIR}}/bankaccount"
+    cmds:
+      - go run ./cmd/server/main.go
+
+  example:clean:
+    desc: Clean old example files in wrong locations
+    cmds:
+      - rm -rf {{.EXAMPLES_DIR}}/bankaccount/proto/
+      - rm -f {{.EXAMPLES_DIR}}/bankaccount/account.pb.go
+      - rm -f {{.EXAMPLES_DIR}}/bankaccount/*.connect.go
+      - echo "Cleaned old example files"
