@@ -1,0 +1,85 @@
+syntax = "proto3";
+
+package eventsourcing;
+
+option go_package = "github.com/plaenen/eventsourcing/examples/pb/eventsourcing;eventsourcing";
+
+import "google/protobuf/descriptor.proto";
+
+// AggregateOptions defines options for aggregate configuration
+message AggregateOptions {
+  // The name of the aggregate this message belongs to
+  string aggregate = 1;
+
+  // For events: optional field mapping when event field names differ from aggregate field names
+  // Maps event field -> aggregate field (e.g., "initial_balance" -> "balance")
+  // If not specified, direct field name mapping is used (event.field_name -> aggregate.field_name)
+  map<string, string> field_mapping = 2;
+
+  // For commands: the event(s) that this command produces
+  // A command can produce one or more events
+  repeated string produces_events = 3;
+
+  // For commands: unique constraints to enforce (domain rules)
+  // These represent domain-level uniqueness requirements (e.g., "email must be unique")
+  // Exposed at API level for better error messages and client-side validation hints
+  repeated UniqueConstraint unique_constraints = 4;
+}
+
+message UniqueConstraint {
+  // Name of the unique index
+  string index_name = 1;
+
+  // Field in the command that provides the value
+  string field = 2;
+
+  // Operation type (claim or release)
+  ConstraintOperation operation = 3;
+}
+
+enum ConstraintOperation {
+  CONSTRAINT_OPERATION_UNSPECIFIED = 0;
+  CONSTRAINT_OPERATION_CLAIM = 1;
+  CONSTRAINT_OPERATION_RELEASE = 2;
+}
+
+// AggregateRootOptions marks a proto message as an aggregate root
+// and configures how it should be generated
+message AggregateRootOptions {
+  // The field name that contains the aggregate ID (e.g., "account_id")
+  string id_field = 1;
+
+  // The aggregate type name (e.g., "Account")
+  // If not specified, uses the message name
+  string type_name = 2;
+}
+
+// EventOptions defines options for event configuration
+message EventOptions {
+  // The name of the aggregate this event belongs to
+  string aggregate = 1;
+
+  // List of aggregate fields that this event updates
+  // If empty, all event fields (except timestamp, version) are applied
+  repeated string applies_to_state = 2;
+
+  // Optional field mapping when event field names differ from aggregate field names
+  // Maps event field -> aggregate field (e.g., "initial_balance" -> "balance")
+  map<string, string> field_mapping = 3;
+
+  // For events that release unique constraints
+  repeated UniqueConstraint unique_constraints = 4;
+}
+
+// Extend message options
+extend google.protobuf.MessageOptions {
+  AggregateOptions aggregate_options = 50001;
+  AggregateRootOptions aggregate_root = 50003;
+  EventOptions event_options = 50004;
+}
+
+// Extend service options to mark aggregate services
+extend google.protobuf.ServiceOptions {
+  // The name of the aggregate this service operates on
+  string aggregate_name = 50002;
+}

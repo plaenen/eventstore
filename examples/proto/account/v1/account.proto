@@ -1,0 +1,262 @@
+syntax = "proto3";
+
+package account.v1;
+
+option go_package = "github.com/plaenen/eventsourcing/examples/pb/account/v1;accountv1";
+
+import "eventsourcing/options.proto";
+
+// AccountCommandService handles write operations (commands)
+service AccountCommandService {
+  option (eventsourcing.aggregate_name) = "Account";
+  // OpenAccount creates a new bank account
+  rpc OpenAccount(OpenAccountCommand) returns (OpenAccountResponse);
+
+  // Deposit adds money to an account
+  rpc Deposit(DepositCommand) returns (DepositResponse);
+
+  // Withdraw removes money from an account
+  rpc Withdraw(WithdrawCommand) returns (WithdrawResponse);
+
+  // CloseAccount closes an existing account
+  rpc CloseAccount(CloseAccountCommand) returns (CloseAccountResponse);
+}
+
+// AccountQueryService handles read operations (queries)
+service AccountQueryService {
+  // GetAccount retrieves account details by ID
+  rpc GetAccount(GetAccountRequest) returns (AccountView);
+
+  // ListAccounts retrieves all accounts with pagination
+  rpc ListAccounts(ListAccountsRequest) returns (ListAccountsResponse);
+
+  // GetAccountBalance retrieves just the balance
+  rpc GetAccountBalance(GetAccountBalanceRequest) returns (BalanceView);
+
+  // GetAccountHistory retrieves transaction history
+  rpc GetAccountHistory(GetAccountHistoryRequest) returns (AccountHistoryResponse);
+}
+
+// Commands (Write Side)
+
+message OpenAccountCommand {
+  option (eventsourcing.aggregate_options) = {
+    aggregate: "Account"
+    produces_events: "AccountOpenedEvent"
+    unique_constraints: {
+      index_name: "account_id"
+      field: "account_id"
+      operation: CONSTRAINT_OPERATION_CLAIM
+    }
+  };
+
+  string account_id = 1;
+  string owner_name = 2;
+  string initial_balance = 3; // Decimal as string
+}
+
+message OpenAccountResponse {
+  string account_id = 1;
+  int64 version = 2;
+}
+
+message DepositCommand {
+  option (eventsourcing.aggregate_options) = {
+    aggregate: "Account"
+    produces_events: "MoneyDepositedEvent"
+  };
+
+  string account_id = 1;
+  string amount = 2;
+}
+
+message DepositResponse {
+  string new_balance = 1;
+  int64 version = 2;
+}
+
+message WithdrawCommand {
+  option (eventsourcing.aggregate_options) = {
+    aggregate: "Account"
+    produces_events: "MoneyWithdrawnEvent"
+  };
+
+  string account_id = 1;
+  string amount = 2;
+}
+
+message WithdrawResponse {
+  string new_balance = 1;
+  int64 version = 2;
+}
+
+message CloseAccountCommand {
+  option (eventsourcing.aggregate_options) = {
+    aggregate: "Account"
+    produces_events: "AccountClosedEvent"
+    unique_constraints: {
+      index_name: "account_id"
+      field: "account_id"
+      operation: CONSTRAINT_OPERATION_RELEASE
+    }
+  };
+
+  string account_id = 1;
+}
+
+message CloseAccountResponse {
+  string final_balance = 1;
+  int64 version = 2;
+}
+
+// Queries (Read Side)
+
+message GetAccountRequest {
+  string account_id = 1;
+}
+
+message AccountView {
+  string account_id = 1;
+  string owner_name = 2;
+  string balance = 3;
+  AccountStatus status = 4;
+  int64 version = 5;
+  int64 created_at = 6;
+  int64 updated_at = 7;
+}
+
+message ListAccountsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListAccountsResponse {
+  repeated AccountView accounts = 1;
+  string next_page_token = 2;
+  int32 total_count = 3;
+}
+
+message GetAccountBalanceRequest {
+  string account_id = 1;
+}
+
+message BalanceView {
+  string account_id = 1;
+  string balance = 2;
+  int64 version = 3;
+}
+
+message GetAccountHistoryRequest {
+  string account_id = 1;
+  int32 limit = 2;
+}
+
+message AccountHistoryResponse {
+  repeated TransactionView transactions = 1;
+}
+
+message TransactionView {
+  string transaction_id = 1;
+  TransactionType type = 2;
+  string amount = 3;
+  string balance_after = 4;
+  int64 timestamp = 5;
+}
+
+enum AccountStatus {
+  ACCOUNT_STATUS_UNSPECIFIED = 0;
+  ACCOUNT_STATUS_OPEN = 1;
+  ACCOUNT_STATUS_CLOSED = 2;
+}
+
+enum TransactionType {
+  TRANSACTION_TYPE_UNSPECIFIED = 0;
+  TRANSACTION_TYPE_OPENED = 1;
+  TRANSACTION_TYPE_DEPOSIT = 2;
+  TRANSACTION_TYPE_WITHDRAWAL = 3;
+  TRANSACTION_TYPE_CLOSED = 4;
+}
+
+// Aggregate State (Domain Model)
+
+message Account {
+  option (eventsourcing.aggregate_root) = {
+    id_field: "account_id"
+    type_name: "Account"
+  };
+
+  string account_id = 1;
+  string owner_name = 2;
+  string balance = 3;
+  AccountStatus status = 4;
+}
+
+// Events (Internal - used for event sourcing)
+
+message AccountOpenedEvent {
+  option (eventsourcing.event_options) = {
+    aggregate: "Account"
+    applies_to_state: ["account_id", "owner_name", "balance"]
+    field_mapping: {
+      key: "initial_balance"
+      value: "balance"
+    }
+  };
+
+  string account_id = 1;
+  string owner_name = 2;
+  string initial_balance = 3;
+  int64 timestamp = 4;
+}
+
+message MoneyDepositedEvent {
+  option (eventsourcing.event_options) = {
+    aggregate: "Account"
+    applies_to_state: ["balance"]
+    field_mapping: {
+      key: "new_balance"
+      value: "balance"
+    }
+  };
+
+  string account_id = 1;
+  string amount = 2;
+  string new_balance = 3;
+  int64 timestamp = 4;
+}
+
+message MoneyWithdrawnEvent {
+  option (eventsourcing.event_options) = {
+    aggregate: "Account"
+    applies_to_state: ["balance"]
+    field_mapping: {
+      key: "new_balance"
+      value: "balance"
+    }
+  };
+
+  string account_id = 1;
+  string amount = 2;
+  string new_balance = 3;
+  int64 timestamp = 4;
+}
+
+message AccountClosedEvent {
+  option (eventsourcing.event_options) = {
+    aggregate: "Account"
+    applies_to_state: ["status"]
+    field_mapping: {
+      key: "final_balance"
+      value: "balance"
+    }
+    unique_constraints: {
+      index_name: "account_id"
+      field: "account_id"
+      operation: CONSTRAINT_OPERATION_RELEASE
+    }
+  };
+
+  string account_id = 1;
+  string final_balance = 2;
+  int64 timestamp = 3;
+}
