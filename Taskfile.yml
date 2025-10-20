@@ -47,6 +47,7 @@ tasks:
     cmds:
       - task: generate:proto:copy-options
       - task: generate:proto:buf
+      - task: generate:proto:unified-sdk
 
   generate:proto:copy-options:
     desc: Copy eventsourcing options.proto to examples
@@ -71,6 +72,17 @@ tasks:
     generates:
       - pb/*.pb.go
       - pb/*connect/*.go
+
+  generate:proto:unified-sdk:
+    desc: Generate unified SDK from all service clients
+    cmds:
+      - go build -o .task/bin/generate-unified-sdk ./cmd/generate-unified-sdk
+      - ./.task/bin/generate-unified-sdk ./examples/pb ./pkg/unifiedsdk/generated.go
+    sources:
+      - examples/pb/**/*_sdk.pb.go
+      - cmd/generate-unified-sdk/*.go
+    generates:
+      - pkg/unifiedsdk/generated.go
 
   generate:mocks:
     desc: Generate mock implementations for testing

@@ -14,7 +14,7 @@ import (
 )
 
 // OpenAccount handles opening a new bank account with business validation
-func (a *Account) OpenAccount(_ context.Context, cmd *OpenAccountCommand, metadata eventsourcing.EventMetadata) error {
+func (a *AccountAggregate) OpenAccount(_ context.Context, cmd *OpenAccountCommand, metadata eventsourcing.EventMetadata) error {
 	// Business validation
 	if cmd.OwnerName == "" {
 		return fmt.Errorf("owner name is required")
@@ -46,7 +46,7 @@ func (a *Account) OpenAccount(_ context.Context, cmd *OpenAccountCommand, metada
 }
 
 // Deposit handles depositing money into the account
-func (a *Account) Deposit(_ context.Context, cmd *DepositCommand, metadata eventsourcing.EventMetadata) error {
+func (a *AccountAggregate) Deposit(_ context.Context, cmd *DepositCommand, metadata eventsourcing.EventMetadata) error {
 	// Business validation: account must be open
 	if a.Status != AccountStatus_ACCOUNT_STATUS_OPEN {
 		return fmt.Errorf("account is not open")
@@ -81,7 +81,7 @@ func (a *Account) Deposit(_ context.Context, cmd *DepositCommand, metadata event
 }
 
 // Withdraw handles withdrawing money from the account
-func (a *Account) Withdraw(_ context.Context, cmd *WithdrawCommand, metadata eventsourcing.EventMetadata) error {
+func (a *AccountAggregate) Withdraw(_ context.Context, cmd *WithdrawCommand, metadata eventsourcing.EventMetadata) error {
 	// Business validation: account must be open
 	if a.Status != AccountStatus_ACCOUNT_STATUS_OPEN {
 		return fmt.Errorf("account is not open")
@@ -121,7 +121,7 @@ func (a *Account) Withdraw(_ context.Context, cmd *WithdrawCommand, metadata eve
 }
 
 // CloseAccount handles closing an existing account
-func (a *Account) CloseAccount(_ context.Context, cmd *CloseAccountCommand, metadata eventsourcing.EventMetadata) error {
+func (a *AccountAggregate) CloseAccount(_ context.Context, cmd *CloseAccountCommand, metadata eventsourcing.EventMetadata) error {
 	// Business validation: account must be open
 	if a.Status != AccountStatus_ACCOUNT_STATUS_OPEN {
 		return fmt.Errorf("account is not open")

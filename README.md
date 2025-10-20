@@ -22,6 +22,9 @@ A production-ready, type-safe CQRS and Event Sourcing framework for Go with code
 
 ### Distribution & Integration
 - **🚀 NATS JetStream** - Distributed event bus with at-least-once delivery and consumer groups
+- **📡 NATS Command Bus** - Distributed command processing with request-reply pattern (Production mode)
+- **🎁 Unified SDK** - Single client for commands/events/queries with Dev/Prod modes
+- **🤖 Auto-Generated Clients** - Type-safe SDK clients generated from proto definitions
 - **📊 Projection Management** - Hybrid approach using EventBus for real-time updates and EventStore for rebuilds
 - **🔌 Middleware Pipeline** - Logging (slog), validation, OpenTelemetry tracing, RBAC authorization, panic recovery
 - **🌐 Connect RPC** - Modern RPC with HTTP/JSON and gRPC support via connectrpc.com
@@ -190,6 +193,7 @@ The code generator creates:
 - ✅ Event emitter helper methods (`EmitAccountOpenedEvent`, etc.)
 - ✅ Event applier methods that update aggregate state
 - ✅ Type-safe repository (`AccountRepository`)
+- ✅ **`AccountClient` SDK** with type-safe command/query methods
 - ✅ Automatic snapshot serialization via proto marshal
 - ✅ Event serialization/deserialization helpers
 
@@ -265,7 +269,96 @@ func (a *Account) Deposit(ctx context.Context, cmd *accountv1.DepositCommand, me
 }
 ```
 
-### 4️⃣ Wire Up Infrastructure
+### 4️⃣ Use the Unified SDK (Recommended)
+
+The framework automatically generates a **unified SDK** that aggregates all service clients into a single entry point:
+
+```go
+package main
+
+import (
+	"context"
+	"log"
+
+	"github.com/plaenen/eventsourcing/pkg/unifiedsdk"
+	"github.com/plaenen/eventsourcing/pkg/sdk"
+	accountv1 "github.com/yourorg/project/pb/account/v1"
+)
+
+func main() {
+	// Create unified SDK - single entry point!
+	s, err := unifiedsdk.New(
+		unifiedsdk.WithMode(sdk.DevelopmentMode),
+		unifiedsdk.WithSQLiteDSN("./events.db"),
+		unifiedsdk.WithWALMode(true),
+	)
+	if err != nil {
+		log.Fatalf("Failed to create SDK: %v", err)
+	}
+	defer s.Close()
+
+	ctx := context.Background()
+
+	// Access all services via properties!
+	_, err = s.Account.OpenAccount(ctx, &accountv1.OpenAccountCommand{
+		AccountId:      "acc-123",
+		OwnerName:      "Alice Johnson",
+		InitialBalance: "1000.00",
+	}, "user-alice")
+	if err != nil {
+		log.Fatalf("Failed: %v", err)
+	}
+
+	// All service clients accessible from one SDK instance
+	s.Account.Deposit(ctx, depositCmd, principalID)
+	s.Order.CreateOrder(ctx, orderCmd, principalID)     // Auto-added when you define Order service
+	s.User.RegisterUser(ctx, userCmd, principalID)      // Auto-added when you define User service
+}
+```
+
+**Benefits:**
+- ✅ **Single entry point** - `unifiedsdk.New()` for all services
+- ✅ **Property-based access** - `s.Account.OpenAccount()`, `s.Order.CreateOrder()`
+- ✅ **Auto-discovery** - New services automatically appear when you add proto definitions
+- ✅ **Type-safe API** - Compiler catches errors, full IntelliSense support
+- ✅ **Multi-file support** - Works across all your proto service definitions
+- ✅ **Dev/Prod modes** - Same API for local development and distributed production
+
+**Production Mode (NATS):**
+
+```go
+// Switch to production mode for distributed command processing
+s, _ := unifiedsdk.New(
+	unifiedsdk.WithMode(sdk.ProductionMode),       // Commands via NATS!
+	unifiedsdk.WithNATSURL("nats://cluster:4222"), // NATS cluster
+	unifiedsdk.WithSQLiteDSN("./events.db"),
+)
+
+// Same API - commands now distributed across services!
+s.Account.OpenAccount(ctx, cmd, principalID)
+s.Order.CreateOrder(ctx, cmd, principalID)
+```
+
+**How It Works:**
+
+1. Each proto service generates an individual client (e.g., `AccountClient`, `OrderClient`)
+2. After proto generation, a post-processing tool scans for all generated clients
+3. The unified SDK is automatically generated with all clients as properties
+4. When you add new services, they're automatically included in the next generation
+
+See `examples/unified_sdk/` for a complete working example.
+
+**Alternative: Individual Service Clients**
+
+If you prefer to use individual service clients directly:
+
+```go
+client, _ := sdk.NewClient(config)
+accountClient := accountv1.NewAccountClient(client)
+accountClient.OpenAccount(ctx, cmd, principalID)
+```
+
+### 5️⃣ Wire Up Infrastructure (Manual Approach)
 
 Connect all components in your main application:
 

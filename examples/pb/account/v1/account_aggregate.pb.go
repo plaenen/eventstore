@@ -3,9 +3,7 @@
 package accountv1
 
 import (
-	"context"
 	"fmt"
-	"time"
 
 	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
 	"google.golang.org/protobuf/proto"
@@ -76,6 +74,10 @@ func (a *AccountAggregate) ApplyEvent(event proto.Message) error {
 	switch e := event.(type) {
 	case *AccountOpenedEvent:
 		return a.applyAccountOpenedEvent(e)
+	case *MoneyDepositedEvent:
+		return a.applyMoneyDepositedEvent(e)
+	case *MoneyWithdrawnEvent:
+		return a.applyMoneyWithdrawnEvent(e)
 	case *AccountClosedEvent:
 		return a.applyAccountClosedEvent(e)
 	default:
@@ -86,14 +88,24 @@ func (a *AccountAggregate) ApplyEvent(event proto.Message) error {
 func (a *AccountAggregate) applyAccountOpenedEvent(e *AccountOpenedEvent) error {
 	a.AccountId = e.AccountId
 	a.OwnerName = e.OwnerName
-	a.InitialBalance = e.InitialBalance
+	a.Balance = e.InitialBalance // field_mapping: initial_balance -> balance
 	a.Status = AccountStatus_ACCOUNT_STATUS_OPEN
+	return nil
+}
+
+func (a *AccountAggregate) applyMoneyDepositedEvent(e *MoneyDepositedEvent) error {
+	a.Balance = e.NewBalance // field_mapping: new_balance -> balance
+	return nil
+}
+
+func (a *AccountAggregate) applyMoneyWithdrawnEvent(e *MoneyWithdrawnEvent) error {
+	a.Balance = e.NewBalance // field_mapping: new_balance -> balance
 	return nil
 }
 
 func (a *AccountAggregate) applyAccountClosedEvent(e *AccountClosedEvent) error {
 	a.AccountId = e.AccountId
-	a.FinalBalance = e.FinalBalance
+	a.Balance = e.FinalBalance // field_mapping: final_balance -> balance
 	a.Status = AccountStatus_ACCOUNT_STATUS_CLOSED
 	return nil
 }
@@ -118,7 +130,13 @@ func NewAccountRepository(eventStore eventsourcing.EventStore) *AccountRepositor
 				if err != nil {
 					return err
 				}
-				return agg.ApplyEvent(msg)
+				// Apply the event to update state
+				if err := agg.ApplyEvent(msg); err != nil {
+					return err
+				}
+				// Update version by loading from history
+				agg.LoadFromHistory([]*eventsourcing.Event{event})
+				return nil
 			},
 		),
 	}
@@ -128,6 +146,18 @@ func deserializeEventAccount(event *eventsourcing.Event) (proto.Message, error) 
 	switch event.EventType {
 	case "accountv1.AccountOpenedEvent":
 		msg := &AccountOpenedEvent{}
+		if err := proto.Unmarshal(event.Data, msg); err != nil {
+			return nil, err
+		}
+		return msg, nil
+	case "accountv1.MoneyDepositedEvent":
+		msg := &MoneyDepositedEvent{}
+		if err := proto.Unmarshal(event.Data, msg); err != nil {
+			return nil, err
+		}
+		return msg, nil
+	case "accountv1.MoneyWithdrawnEvent":
+		msg := &MoneyWithdrawnEvent{}
 		if err := proto.Unmarshal(event.Data, msg); err != nil {
 			return nil, err
 		}

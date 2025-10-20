@@ -125,12 +125,15 @@ These directories contain generated code that will be overwritten:
 
 - `gen/` - All generated Go code from proto files
 - `examples/pb/**/*_aggregate.pb.go` - Generated aggregate wrappers (e.g., `AccountAggregate`)
+- `examples/pb/**/*_sdk.pb.go` - **Generated SDK clients** (e.g., `AccountClient`)
 - `pkg/sqlite/sqlc.go` - Generated SQL queries
 - Any file with "Code generated" comment at the top
 
 **Key generated types:**
 - `AccountAggregate` - Wrapper struct embedding proto `Account` message
+- `AccountClient` - **Type-safe SDK client with command/query methods**
 - `NewAccount()` - Constructor returning `*AccountAggregate`
+- `NewAccountClient()` - **Constructor for SDK client**
 - `EmitXxxEvent()` - Event emitter helpers
 - `applyXxxEvent()` - Auto-generated event appliers
 - `AccountRepository` - Type-safe repository
@@ -141,7 +144,8 @@ These directories contain generated code that will be overwritten:
 - `pkg/eventsourcing/` - Core framework interfaces and implementations
 - `pkg/middleware/` - Middleware implementations
 - `pkg/sqlite/` - Event store and snapshot store (except `sqlc.go`)
-- `pkg/nats/` - NATS event bus implementation
+- `pkg/nats/` - NATS event bus and command bus implementation
+- `pkg/sdk/` - **Unified SDK client for commands/events/queries**
 - `cmd/protoc-gen-eventsourcing/` - Code generator plugin
 - `examples/bankaccount/domain/` - Example business logic
 - `examples/pb/account/v1/account.go` - Business logic for generated aggregate
@@ -372,6 +376,114 @@ func TestAggregate_Command(t *testing.T) {
     }
 }
 ```
+
+## SDK and Distributed Architecture
+
+### Generated SDK Client
+
+The code generator automatically creates type-safe SDK clients for each aggregate:
+
+**Generated Files:**
+- `*_sdk.pb.go` - Contains `{Aggregate}Client` with type-safe command/query methods
+
+**Example Generated Client:**
+```go
+// Generated in examples/pb/account/v1/account_sdk.pb.go
+type AccountClient struct {
+    sdk *sdk.Client
+}
+
+func NewAccountClient(sdkClient *sdk.Client) *AccountClient
+
+func (c *AccountClient) OpenAccount(ctx context.Context, req *OpenAccountCommand, principalID string) (*OpenAccountResponse, error)
+func (c *AccountClient) Deposit(ctx context.Context, req *DepositCommand, principalID string) (*DepositResponse, error)
+func (c *AccountClient) GetAccount(ctx context.Context, req *GetAccountRequest) (*AccountView, error)
+```
+
+**Usage:**
+```go
+// 1. Create SDK client
+client, _ := sdk.NewBuilder().
+    WithMode(sdk.DevelopmentMode).
+    WithSQLiteDSN(":memory:").
+    Build()
+defer client.Close()
+
+// 2. Use generated client
+accountClient := accountv1.NewAccountClient(client)
+
+// 3. Send commands with type safety
+accountClient.OpenAccount(ctx, &accountv1.OpenAccountCommand{
+    AccountId:      "acc-123",
+    OwnerName:      "Alice",
+    InitialBalance: "1000.00",
+}, "user-alice")
+```
+
+### SDK Modes
+
+**Development Mode (In-Memory Command Bus):**
+- Commands processed in-memory within the same process
+- Events published to NATS for distribution
+- Perfect for local development and testing
+- Fast feedback loops
+
+```go
+client, _ := sdk.NewBuilder().
+    WithMode(sdk.DevelopmentMode).
+    Build()
+```
+
+**Production Mode (NATS Command Bus):**
+- Commands published to NATS with request-reply pattern
+- Enables distributed command processing across services
+- Commands routed via NATS subjects: `commands.{CommandType}`
+- Queue groups for load balancing handlers
+
+```go
+client, _ := sdk.NewBuilder().
+    WithMode(sdk.ProductionMode).
+    WithNATSURL("nats://cluster:4222").
+    Build()
+```
+
+### Command Bus Architecture
+
+**Development Mode Flow:**
+```
+Client → In-Memory CommandBus → Handler → EventStore → NATS EventBus
+```
+
+**Production Mode Flow:**
+```
+Client → NATS CommandBus → NATS (request-reply) → Handler Service → EventStore → NATS EventBus
+```
+
+**Key Files:**
+- `pkg/eventsourcing/commandbus.go` - In-memory command bus
+- `pkg/nats/commandbus.go` - NATS-based distributed command bus
+- `pkg/nats/eventbus.go` - NATS JetStream event bus
+- `pkg/sdk/client.go` - Unified SDK client
+
+### Registering Command Handlers
+
+**With SDK (Development Mode):**
+```go
+client.RegisterCommandHandler("account.v1.OpenAccountCommand",
+    eventsourcing.CommandHandlerFunc(func(ctx context.Context, cmd *eventsourcing.CommandEnvelope) ([]*eventsourcing.Event, error) {
+        // Handler logic
+        return events, nil
+    }),
+)
+```
+
+**With SDK (Production Mode):**
+Same code! The SDK automatically subscribes to NATS when in production mode.
+
+**Command Subject Pattern:**
+- Subject: `commands.{CommandType}`
+- Example: `commands.account.v1.OpenAccountCommand`
+- Queue group: `command-handlers` (load balancing)
 
 ## Common Workflows
 
