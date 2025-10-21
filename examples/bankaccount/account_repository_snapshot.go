@@ -35,7 +35,7 @@ func NewAccountRepositoryWithSnapshots(
 }
 
 // Load loads an account using snapshots for optimization
-func (r *AccountRepositoryWithSnapshots) Load(aggregateID string) (*accountv1.Account, error) {
+func (r *AccountRepositoryWithSnapshots) Load(aggregateID string) (*accountv1.AccountAggregate, error) {
 	// Try to load the latest snapshot
 	snapshot, err := r.snapshotStore.GetLatestSnapshot(aggregateID)
 
@@ -88,7 +88,7 @@ func (r *AccountRepositoryWithSnapshots) Load(aggregateID string) (*accountv1.Ac
 }
 
 // SaveWithCommand saves the aggregate and creates snapshots according to strategy
-func (r *AccountRepositoryWithSnapshots) SaveWithCommand(aggregate *accountv1.Account, commandID string) (*eventsourcing.CommandResult, error) {
+func (r *AccountRepositoryWithSnapshots) SaveWithCommand(aggregate *accountv1.AccountAggregate, commandID string) (*eventsourcing.CommandResult, error) {
 	// Save events first
 	result, err := r.AccountRepository.SaveWithCommand(aggregate, commandID)
 	if err != nil {
@@ -133,7 +133,7 @@ func (r *AccountRepositoryWithSnapshots) SaveWithCommand(aggregate *accountv1.Ac
 }
 
 // createSnapshot creates a snapshot for the given aggregate
-func (r *AccountRepositoryWithSnapshots) createSnapshot(aggregate *accountv1.Account) error {
+func (r *AccountRepositoryWithSnapshots) createSnapshot(aggregate *accountv1.AccountAggregate) error {
 	startTime := time.Now()
 
 	data, err := aggregate.MarshalSnapshot()

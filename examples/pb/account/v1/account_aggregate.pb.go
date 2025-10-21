@@ -3,9 +3,7 @@
 package accountv1
 
 import (
-	"context"
 	"fmt"
-	"time"
 
 	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
 	"google.golang.org/protobuf/proto"
@@ -72,31 +70,37 @@ func (a *AccountAggregate) EmitAccountClosedEvent(event *AccountClosedEvent, met
 }
 
 // ApplyEvent applies an event to the Account aggregate
+// This method routes events to their specific applier methods
 func (a *AccountAggregate) ApplyEvent(event proto.Message) error {
 	switch e := event.(type) {
 	case *AccountOpenedEvent:
-		return a.applyAccountOpenedEvent(e)
+		return a.ApplyAccountOpenedEvent(e)
+	case *MoneyDepositedEvent:
+		return a.ApplyMoneyDepositedEvent(e)
+	case *MoneyWithdrawnEvent:
+		return a.ApplyMoneyWithdrawnEvent(e)
 	case *AccountClosedEvent:
-		return a.applyAccountClosedEvent(e)
+		return a.ApplyAccountClosedEvent(e)
 	default:
 		return fmt.Errorf("unknown event type: %T", event)
 	}
 }
 
-func (a *AccountAggregate) applyAccountOpenedEvent(e *AccountOpenedEvent) error {
-	a.AccountId = e.AccountId
-	a.OwnerName = e.OwnerName
-	a.InitialBalance = e.InitialBalance
-	a.Status = AccountStatus_ACCOUNT_STATUS_OPEN
-	return nil
+// AccountEventApplier defines methods for applying events to Account
+// Developers must implement these methods to define how events change aggregate state
+type AccountEventApplier interface {
+	// ApplyAccountOpenedEvent applies the AccountOpenedEvent to the aggregate state
+	ApplyAccountOpenedEvent(e *AccountOpenedEvent) error
+	// ApplyMoneyDepositedEvent applies the MoneyDepositedEvent to the aggregate state
+	ApplyMoneyDepositedEvent(e *MoneyDepositedEvent) error
+	// ApplyMoneyWithdrawnEvent applies the MoneyWithdrawnEvent to the aggregate state
+	ApplyMoneyWithdrawnEvent(e *MoneyWithdrawnEvent) error
+	// ApplyAccountClosedEvent applies the AccountClosedEvent to the aggregate state
+	ApplyAccountClosedEvent(e *AccountClosedEvent) error
 }
 
-func (a *AccountAggregate) applyAccountClosedEvent(e *AccountClosedEvent) error {
-	a.AccountId = e.AccountId
-	a.FinalBalance = e.FinalBalance
-	a.Status = AccountStatus_ACCOUNT_STATUS_CLOSED
-	return nil
-}
+// The AccountAggregate must implement AccountEventApplier
+// Developer implements these methods in a separate file (not generated)
 
 // AccountRepository provides persistence for Account
 type AccountRepository struct {
@@ -128,6 +132,18 @@ func deserializeEventAccount(event *eventsourcing.Event) (proto.Message, error) 
 	switch event.EventType {
 	case "accountv1.AccountOpenedEvent":
 		msg := &AccountOpenedEvent{}
+		if err := proto.Unmarshal(event.Data, msg); err != nil {
+			return nil, err
+		}
+		return msg, nil
+	case "accountv1.MoneyDepositedEvent":
+		msg := &MoneyDepositedEvent{}
+		if err := proto.Unmarshal(event.Data, msg); err != nil {
+			return nil, err
+		}
+		return msg, nil
+	case "accountv1.MoneyWithdrawnEvent":
+		msg := &MoneyWithdrawnEvent{}
 		if err := proto.Unmarshal(event.Data, msg); err != nil {
 			return nil, err
 		}

@@ -64,6 +64,7 @@ tasks:
     cmds:
       - rm -f .task/checksum/generate-proto-buf
       - buf generate
+      - task: generate:sdk:unified
     sources:
       - proto/**/*.proto
       - buf.yaml
@@ -71,6 +72,17 @@ tasks:
     generates:
       - pb/*.pb.go
       - pb/*connect/*.go
+
+  generate:sdk:unified:
+    desc: Generate unified SDK from all service SDKs
+    dir: .
+    cmds:
+      - task: build:sdk-generator
+      - ./bin/generate-unified-sdk ./examples/pb ./examples/sdk/unified.go
+    sources:
+      - examples/pb/**/*_sdk.pb.go
+    generates:
+      - examples/sdk/unified.go
 
   generate:mocks:
     desc: Generate mock implementations for testing
@@ -80,7 +92,7 @@ tasks:
   # Build tasks
   build:
     desc: Build all binaries
-    deps: [build:plugin]
+    deps: [build:plugin, build:sdk-generator]
 
   build:plugin:
     desc: Build protoc-gen-eventsourcing plugin
@@ -92,6 +104,16 @@ tasks:
       - "**/*.go"
     generates:
       - ../../bin/protoc-gen-eventsourcing
+
+  build:sdk-generator:
+    desc: Build generate-unified-sdk tool
+    dir: "{{.CMD_DIR}}/generate-unified-sdk"
+    cmds:
+      - go build -o ../../bin/generate-unified-sdk .
+    sources:
+      - "*.go"
+    generates:
+      - ../../bin/generate-unified-sdk
 
   # Linting and formatting tasks
   lint:

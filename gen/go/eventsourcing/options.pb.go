@@ -212,6 +212,138 @@ func (x *UniqueConstraint) GetOperation() ConstraintOperation {
 	return ConstraintOperation_CONSTRAINT_OPERATION_UNSPECIFIED
 }
 
+// AggregateRootOptions marks a proto message as an aggregate root
+// and configures how it should be generated
+type AggregateRootOptions struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The field name that contains the aggregate ID (e.g., "account_id")
+	IdField string `protobuf:"bytes,1,opt,name=id_field,json=idField,proto3" json:"id_field,omitempty"`
+	// The aggregate type name (e.g., "Account")
+	// If not specified, uses the message name
+	TypeName      string `protobuf:"bytes,2,opt,name=type_name,json=typeName,proto3" json:"type_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AggregateRootOptions) Reset() {
+	*x = AggregateRootOptions{}
+	mi := &file_eventsourcing_options_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AggregateRootOptions) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AggregateRootOptions) ProtoMessage() {}
+
+func (x *AggregateRootOptions) ProtoReflect() protoreflect.Message {
+	mi := &file_eventsourcing_options_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AggregateRootOptions.ProtoReflect.Descriptor instead.
+func (*AggregateRootOptions) Descriptor() ([]byte, []int) {
+	return file_eventsourcing_options_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *AggregateRootOptions) GetIdField() string {
+	if x != nil {
+		return x.IdField
+	}
+	return ""
+}
+
+func (x *AggregateRootOptions) GetTypeName() string {
+	if x != nil {
+		return x.TypeName
+	}
+	return ""
+}
+
+// EventOptions defines options for event configuration
+type EventOptions struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The name of the aggregate this event belongs to
+	Aggregate string `protobuf:"bytes,1,opt,name=aggregate,proto3" json:"aggregate,omitempty"`
+	// List of aggregate fields that this event updates
+	// If empty, all event fields (except timestamp, version) are applied
+	AppliesToState []string `protobuf:"bytes,2,rep,name=applies_to_state,json=appliesToState,proto3" json:"applies_to_state,omitempty"`
+	// Optional field mapping when event field names differ from aggregate field names
+	// Maps event field -> aggregate field (e.g., "initial_balance" -> "balance")
+	FieldMapping map[string]string `protobuf:"bytes,3,rep,name=field_mapping,json=fieldMapping,proto3" json:"field_mapping,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// For events that release unique constraints
+	UniqueConstraints []*UniqueConstraint `protobuf:"bytes,4,rep,name=unique_constraints,json=uniqueConstraints,proto3" json:"unique_constraints,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *EventOptions) Reset() {
+	*x = EventOptions{}
+	mi := &file_eventsourcing_options_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EventOptions) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EventOptions) ProtoMessage() {}
+
+func (x *EventOptions) ProtoReflect() protoreflect.Message {
+	mi := &file_eventsourcing_options_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EventOptions.ProtoReflect.Descriptor instead.
+func (*EventOptions) Descriptor() ([]byte, []int) {
+	return file_eventsourcing_options_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *EventOptions) GetAggregate() string {
+	if x != nil {
+		return x.Aggregate
+	}
+	return ""
+}
+
+func (x *EventOptions) GetAppliesToState() []string {
+	if x != nil {
+		return x.AppliesToState
+	}
+	return nil
+}
+
+func (x *EventOptions) GetFieldMapping() map[string]string {
+	if x != nil {
+		return x.FieldMapping
+	}
+	return nil
+}
+
+func (x *EventOptions) GetUniqueConstraints() []*UniqueConstraint {
+	if x != nil {
+		return x.UniqueConstraints
+	}
+	return nil
+}
+
 var file_eventsourcing_options_proto_extTypes = []protoimpl.ExtensionInfo{
 	{
 		ExtendedType:  (*descriptorpb.MessageOptions)(nil),
@@ -219,6 +351,22 @@ var file_eventsourcing_options_proto_extTypes = []protoimpl.ExtensionInfo{
 		Field:         50001,
 		Name:          "eventsourcing.aggregate_options",
 		Tag:           "bytes,50001,opt,name=aggregate_options",
+		Filename:      "eventsourcing/options.proto",
+	},
+	{
+		ExtendedType:  (*descriptorpb.MessageOptions)(nil),
+		ExtensionType: (*AggregateRootOptions)(nil),
+		Field:         50003,
+		Name:          "eventsourcing.aggregate_root",
+		Tag:           "bytes,50003,opt,name=aggregate_root",
+		Filename:      "eventsourcing/options.proto",
+	},
+	{
+		ExtendedType:  (*descriptorpb.MessageOptions)(nil),
+		ExtensionType: (*EventOptions)(nil),
+		Field:         50004,
+		Name:          "eventsourcing.event_options",
+		Tag:           "bytes,50004,opt,name=event_options",
 		Filename:      "eventsourcing/options.proto",
 	},
 	{
@@ -235,6 +383,10 @@ var file_eventsourcing_options_proto_extTypes = []protoimpl.ExtensionInfo{
 var (
 	// optional eventsourcing.AggregateOptions aggregate_options = 50001;
 	E_AggregateOptions = &file_eventsourcing_options_proto_extTypes[0]
+	// optional eventsourcing.AggregateRootOptions aggregate_root = 50003;
+	E_AggregateRoot = &file_eventsourcing_options_proto_extTypes[1]
+	// optional eventsourcing.EventOptions event_options = 50004;
+	E_EventOptions = &file_eventsourcing_options_proto_extTypes[2]
 )
 
 // Extension fields to descriptorpb.ServiceOptions.
@@ -242,7 +394,7 @@ var (
 	// The name of the aggregate this service operates on
 	//
 	// optional string aggregate_name = 50002;
-	E_AggregateName = &file_eventsourcing_options_proto_extTypes[1]
+	E_AggregateName = &file_eventsourcing_options_proto_extTypes[3]
 )
 
 var File_eventsourcing_options_proto protoreflect.FileDescriptor
@@ -262,13 +414,26 @@ const file_eventsourcing_options_proto_rawDesc = "" +
 	"\n" +
 	"index_name\x18\x01 \x01(\tR\tindexName\x12\x14\n" +
 	"\x05field\x18\x02 \x01(\tR\x05field\x12@\n" +
-	"\toperation\x18\x03 \x01(\x0e2\".eventsourcing.ConstraintOperationR\toperation*}\n" +
+	"\toperation\x18\x03 \x01(\x0e2\".eventsourcing.ConstraintOperationR\toperation\"N\n" +
+	"\x14AggregateRootOptions\x12\x19\n" +
+	"\bid_field\x18\x01 \x01(\tR\aidField\x12\x1b\n" +
+	"\ttype_name\x18\x02 \x01(\tR\btypeName\"\xbb\x02\n" +
+	"\fEventOptions\x12\x1c\n" +
+	"\taggregate\x18\x01 \x01(\tR\taggregate\x12(\n" +
+	"\x10applies_to_state\x18\x02 \x03(\tR\x0eappliesToState\x12R\n" +
+	"\rfield_mapping\x18\x03 \x03(\v2-.eventsourcing.EventOptions.FieldMappingEntryR\ffieldMapping\x12N\n" +
+	"\x12unique_constraints\x18\x04 \x03(\v2\x1f.eventsourcing.UniqueConstraintR\x11uniqueConstraints\x1a?\n" +
+	"\x11FieldMappingEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01*}\n" +
 	"\x13ConstraintOperation\x12$\n" +
 	" CONSTRAINT_OPERATION_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aCONSTRAINT_OPERATION_CLAIM\x10\x01\x12 \n" +
 	"\x1cCONSTRAINT_OPERATION_RELEASE\x10\x02:o\n" +
-	"\x11aggregate_options\x12\x1f.google.protobuf.MessageOptions\x18ц\x03 \x01(\v2\x1f.eventsourcing.AggregateOptionsR\x10aggregateOptions:H\n" +
-	"\x0eaggregate_name\x12\x1f.google.protobuf.ServiceOptions\x18҆\x03 \x01(\tR\raggregateNameB6Z4github.com/plaenen/eventsourcing/proto/eventsourcingb\x06proto3"
+	"\x11aggregate_options\x12\x1f.google.protobuf.MessageOptions\x18ц\x03 \x01(\v2\x1f.eventsourcing.AggregateOptionsR\x10aggregateOptions:m\n" +
+	"\x0eaggregate_root\x12\x1f.google.protobuf.MessageOptions\x18ӆ\x03 \x01(\v2#.eventsourcing.AggregateRootOptionsR\raggregateRoot:c\n" +
+	"\revent_options\x12\x1f.google.protobuf.MessageOptions\x18Ԇ\x03 \x01(\v2\x1b.eventsourcing.EventOptionsR\feventOptions:H\n" +
+	"\x0eaggregate_name\x12\x1f.google.protobuf.ServiceOptions\x18҆\x03 \x01(\tR\raggregateNameBJZHgithub.com/plaenen/eventsourcing/examples/pb/eventsourcing;eventsourcingb\x06proto3"
 
 var (
 	file_eventsourcing_options_proto_rawDescOnce sync.Once
@@ -283,27 +448,36 @@ func file_eventsourcing_options_proto_rawDescGZIP() []byte {
 }
 
 var file_eventsourcing_options_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_eventsourcing_options_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_eventsourcing_options_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_eventsourcing_options_proto_goTypes = []any{
 	(ConstraintOperation)(0),            // 0: eventsourcing.ConstraintOperation
 	(*AggregateOptions)(nil),            // 1: eventsourcing.AggregateOptions
 	(*UniqueConstraint)(nil),            // 2: eventsourcing.UniqueConstraint
-	nil,                                 // 3: eventsourcing.AggregateOptions.FieldMappingEntry
-	(*descriptorpb.MessageOptions)(nil), // 4: google.protobuf.MessageOptions
-	(*descriptorpb.ServiceOptions)(nil), // 5: google.protobuf.ServiceOptions
+	(*AggregateRootOptions)(nil),        // 3: eventsourcing.AggregateRootOptions
+	(*EventOptions)(nil),                // 4: eventsourcing.EventOptions
+	nil,                                 // 5: eventsourcing.AggregateOptions.FieldMappingEntry
+	nil,                                 // 6: eventsourcing.EventOptions.FieldMappingEntry
+	(*descriptorpb.MessageOptions)(nil), // 7: google.protobuf.MessageOptions
+	(*descriptorpb.ServiceOptions)(nil), // 8: google.protobuf.ServiceOptions
 }
 var file_eventsourcing_options_proto_depIdxs = []int32{
-	3, // 0: eventsourcing.AggregateOptions.field_mapping:type_name -> eventsourcing.AggregateOptions.FieldMappingEntry
-	2, // 1: eventsourcing.AggregateOptions.unique_constraints:type_name -> eventsourcing.UniqueConstraint
-	0, // 2: eventsourcing.UniqueConstraint.operation:type_name -> eventsourcing.ConstraintOperation
-	4, // 3: eventsourcing.aggregate_options:extendee -> google.protobuf.MessageOptions
-	5, // 4: eventsourcing.aggregate_name:extendee -> google.protobuf.ServiceOptions
-	1, // 5: eventsourcing.aggregate_options:type_name -> eventsourcing.AggregateOptions
-	6, // [6:6] is the sub-list for method output_type
-	6, // [6:6] is the sub-list for method input_type
-	5, // [5:6] is the sub-list for extension type_name
-	3, // [3:5] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	5,  // 0: eventsourcing.AggregateOptions.field_mapping:type_name -> eventsourcing.AggregateOptions.FieldMappingEntry
+	2,  // 1: eventsourcing.AggregateOptions.unique_constraints:type_name -> eventsourcing.UniqueConstraint
+	0,  // 2: eventsourcing.UniqueConstraint.operation:type_name -> eventsourcing.ConstraintOperation
+	6,  // 3: eventsourcing.EventOptions.field_mapping:type_name -> eventsourcing.EventOptions.FieldMappingEntry
+	2,  // 4: eventsourcing.EventOptions.unique_constraints:type_name -> eventsourcing.UniqueConstraint
+	7,  // 5: eventsourcing.aggregate_options:extendee -> google.protobuf.MessageOptions
+	7,  // 6: eventsourcing.aggregate_root:extendee -> google.protobuf.MessageOptions
+	7,  // 7: eventsourcing.event_options:extendee -> google.protobuf.MessageOptions
+	8,  // 8: eventsourcing.aggregate_name:extendee -> google.protobuf.ServiceOptions
+	1,  // 9: eventsourcing.aggregate_options:type_name -> eventsourcing.AggregateOptions
+	3,  // 10: eventsourcing.aggregate_root:type_name -> eventsourcing.AggregateRootOptions
+	4,  // 11: eventsourcing.event_options:type_name -> eventsourcing.EventOptions
+	12, // [12:12] is the sub-list for method output_type
+	12, // [12:12] is the sub-list for method input_type
+	9,  // [9:12] is the sub-list for extension type_name
+	5,  // [5:9] is the sub-list for extension extendee
+	0,  // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_eventsourcing_options_proto_init() }
@@ -317,8 +491,8 @@ func file_eventsourcing_options_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_eventsourcing_options_proto_rawDesc), len(file_eventsourcing_options_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   3,
-			NumExtensions: 2,
+			NumMessages:   6,
+			NumExtensions: 4,
 			NumServices:   0,
 		},
 		GoTypes:           file_eventsourcing_options_proto_goTypes,

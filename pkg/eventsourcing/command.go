@@ -31,6 +31,9 @@ type CommandMetadata struct {
 	// PrincipalID is the identifier of the principal executing this command
 	PrincipalID string
 
+	// TenantID is the identifier of the tenant this command belongs to (for multi-tenancy)
+	TenantID string
+
 	// Timestamp is when the command was created
 	Timestamp time.Time
 

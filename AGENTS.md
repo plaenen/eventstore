@@ -125,12 +125,15 @@ These directories contain generated code that will be overwritten:
 
 - `gen/` - All generated Go code from proto files
 - `examples/pb/**/*_aggregate.pb.go` - Generated aggregate wrappers (e.g., `AccountAggregate`)
+- `examples/pb/**/*_sdk.pb.go` - **Generated SDK clients** (e.g., `AccountClient`)
 - `pkg/sqlite/sqlc.go` - Generated SQL queries
 - Any file with "Code generated" comment at the top
 
 **Key generated types:**
 - `AccountAggregate` - Wrapper struct embedding proto `Account` message
+- `AccountClient` - **Type-safe SDK client with command/query methods**
 - `NewAccount()` - Constructor returning `*AccountAggregate`
+- `NewAccountClient()` - **Constructor for SDK client**
 - `EmitXxxEvent()` - Event emitter helpers
 - `applyXxxEvent()` - Auto-generated event appliers
 - `AccountRepository` - Type-safe repository
@@ -141,7 +144,8 @@ These directories contain generated code that will be overwritten:
 - `pkg/eventsourcing/` - Core framework interfaces and implementations
 - `pkg/middleware/` - Middleware implementations
 - `pkg/sqlite/` - Event store and snapshot store (except `sqlc.go`)
-- `pkg/nats/` - NATS event bus implementation
+- `pkg/nats/` - NATS event bus and command bus implementation
+- `pkg/observability/` - OpenTelemetry-based observability (tracing, metrics)
 - `cmd/protoc-gen-eventsourcing/` - Code generator plugin
 - `examples/bankaccount/domain/` - Example business logic
 - `examples/pb/account/v1/account.go` - Business logic for generated aggregate
@@ -372,6 +376,131 @@ func TestAggregate_Command(t *testing.T) {
     }
 }
 ```
+
+## SDK and Distributed Architecture
+
+### Generated SDK Client
+
+The code generator automatically creates type-safe SDK clients for each aggregate:
+
+**Generated Files:**
+- `*_sdk.pb.go` - Contains `{Aggregate}Client` with type-safe command/query methods
+
+**Example Generated Client:**
+```go
+// Generated in examples/pb/account/v1/account_sdk.pb.go
+type AccountClient struct {
+    sdk *sdk.Client
+}
+
+func NewAccountClient(sdkClient *sdk.Client) *AccountClient
+
+func (c *AccountClient) OpenAccount(ctx context.Context, req *OpenAccountCommand, principalID string) (*OpenAccountResponse, error)
+func (c *AccountClient) Deposit(ctx context.Context, req *DepositCommand, principalID string) (*DepositResponse, error)
+func (c *AccountClient) GetAccount(ctx context.Context, req *GetAccountRequest) (*AccountView, error)
+```
+
+**Usage:**
+```go
+// 1. Create SDK client
+client, _ := sdk.NewBuilder().
+    WithMode(sdk.DevelopmentMode).
+    WithSQLiteDSN(":memory:").
+    Build()
+defer client.Close()
+
+// 2. Use generated client
+accountClient := accountv1.NewAccountClient(client)
+
+// 3. Send commands with type safety
+accountClient.OpenAccount(ctx, &accountv1.OpenAccountCommand{
+    AccountId:      "acc-123",
+    OwnerName:      "Alice",
+    InitialBalance: "1000.00",
+}, "user-alice")
+```
+
+### SDK Modes
+
+**Development Mode (In-Memory Command Bus):**
+- Commands processed in-memory within the same process
+- Events published to NATS for distribution
+- Perfect for local development and testing
+- Fast feedback loops
+
+```go
+client, _ := sdk.NewBuilder().
+    WithMode(sdk.DevelopmentMode).
+    Build()
+```
+
+**Production Mode (NATS Command Bus):**
+- Commands published to NATS with request-reply pattern
+- Enables distributed command processing across services
+- Commands routed via NATS subjects: `commands.{CommandType}`
+- Queue groups for load balancing handlers
+
+```go
+client, _ := sdk.NewBuilder().
+    WithMode(sdk.ProductionMode).
+    WithNATSURL("nats://cluster:4222").
+    Build()
+```
+
+### Command Bus Architecture
+
+**Development Mode Flow:**
+```
+Client → In-Memory CommandBus → Handler → EventStore → NATS EventBus
+```
+
+**Production Mode Flow:**
+```
+Client → NATS CommandBus → NATS (request-reply) → Handler Service → EventStore → NATS EventBus
+```
+
+**Key Files:**
+- `pkg/eventsourcing/commandbus.go` - In-memory command bus
+- `pkg/nats/commandbus.go` - NATS-based distributed command bus
+- `pkg/nats/eventbus.go` - NATS JetStream event bus
+- `pkg/nats/server.go` - NATS microservices server for request/reply
+- `pkg/nats/transport.go` - NATS transport for client SDK
+
+### Registering Command Handlers
+
+**Server-side (NATS microservices):**
+```go
+// Create handlers
+commandHandler := handlers.NewAccountCommandHandler(repo)
+
+// Register with NATS server
+natsServer, _ := natspkg.NewServer(&natspkg.ServerConfig{
+    URL:         "nats://localhost:4222",
+    Name:        "AccountService",
+    Version:     "1.0.0",
+})
+
+// Generated service registration
+commandService := accountv1.NewAccountCommandServiceServer(natsServer, commandHandler)
+commandService.Start(ctx)
+```
+
+**Client-side (Generated SDK):**
+```go
+// Create transport
+transport, _ := natspkg.NewTransport(&natspkg.TransportConfig{
+    URL: "nats://localhost:4222",
+})
+
+// Use generated client
+client := accountv1.NewAccountClient(transport)
+response, err := client.OpenAccount(ctx, &accountv1.OpenAccountCommand{...})
+```
+
+**Command Subject Pattern:**
+- Subject: `commands.{CommandType}`
+- Example: `commands.account.v1.OpenAccountCommand`
+- Queue group: `command-handlers` (load balancing)
 
 ## Common Workflows
 
@@ -746,17 +875,136 @@ Before submitting changes:
 5. Push tags: `git push --tags`
 6. GitHub Actions builds and publishes
 
+## Multi-Tenancy Support
+
+The framework provides built-in multi-tenancy support for SaaS applications.
+
+### When to Use Multi-Tenancy
+
+Use multi-tenancy when:
+- Building a SaaS application serving multiple customers
+- Each customer (tenant) needs data isolation
+- You need to scale horizontally while maintaining isolation
+
+### Two Isolation Strategies
+
+**1. Shared Database (Recommended Start)**
+
+All tenants share one database with tenant-scoped aggregate IDs:
+
+```go
+import "github.com/plaenen/eventsourcing/pkg/multitenancy"
+
+// Create store
+multiStore, _ := multitenancy.NewMultiTenantEventStore(multitenancy.MultiTenantConfig{
+    Strategy:  multitenancy.SharedDatabase,
+    SharedDSN: "./events.db",
+})
+
+// Add tenant to context
+ctx := multitenancy.WithTenantID(context.Background(), "tenant-abc")
+
+// Compose tenant-scoped ID: "tenant-abc::acc-001"
+aggregateID := multitenancy.ComposeAggregateID("tenant-abc", "acc-001")
+```
+
+**Best for:** 100s-1000s of small tenants
+
+**2. Database-Per-Tenant (Enterprise)**
+
+Each tenant gets their own SQLite database file:
+
+```go
+multiStore, _ := multitenancy.NewMultiTenantEventStore(multitenancy.MultiTenantConfig{
+    Strategy:             multitenancy.DatabasePerTenant,
+    DatabasePathTemplate: "./data/tenant_%s.db",
+})
+```
+
+**Best for:** 10s-100s of large enterprise tenants
+
+### Middleware Integration
+
+Always add tenant middleware to enforce isolation:
+
+```go
+commandBus.Use(multitenancy.TenantExtractionMiddleware(extractor)) // Extract
+commandBus.Use(multitenancy.TenantIsolationMiddleware())           // Enforce
+commandBus.Use(multitenancy.TenantAuthorizationMiddleware(auth))   // Authorize
+```
+
+### HTTP Integration Pattern
+
+```go
+// Extract tenant from request
+func TenantMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        tenantID := r.Header.Get("X-Tenant-ID") // or subdomain, JWT, etc.
+        ctx := multitenancy.WithTenantID(r.Context(), tenantID)
+        next.ServeHTTP(w, r.WithContext(ctx))
+    })
+}
+
+// Use in handlers
+func (h *Handler) OpenAccount(w http.ResponseWriter, r *http.Request) {
+    tenantID := multitenancy.MustGetTenantID(r.Context())
+    aggregateID := multitenancy.ComposeAggregateID(tenantID, req.AccountID)
+    // ... process command
+}
+```
+
+### Testing Multi-Tenant Code
+
+```go
+func TestTenantIsolation(t *testing.T) {
+    // Tenant A
+    ctxA := multitenancy.WithTenantID(context.Background(), "tenant-a")
+    accountA := accountv1.NewAccount(multitenancy.ComposeAggregateID("tenant-a", "acc-001"))
+
+    // Tenant B - same local ID
+    ctxB := multitenancy.WithTenantID(context.Background(), "tenant-b")
+    accountB := accountv1.NewAccount(multitenancy.ComposeAggregateID("tenant-b", "acc-001"))
+
+    // Verify isolation
+    // ... both can exist independently
+}
+```
+
+### Key Functions
+
+- `multitenancy.WithTenantID(ctx, tenantID)` - Add tenant to context
+- `multitenancy.GetTenantID(ctx)` - Retrieve tenant (returns error if missing)
+- `multitenancy.MustGetTenantID(ctx)` - Retrieve or panic
+- `multitenancy.ComposeAggregateID(tenant, id)` - Create scoped ID
+- `multitenancy.DecomposeAggregateID(compositeID)` - Split into parts
+- `multitenancy.ValidateTenantID(id, expectedTenant)` - Verify tenant match
+
+### Complete Documentation
+
+See **docs/MULTITENANCY.md** for:
+- Detailed strategy comparison
+- Migration from single-tenant
+- Projection patterns with tenant filtering
+- Authorization implementation
+- Production deployment guide
+
+### Example
+
+Run: `go run ./examples/multitenant`
+
 ## Additional Resources
 
 - **README.md** - Human-focused project overview (includes snapshot guide)
 - **CONTRIBUTING.md** - Detailed contribution guidelines
+- **docs/MULTITENANCY.md** - Complete multi-tenancy guide
 - **examples/EXAMPLE.md** - Step-by-step tutorial
+- **examples/multitenant/** - Multi-tenancy example code
 - **go.dev/doc** - Go language documentation
 - **buf.build/docs** - Protocol Buffers tooling
 - **docs.nats.io** - NATS event bus documentation
 
 ---
 
-**Last Updated**: 2025-01-20
+**Last Updated**: 2025-01-21
 
 This file follows the [agents.md](https://agents.md/) specification for AI coding agent instructions.

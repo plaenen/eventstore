@@ -22,6 +22,9 @@ import (
 
 	"google.golang.org/protobuf/compiler/protogen"
 	"google.golang.org/protobuf/types/pluginpb"
+	"google.golang.org/protobuf/proto"
+
+	eventsourcing "github.com/plaenen/eventsourcing/gen/go/eventsourcing"
 )
 
 func main() {
@@ -71,6 +74,15 @@ func generateFile(gen *protogen.Plugin, file *protogen.File) {
 	generateCommandHandlers(g, file)
 	generateEventAppliers(g, file)
 	generateRepository(g, file)
+
+	// Generate SDK client if there are commands or queries
+	services := findServices(file)
+	if len(services) > 0 {
+		generateSDKClient(gen, file, aggregates, services)
+		generateUnifiedSDK(gen, file, aggregates, services)
+		generateServerService(gen, file, aggregates, services)
+		generateHandlerInterfaces(gen, file, aggregates, services)
+	}
 }
 
 func generateHeader(g *protogen.GeneratedFile, file *protogen.File) {
@@ -79,9 +91,7 @@ func generateHeader(g *protogen.GeneratedFile, file *protogen.File) {
 	g.P("package ", file.GoPackageName)
 	g.P()
 	g.P("import (")
-	g.P(`	"context"`)
 	g.P(`	"fmt"`)
-	g.P(`	"time"`)
 	g.P()
 	g.P(`	"github.com/plaenen/eventsourcing/pkg/eventsourcing"`)
 	g.P(`	"google.golang.org/protobuf/proto"`)
@@ -208,13 +218,16 @@ func generateEventAppliers(g *protogen.GeneratedFile, file *protogen.File) {
 			continue
 		}
 
+		// Generate the ApplyEvent dispatcher (routes to specific applier methods)
 		g.P("// ApplyEvent applies an event to the ", agg.TypeName, " aggregate")
+		g.P("// This method routes events to their specific applier methods")
 		g.P("func (a *", aggregateType, ") ApplyEvent(event proto.Message) error {")
 		g.P("	switch e := event.(type) {")
 
 		for _, evt := range events {
+			methodName := "Apply" + evt.MessageName
 			g.P("	case *", evt.MessageName, ":")
-			g.P("		return a.apply", evt.MessageName, "(e)")
+			g.P("		return a.", methodName, "(e)")
 		}
 
 		g.P("	default:")
@@ -223,47 +236,23 @@ func generateEventAppliers(g *protogen.GeneratedFile, file *protogen.File) {
 		g.P("}")
 		g.P()
 
-		// Generate individual appliers
+		g.P("// ", agg.TypeName, "EventApplier defines methods for applying events to ", agg.TypeName)
+		g.P("// Developers must implement these methods to define how events change aggregate state")
+		g.P("type ", agg.TypeName, "EventApplier interface {")
+
+		// Generate interface method signatures
 		for _, evt := range events {
-			g.P("func (a *", aggregateType, ") apply", evt.MessageName, "(e *", evt.MessageName, ") error {")
-
-			// Apply field mappings and state updates
-			if len(evt.AppliesToState) > 0 {
-				for _, stateField := range evt.AppliesToState {
-					// Check if there's a field mapping
-					eventField := stateField
-					if mappedField, ok := evt.FieldMapping[stateField]; ok {
-						eventField = mappedField
-					}
-
-					// Convert to Go field names
-					stateFieldGo := toGoName(stateField)
-					eventFieldGo := toGoName(eventField)
-
-					g.P("	a.", stateFieldGo, " = e.", eventFieldGo)
-				}
-			} else {
-				g.P("	// TODO: Manually update aggregate state from event fields")
-			}
-
-			// Special handling for status changes
-			if strings.Contains(evt.MessageName, "Closed") {
-				// Try to find status enum
-				if hasField(agg.Message, "status") {
-					statusType := getFieldType(agg.Message, "status")
-					g.P("	a.Status = ", statusType, "_", strings.ToUpper(agg.TypeName), "_STATUS_CLOSED")
-				}
-			} else if strings.Contains(evt.MessageName, "Opened") || strings.Contains(evt.MessageName, "Created") {
-				if hasField(agg.Message, "status") {
-					statusType := getFieldType(agg.Message, "status")
-					g.P("	a.Status = ", statusType, "_", strings.ToUpper(agg.TypeName), "_STATUS_OPEN")
-				}
-			}
-
-			g.P("	return nil")
-			g.P("}")
-			g.P()
+			methodName := "Apply" + evt.MessageName
+			g.P("	// ", methodName, " applies the ", evt.MessageName, " to the aggregate state")
+			g.P("	", methodName, "(e *", evt.MessageName, ") error")
 		}
+
+		g.P("}")
+		g.P()
+
+		g.P("// The ", aggregateType, " must implement ", agg.TypeName, "EventApplier")
+		g.P("// Developer implements these methods in a separate file (not generated)")
+		g.P()
 	}
 }
 
@@ -445,15 +434,31 @@ func findEventsForAggregate(file *protogen.File, aggregateName string) []*EventI
 			continue
 		}
 
-		// Simple heuristic: if event name contains aggregate name, it belongs to that aggregate
 		eventName := string(msg.Desc.Name())
-		if strings.Contains(eventName, aggregateName) || aggregateName == "" {
-			events = append(events, &EventInfo{
-				MessageName:    eventName,
-				AggregateName:  aggregateName,
-				AppliesToState: extractStateFieldsFromEvent(msg),
-				FieldMapping:   make(map[string]string),
-			})
+
+		// Check if message has event_options annotation
+		if proto.HasExtension(msg.Desc.Options(), eventsourcing.E_EventOptions) {
+			opts := proto.GetExtension(msg.Desc.Options(), eventsourcing.E_EventOptions).(*eventsourcing.EventOptions)
+
+			// Only include events that belong to this aggregate
+			if opts.GetAggregate() == aggregateName || aggregateName == "" {
+				events = append(events, &EventInfo{
+					MessageName:    eventName,
+					AggregateName:  aggregateName,
+					AppliesToState: extractStateFieldsFromEvent(msg),
+					FieldMapping:   make(map[string]string),
+				})
+			}
+		} else {
+			// Fallback to name heuristic if no event_options annotation
+			if strings.Contains(eventName, aggregateName) || aggregateName == "" {
+				events = append(events, &EventInfo{
+					MessageName:    eventName,
+					AggregateName:  aggregateName,
+					AppliesToState: extractStateFieldsFromEvent(msg),
+					FieldMapping:   make(map[string]string),
+				})
+			}
 		}
 	}
 
@@ -569,4 +574,513 @@ func inferEventName(commandName string) string {
 	}
 
 	return method + "Event"
+}
+
+// ServiceInfo holds information about gRPC services
+type ServiceInfo struct {
+	Name        string
+	Commands    []*protogen.Method
+	Queries     []*protogen.Method
+	Service     *protogen.Service
+	AggregateName string
+}
+
+// findServices finds all command and query services in the proto file
+func findServices(file *protogen.File) []*ServiceInfo {
+	var services []*ServiceInfo
+
+	for _, svc := range file.Services {
+		name := string(svc.Desc.Name())
+
+		// Determine aggregate name and service type
+		var aggregateName string
+		var serviceType string
+
+		if strings.HasSuffix(name, "CommandService") {
+			aggregateName = strings.TrimSuffix(name, "CommandService")
+			serviceType = "command"
+		} else if strings.HasSuffix(name, "QueryService") {
+			aggregateName = strings.TrimSuffix(name, "QueryService")
+			serviceType = "query"
+		} else {
+			continue // Skip other services
+		}
+
+		info := &ServiceInfo{
+			Name:          name,
+			Service:       svc,
+			AggregateName: aggregateName,
+			Commands:      make([]*protogen.Method, 0),
+			Queries:       make([]*protogen.Method, 0),
+		}
+
+		// Categorize methods
+		for _, method := range svc.Methods {
+			if serviceType == "command" {
+				info.Commands = append(info.Commands, method)
+			} else if serviceType == "query" {
+				info.Queries = append(info.Queries, method)
+			}
+		}
+
+		services = append(services, info)
+	}
+
+	return services
+}
+
+// generateSDKClient generates a type-safe SDK client for commands and queries using Transport
+func generateSDKClient(gen *protogen.Plugin, file *protogen.File, aggregates []*AggregateInfo, services []*ServiceInfo) {
+	clientFilename := file.GeneratedFilenamePrefix + "_client.pb.go"
+	g := gen.NewGeneratedFile(clientFilename, file.GoImportPath)
+
+	// Header
+	g.P("// Code generated by protoc-gen-eventsourcing. DO NOT EDIT.")
+	g.P("// Client SDK for ", file.Desc.Name())
+	g.P()
+	g.P("package ", file.GoPackageName)
+	g.P()
+	g.P("import (")
+	g.P(`	"context"`)
+	g.P()
+	g.P(`	"github.com/plaenen/eventsourcing/pkg/eventsourcing"`)
+	g.P(")")
+	g.P()
+
+	// Generate aggregate-specific client for each aggregate
+	for _, agg := range aggregates {
+		clientName := agg.TypeName + "Client"
+
+		g.P("// ", clientName, " provides type-safe methods for ", agg.TypeName, " commands and queries")
+		g.P("type ", clientName, " struct {")
+		g.P("	transport eventsourcing.Transport")
+		g.P("}")
+		g.P()
+
+		g.P("// New", clientName, " creates a new type-safe client for ", agg.TypeName)
+		g.P("func New", clientName, "(transport eventsourcing.Transport) *", clientName, " {")
+		g.P("	return &", clientName, "{transport: transport}")
+		g.P("}")
+		g.P()
+
+		// Find services for this aggregate
+		for _, svc := range services {
+			if svc.AggregateName != agg.TypeName {
+				continue
+			}
+
+			// Generate command methods
+			for _, method := range svc.Commands {
+				methodName := method.GoName
+				inputType := g.QualifiedGoIdent(method.Input.GoIdent)
+				outputType := g.QualifiedGoIdent(method.Output.GoIdent)
+				subject := string(file.Desc.Package()) + "." + svc.Name + "." + methodName
+
+				g.P("// ", methodName, " sends a ", methodName, " command and returns the response")
+				g.P("func (c *", clientName, ") ", methodName, "(ctx context.Context, cmd *", inputType, ") (*", outputType, ", *eventsourcing.AppError) {")
+				g.P("	// Send request via transport")
+				g.P(`	resp, err := c.transport.Request(ctx, "`, subject, `", cmd)`)
+				g.P("	if err != nil {")
+				g.P("		return nil, &eventsourcing.AppError{")
+				g.P(`			Code:    "TRANSPORT_ERROR",`)
+				g.P("			Message: err.Error(),")
+				g.P("		}")
+				g.P("	}")
+				g.P()
+				g.P("	// Check if request succeeded")
+				g.P("	if !resp.Success {")
+				g.P("		return nil, resp.GetError()")
+				g.P("	}")
+				g.P()
+				g.P("	// Unpack response data")
+				g.P("	result := &", outputType, "{}")
+				g.P("	if err := resp.UnpackData(result); err != nil {")
+				g.P("		return nil, &eventsourcing.AppError{")
+				g.P(`			Code:    "INVALID_RESPONSE",`)
+				g.P("			Message: err.Error(),")
+				g.P("		}")
+				g.P("	}")
+				g.P()
+				g.P("	return result, nil")
+				g.P("}")
+				g.P()
+			}
+
+			// Generate query methods
+			for _, method := range svc.Queries {
+				methodName := method.GoName
+				inputType := g.QualifiedGoIdent(method.Input.GoIdent)
+				outputType := g.QualifiedGoIdent(method.Output.GoIdent)
+				subject := string(file.Desc.Package()) + "." + svc.Name + "." + methodName
+
+				g.P("// ", methodName, " executes a ", methodName, " query and returns the result")
+				g.P("func (c *", clientName, ") ", methodName, "(ctx context.Context, query *", inputType, ") (*", outputType, ", *eventsourcing.AppError) {")
+				g.P("	// Send request via transport")
+				g.P(`	resp, err := c.transport.Request(ctx, "`, subject, `", query)`)
+				g.P("	if err != nil {")
+				g.P("		return nil, &eventsourcing.AppError{")
+				g.P(`			Code:    "TRANSPORT_ERROR",`)
+				g.P("			Message: err.Error(),")
+				g.P("		}")
+				g.P("	}")
+				g.P()
+				g.P("	// Check if request succeeded")
+				g.P("	if !resp.Success {")
+				g.P("		return nil, resp.GetError()")
+				g.P("	}")
+				g.P()
+				g.P("	// Unpack response data")
+				g.P("	result := &", outputType, "{}")
+				g.P("	if err := resp.UnpackData(result); err != nil {")
+				g.P("		return nil, &eventsourcing.AppError{")
+				g.P(`			Code:    "INVALID_RESPONSE",`)
+				g.P("			Message: err.Error(),")
+				g.P("		}")
+				g.P("	}")
+				g.P()
+				g.P("	return result, nil")
+				g.P("}")
+				g.P()
+			}
+		}
+	}
+}
+
+// findIDField finds the ID field in a message (looks for fields ending with _id)
+func findIDField(msg *protogen.Message) string {
+	for _, field := range msg.Fields {
+		fieldName := string(field.Desc.Name())
+		if strings.HasSuffix(fieldName, "_id") {
+			return field.GoName
+		}
+	}
+	// Fallback to first string field
+	for _, field := range msg.Fields {
+		if field.Desc.Kind().String() == "string" {
+			return field.GoName
+		}
+	}
+	return "Id"
+}
+
+// generateHandlerInterfaces generates handler interfaces for developers to implement
+func generateHandlerInterfaces(gen *protogen.Plugin, file *protogen.File, aggregates []*AggregateInfo, services []*ServiceInfo) {
+	handlerFilename := file.GeneratedFilenamePrefix + "_handler.pb.go"
+	g := gen.NewGeneratedFile(handlerFilename, file.GoImportPath)
+
+	// Header
+	g.P("// Code generated by protoc-gen-eventsourcing. DO NOT EDIT.")
+	g.P("// Handler interfaces for ", file.Desc.Name())
+	g.P("// Developers implement these interfaces to handle commands and queries")
+	g.P()
+	g.P("package ", file.GoPackageName)
+	g.P()
+	g.P("import (")
+	g.P(`	"context"`)
+	g.P()
+	g.P(`	"github.com/plaenen/eventsourcing/pkg/eventsourcing"`)
+	g.P(")")
+	g.P()
+
+	// Generate handler interface for each service
+	for _, svc := range services {
+		handlerName := svc.Name + "Handler"
+
+		g.P("// ", handlerName, " is the interface developers implement to handle ", svc.Name, " requests")
+		g.P("type ", handlerName, " interface {")
+
+		// Generate method signatures for commands
+		for _, method := range svc.Commands {
+			methodName := method.GoName
+			inputType := g.QualifiedGoIdent(method.Input.GoIdent)
+			outputType := g.QualifiedGoIdent(method.Output.GoIdent)
+
+			g.P("	// ", methodName, " handles the ", methodName, " command")
+			g.P("	", methodName, "(ctx context.Context, cmd *", inputType, ") (*", outputType, ", *eventsourcing.AppError)")
+		}
+
+		// Generate method signatures for queries
+		for _, method := range svc.Queries {
+			methodName := method.GoName
+			inputType := g.QualifiedGoIdent(method.Input.GoIdent)
+			outputType := g.QualifiedGoIdent(method.Output.GoIdent)
+
+			g.P("	// ", methodName, " handles the ", methodName, " query")
+			g.P("	", methodName, "(ctx context.Context, query *", inputType, ") (*", outputType, ", *eventsourcing.AppError)")
+		}
+
+		g.P("}")
+		g.P()
+	}
+}
+
+// generateServerService generates server-side service that routes requests to handlers
+func generateServerService(gen *protogen.Plugin, file *protogen.File, aggregates []*AggregateInfo, services []*ServiceInfo) {
+	serverFilename := file.GeneratedFilenamePrefix + "_server.pb.go"
+	g := gen.NewGeneratedFile(serverFilename, file.GoImportPath)
+
+	// Header
+	g.P("// Code generated by protoc-gen-eventsourcing. DO NOT EDIT.")
+	g.P("// Server service for ", file.Desc.Name())
+	g.P()
+	g.P("package ", file.GoPackageName)
+	g.P()
+	g.P("import (")
+	g.P(`	"context"`)
+	g.P(`	"fmt"`)
+	g.P()
+	g.P(`	"github.com/plaenen/eventsourcing/pkg/eventsourcing"`)
+	g.P(`	"google.golang.org/protobuf/proto"`)
+	g.P(")")
+	g.P()
+
+	// Generate server for each service
+	for _, svc := range services {
+		serverName := svc.Name + "Server"
+		handlerName := svc.Name + "Handler"
+
+		// Server struct
+		g.P("// ", serverName, " handles ", svc.Name, " requests by routing them to the handler")
+		g.P("type ", serverName, " struct {")
+		g.P("	server  eventsourcing.Server")
+		g.P("	handler ", handlerName)
+		g.P("}")
+		g.P()
+
+		// Constructor
+		g.P("// New", serverName, " creates a new server for ", svc.Name)
+		g.P("func New", serverName, "(server eventsourcing.Server, handler ", handlerName, ") *", serverName, " {")
+		g.P("	return &", serverName, "{")
+		g.P("		server:  server,")
+		g.P("		handler: handler,")
+		g.P("	}")
+		g.P("}")
+		g.P()
+
+		// Start method
+		g.P("// Start registers all handlers and starts the server")
+		g.P("func (s *", serverName, ") Start(ctx context.Context) error {")
+
+		// Register handlers for commands
+		for _, method := range svc.Commands {
+			methodName := method.GoName
+			subject := string(file.Desc.Package()) + "." + svc.Name + "." + methodName
+
+			g.P("	// Register ", methodName, " handler")
+			g.P(`	if err := s.server.RegisterHandler("`, subject, `", s.handle`, methodName, `); err != nil {`)
+			g.P("		return fmt.Errorf(\"failed to register ", methodName, " handler: %w\", err)")
+			g.P("	}")
+		}
+
+		// Register handlers for queries
+		for _, method := range svc.Queries {
+			methodName := method.GoName
+			subject := string(file.Desc.Package()) + "." + svc.Name + "." + methodName
+
+			g.P("	// Register ", methodName, " handler")
+			g.P(`	if err := s.server.RegisterHandler("`, subject, `", s.handle`, methodName, `); err != nil {`)
+			g.P("		return fmt.Errorf(\"failed to register ", methodName, " handler: %w\", err)")
+			g.P("	}")
+		}
+
+		g.P()
+		g.P("	return s.server.Start(ctx)")
+		g.P("}")
+		g.P()
+
+		// Generate handler wrapper methods for commands
+		for _, method := range svc.Commands {
+			methodName := method.GoName
+			inputType := g.QualifiedGoIdent(method.Input.GoIdent)
+
+			g.P("func (s *", serverName, ") handle", methodName, "(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {")
+			g.P("	cmd := request.(*", inputType, ")")
+			g.P("	result, appErr := s.handler.", methodName, "(ctx, cmd)")
+			g.P("	if appErr != nil {")
+			g.P("		return &eventsourcing.Response{")
+			g.P("			Success: false,")
+			g.P("			Error:   appErr,")
+			g.P("		}, nil")
+			g.P("	}")
+			g.P("	return eventsourcing.NewSuccessResponse(result)")
+			g.P("}")
+			g.P()
+		}
+
+		// Generate handler wrapper methods for queries
+		for _, method := range svc.Queries {
+			methodName := method.GoName
+			inputType := g.QualifiedGoIdent(method.Input.GoIdent)
+
+			g.P("func (s *", serverName, ") handle", methodName, "(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {")
+			g.P("	query := request.(*", inputType, ")")
+			g.P("	result, appErr := s.handler.", methodName, "(ctx, query)")
+			g.P("	if appErr != nil {")
+			g.P("		return &eventsourcing.Response{")
+			g.P("			Success: false,")
+			g.P("			Error:   appErr,")
+			g.P("		}, nil")
+			g.P("	}")
+			g.P("	return eventsourcing.NewSuccessResponse(result)")
+			g.P("}")
+			g.P()
+		}
+
+		// Close method
+		g.P("// Close stops the server")
+		g.P("func (s *", serverName, ") Close() error {")
+		g.P("	return s.server.Close()")
+		g.P("}")
+		g.P()
+	}
+}
+
+// generateUnifiedSDK generates a unified SDK wrapper that combines client functionality
+func generateUnifiedSDK(gen *protogen.Plugin, file *protogen.File, aggregates []*AggregateInfo, services []*ServiceInfo) {
+	sdkFilename := file.GeneratedFilenamePrefix + "_sdk.pb.go"
+	g := gen.NewGeneratedFile(sdkFilename, file.GoImportPath)
+
+	// Header
+	g.P("// Code generated by protoc-gen-eventsourcing. DO NOT EDIT.")
+	g.P("// Unified SDK for ", file.Desc.Name())
+	g.P()
+	g.P("package ", file.GoPackageName)
+	g.P()
+	g.P("import (")
+	g.P(`	"context"`)
+	g.P()
+	g.P(`	"github.com/plaenen/eventsourcing/pkg/eventsourcing"`)
+	g.P(")")
+	g.P()
+
+	// Generate SDK for each aggregate
+	for _, agg := range aggregates {
+		sdkName := agg.TypeName + "SDK"
+		clientName := agg.TypeName + "Client"
+
+		// SDK documentation
+		g.P("// ", sdkName, " provides a unified, developer-friendly interface for the ", agg.TypeName, " service.")
+		g.P("// It combines all commands and queries into a single client that only requires a transport.")
+		g.P("//")
+		g.P("// Example usage:")
+		g.P("//")
+		g.P("//	transport, _ := nats.NewTransport(&nats.TransportConfig{...})")
+		g.P("//	sdk := ", file.GoPackageName, ".New", sdkName, "(transport)")
+		g.P("//")
+		g.P("//	// Execute commands and queries")
+
+		// Find first command as example
+		for _, svc := range services {
+			if svc.AggregateName == agg.TypeName && len(svc.Commands) > 0 {
+				firstCmd := svc.Commands[0]
+				cmdName := firstCmd.GoName
+				g.P("//	resp, err := sdk.", cmdName, "(ctx, &", file.GoPackageName, ".", firstCmd.Input.GoIdent.GoName, "{...})")
+				break
+			}
+		}
+
+		g.P("type ", sdkName, " struct {")
+		g.P("	client *", clientName)
+		g.P("}")
+		g.P()
+
+		// Constructor
+		g.P("// New", sdkName, " creates a new unified SDK for the ", agg.TypeName, " service.")
+		g.P("// It only requires a transport - all service clients are created automatically.")
+		g.P("func New", sdkName, "(transport eventsourcing.Transport) *", sdkName, " {")
+		g.P("	return &", sdkName, "{")
+		g.P("		client: New", clientName, "(transport),")
+		g.P("	}")
+		g.P("}")
+		g.P()
+
+		// Generate wrapper methods for commands and queries
+		for _, svc := range services {
+			if svc.AggregateName != agg.TypeName {
+				continue
+			}
+
+			// Commands
+			if len(svc.Commands) > 0 {
+				g.P("// Commands")
+				g.P()
+			}
+
+			for _, method := range svc.Commands {
+				methodName := method.GoName
+				inputType := g.QualifiedGoIdent(method.Input.GoIdent)
+				outputType := g.QualifiedGoIdent(method.Output.GoIdent)
+
+				// Extract brief description from method name
+				description := extractDescription(methodName)
+
+				g.P("// ", methodName, " ", description)
+				g.P("func (s *", sdkName, ") ", methodName, "(ctx context.Context, cmd *", inputType, ") (*", outputType, ", *eventsourcing.AppError) {")
+				g.P("	return s.client.", methodName, "(ctx, cmd)")
+				g.P("}")
+				g.P()
+			}
+
+			// Queries
+			if len(svc.Queries) > 0 {
+				g.P("// Queries")
+				g.P()
+			}
+
+			for _, method := range svc.Queries {
+				methodName := method.GoName
+				inputType := g.QualifiedGoIdent(method.Input.GoIdent)
+				outputType := g.QualifiedGoIdent(method.Output.GoIdent)
+
+				description := extractDescription(methodName)
+
+				g.P("// ", methodName, " ", description)
+				g.P("func (s *", sdkName, ") ", methodName, "(ctx context.Context, query *", inputType, ") (*", outputType, ", *eventsourcing.AppError) {")
+				g.P("	return s.client.", methodName, "(ctx, query)")
+				g.P("}")
+				g.P()
+			}
+		}
+
+		// Utility methods
+		g.P("// Transport returns the underlying transport used by this SDK.")
+		g.P("// This can be useful for cleanup or advanced use cases.")
+		g.P("func (s *", sdkName, ") Transport() eventsourcing.Transport {")
+		g.P("	return s.client.transport")
+		g.P("}")
+		g.P()
+
+		g.P("// Close closes the underlying transport connection.")
+		g.P("// This is a convenience method equivalent to calling Transport().Close()")
+		g.P("func (s *", sdkName, ") Close() error {")
+		g.P("	return s.client.transport.Close()")
+		g.P("}")
+		g.P()
+	}
+}
+
+// extractDescription creates a brief description from a method name
+func extractDescription(methodName string) string {
+	switch {
+	case strings.HasPrefix(methodName, "Get"):
+		return "retrieves " + strings.ToLower(strings.TrimPrefix(methodName, "Get"))
+	case strings.HasPrefix(methodName, "List"):
+		return "lists " + strings.ToLower(strings.TrimPrefix(methodName, "List"))
+	case strings.HasPrefix(methodName, "Create"):
+		return "creates a new " + strings.ToLower(strings.TrimPrefix(methodName, "Create"))
+	case strings.HasPrefix(methodName, "Update"):
+		return "updates " + strings.ToLower(strings.TrimPrefix(methodName, "Update"))
+	case strings.HasPrefix(methodName, "Delete"):
+		return "deletes " + strings.ToLower(strings.TrimPrefix(methodName, "Delete"))
+	case strings.HasPrefix(methodName, "Open"):
+		return "opens " + strings.ToLower(strings.TrimPrefix(methodName, "Open"))
+	case strings.HasPrefix(methodName, "Close"):
+		return "closes " + strings.ToLower(strings.TrimPrefix(methodName, "Close"))
+	case methodName == "Deposit":
+		return "adds money to an account"
+	case methodName == "Withdraw":
+		return "removes money from an account"
+	default:
+		return "executes " + strings.ToLower(methodName)
+	}
 }

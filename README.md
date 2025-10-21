@@ -4,7 +4,7 @@
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/plaenen/eventsourcing)](https://goreportcard.com/report/github.com/plaenen/eventsourcing)
 
-A production-ready, type-safe CQRS and Event Sourcing framework for Go with code generation from Protocol Buffers.
+A **alpha version**, type-safe CQRS and Event Sourcing framework for Go with code generation from Protocol Buffers.
 
 ## ✨ Features
 
@@ -22,9 +22,13 @@ A production-ready, type-safe CQRS and Event Sourcing framework for Go with code
 
 ### Distribution & Integration
 - **🚀 NATS JetStream** - Distributed event bus with at-least-once delivery and consumer groups
+- **📡 NATS Command Bus** - Distributed command processing with request-reply pattern (Production mode)
+- **🎁 Unified SDK** - Single client for commands/events/queries with Dev/Prod modes
+- **🤖 Auto-Generated Clients** - Type-safe SDK clients generated from proto definitions
 - **📊 Projection Management** - Hybrid approach using EventBus for real-time updates and EventStore for rebuilds
 - **🔌 Middleware Pipeline** - Logging (slog), validation, OpenTelemetry tracing, RBAC authorization, panic recovery
 - **🌐 Connect RPC** - Modern RPC with HTTP/JSON and gRPC support via connectrpc.com
+- **🏢 Multi-Tenancy** - Built-in support for SaaS applications with two isolation strategies
 
 ## 📋 Table of Contents
 
@@ -33,6 +37,7 @@ A production-ready, type-safe CQRS and Event Sourcing framework for Go with code
 - [Core Concepts](#-core-concepts)
 - [Code Generation](#-code-generation)
 - [Middleware](#-middleware)
+- [Multi-Tenancy](#-multi-tenancy)
 - [Testing](#-testing)
 - [Performance](#-performance)
 - [Examples](#-examples)
@@ -190,6 +195,7 @@ The code generator creates:
 - ✅ Event emitter helper methods (`EmitAccountOpenedEvent`, etc.)
 - ✅ Event applier methods that update aggregate state
 - ✅ Type-safe repository (`AccountRepository`)
+- ✅ **`AccountClient` SDK** with type-safe command/query methods
 - ✅ Automatic snapshot serialization via proto marshal
 - ✅ Event serialization/deserialization helpers
 
@@ -265,7 +271,97 @@ func (a *Account) Deposit(ctx context.Context, cmd *accountv1.DepositCommand, me
 }
 ```
 
-### 4️⃣ Wire Up Infrastructure
+### 4️⃣ Use the Generated Client (Recommended)
+
+The framework automatically generates **type-safe clients** from your proto definitions:
+
+```go
+package main
+
+import (
+	"context"
+	"log"
+	"time"
+
+	accountv1 "github.com/plaenen/eventsourcing/examples/pb/account/v1"
+	"github.com/plaenen/eventsourcing/examples/bankaccount/handlers"
+	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
+	natspkg "github.com/plaenen/eventsourcing/pkg/nats"
+	"github.com/plaenen/eventsourcing/pkg/sqlite"
+)
+
+func main() {
+	ctx := context.Background()
+
+	// Setup infrastructure
+	eventStore, _ := sqlite.NewEventStore(sqlite.WithFilename("./events.db"))
+	defer eventStore.Close()
+
+	repo := accountv1.NewAccountRepository(eventStore)
+	commandHandler := handlers.NewAccountCommandHandler(repo)
+
+	// Start NATS server (server-side)
+	natsServer, _ := natspkg.NewServer(&natspkg.ServerConfig{
+		URL:  "nats://localhost:4222",
+		Name: "AccountService",
+	})
+	defer natsServer.Close()
+
+	// Register handlers
+	commandService := accountv1.NewAccountCommandServiceServer(natsServer, commandHandler)
+	commandService.Start(ctx)
+
+	// Create client transport (client-side)
+	transport, _ := natspkg.NewTransport(&natspkg.TransportConfig{
+		URL: "nats://localhost:4222",
+	})
+	defer transport.Close()
+
+	// Use generated client - fully type-safe!
+	client := accountv1.NewAccountClient(transport)
+
+	// Execute commands
+	resp, appErr := client.OpenAccount(ctx, &accountv1.OpenAccountCommand{
+		AccountId:      "acc-123",
+		OwnerName:      "Alice Johnson",
+		InitialBalance: "1000.00",
+	})
+	if appErr != nil {
+		log.Fatalf("Error: [%s] %s", appErr.Code, appErr.Message)
+	}
+
+	log.Printf("Account opened: %s", resp.AccountId)
+}
+```
+
+**Benefits:**
+- ✅ **Type-safe** - Full compile-time checking from protobuf
+- ✅ **Auto-generated** - No manual client code needed
+- ✅ **Service discovery** - NATS microservices API
+- ✅ **Error handling** - Structured AppError responses
+- ✅ **Distributed** - Runs over NATS for microservices
+- ✅ **Observability-ready** - Works with OpenTelemetry
+
+**How It Works:**
+
+1. Define your proto files with commands, queries, and events
+2. Run `task generate` to generate protobuf code
+3. Generated clients appear in `examples/pb/{service}/v1/*_sdk.pb.go`
+4. Use `NewAccountClient(transport)` for type-safe command execution
+
+See `examples/bankaccount_demo.go` for a complete working example.
+
+**Alternative: Direct Handler Registration**
+
+If you prefer to use individual service clients directly:
+
+```go
+client, _ := sdk.NewClient(config)
+accountClient := accountv1.NewAccountClient(client)
+accountClient.OpenAccount(ctx, cmd, principalID)
+```
+
+### 5️⃣ Wire Up Infrastructure (Manual Approach)
 
 Connect all components in your main application:
 
@@ -962,6 +1058,170 @@ func AuditMiddleware(logger *slog.Logger) eventsourcing.Middleware {
 commandBus.Use(AuditMiddleware(logger))
 ```
 
+## 🏢 Multi-Tenancy
+
+Build SaaS applications with built-in tenant isolation at the event sourcing level.
+
+### Isolation Strategies
+
+The framework supports two multi-tenancy strategies:
+
+**1. Shared Database (Tenant-Prefixed Aggregates)**
+
+All tenants share the same database with tenant-scoped aggregate IDs:
+
+```go
+import "github.com/plaenen/eventsourcing/pkg/multitenancy"
+
+// Create multi-tenant store
+multiStore, _ := multitenancy.NewMultiTenantEventStore(multitenancy.MultiTenantConfig{
+    Strategy:  multitenancy.SharedDatabase,
+    SharedDSN: "./events.db",
+    WALMode:   true,
+})
+
+// Add tenant to context
+ctx := multitenancy.WithTenantID(context.Background(), "tenant-abc")
+
+// Compose tenant-scoped aggregate ID
+aggregateID := multitenancy.ComposeAggregateID("tenant-abc", "acc-001")
+// Result: "tenant-abc::acc-001"
+
+// Get store and use normally
+store, _ := multiStore.GetStore(ctx)
+repo := accountv1.NewAccountRepository(store)
+```
+
+**Pros:**
+- ✅ Simple deployment - single database
+- ✅ Easy cross-tenant analytics
+- ✅ Lower infrastructure overhead
+
+**Best for:** 100s-1000s of small tenants
+
+**2. Database-Per-Tenant**
+
+Each tenant gets their own isolated SQLite database:
+
+```go
+multiStore, _ := multitenancy.NewMultiTenantEventStore(multitenancy.MultiTenantConfig{
+    Strategy:             multitenancy.DatabasePerTenant,
+    DatabasePathTemplate: "./data/tenant_%s.db",
+    WALMode:              true,
+})
+
+// Tenant context determines which database
+ctx := multitenancy.WithTenantID(context.Background(), "tenant-xyz")
+
+// Simple local IDs (no prefix needed!)
+account := accountv1.NewAccount("acc-001")
+```
+
+**Pros:**
+- ✅ Complete physical isolation
+- ✅ Easy tenant backup/restore/delete
+- ✅ Natural security boundary
+
+**Best for:** 10s-100s of enterprise tenants
+
+### Middleware Enforcement
+
+Add tenant isolation middleware to your command bus:
+
+```go
+import "github.com/plaenen/eventsourcing/pkg/multitenancy"
+
+commandBus := eventsourcing.NewCommandBus()
+
+// Extract tenant from context/metadata/custom source
+commandBus.Use(multitenancy.TenantExtractionMiddleware(extractor))
+
+// Enforce tenant boundaries (validates aggregate IDs match tenant)
+commandBus.Use(multitenancy.TenantIsolationMiddleware())
+
+// Authorize principal access to tenant
+commandBus.Use(multitenancy.TenantAuthorizationMiddleware(authorizer))
+```
+
+### HTTP Integration
+
+Extract tenant from requests and propagate through the stack:
+
+```go
+func TenantMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        // Extract from header, subdomain, JWT claim, etc.
+        tenantID := r.Header.Get("X-Tenant-ID")
+
+        // Add to context
+        ctx := multitenancy.WithTenantID(r.Context(), tenantID)
+        next.ServeHTTP(w, r.WithContext(ctx))
+    })
+}
+
+func (h *Handler) OpenAccount(w http.ResponseWriter, r *http.Request) {
+    // Tenant automatically flows through context
+    tenantID := multitenancy.MustGetTenantID(r.Context())
+
+    // Compose tenant-scoped ID
+    aggregateID := multitenancy.ComposeAggregateID(tenantID, req.AccountID)
+
+    // Use SDK - tenant isolation enforced by middleware
+    h.sdk.Account.OpenAccount(r.Context(), cmd, principalID)
+}
+```
+
+### Projections with Multi-Tenancy
+
+Index read models by tenant for efficient queries:
+
+```sql
+CREATE TABLE account_views (
+    tenant_id TEXT NOT NULL,
+    account_id TEXT NOT NULL,
+    owner_name TEXT NOT NULL,
+    balance TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    PRIMARY KEY (tenant_id, account_id)
+);
+
+CREATE INDEX idx_tenant_accounts ON account_views(tenant_id);
+```
+
+```go
+func (p *AccountViewProjection) Handle(ctx context.Context, event *eventsourcing.Event) error {
+    tenantID, localID, _ := multitenancy.DecomposeAggregateID(event.AggregateID)
+
+    _, err := p.db.Exec(`
+        INSERT INTO account_views (tenant_id, account_id, owner_name, balance, version)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(tenant_id, account_id) DO UPDATE SET ...
+    `, tenantID, localID, ...)
+
+    return err
+}
+```
+
+### Complete Guide
+
+See **[docs/MULTITENANCY.md](docs/MULTITENANCY.md)** for:
+- Detailed strategy comparison
+- Migration from single-tenant
+- Tenant authorization patterns
+- Testing multi-tenant logic
+- Production deployment guide
+- Complete working examples
+
+### Example
+
+Run the multi-tenant example:
+
+```bash
+go run ./examples/multitenant
+```
+
+Output demonstrates both isolation strategies with tenant isolation verification.
+
 ## 🧪 Testing
 
 ### Unit Tests (Aggregate Logic)
@@ -1136,6 +1396,42 @@ task test:coverage
 **View detailed walkthrough:**
 - [examples/EXAMPLE.md](examples/EXAMPLE.md) - Step-by-step tutorial
 - [examples/SETUP.md](examples/SETUP.md) - Development environment setup
+
+### Multi-Tenancy (SaaS Applications)
+
+Location: `examples/multitenant/`
+
+**Features demonstrated:**
+- ✅ Two isolation strategies (Shared Database, Database-Per-Tenant)
+- ✅ Tenant context propagation
+- ✅ Tenant-scoped aggregate IDs
+- ✅ Complete tenant isolation verification
+- ✅ Working examples for both strategies
+
+**Run the example:**
+
+```bash
+go run ./examples/multitenant
+```
+
+**Learn more:**
+- [docs/MULTITENANCY.md](docs/MULTITENANCY.md) - Complete multi-tenancy guide
+
+### Unified SDK
+
+Location: `examples/unified_sdk/`
+
+**Features demonstrated:**
+- ✅ Single SDK entry point for all services
+- ✅ Auto-generated service clients
+- ✅ Property-based API access
+- ✅ Type-safe command execution
+
+**Run the example:**
+
+```bash
+go run ./examples/unified_sdk
+```
 
 ## 💡 Best Practices
 
