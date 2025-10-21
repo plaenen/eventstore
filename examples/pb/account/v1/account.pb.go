@@ -7,13 +7,12 @@
 package accountv1
 
 import (
+	_ "github.com/plaenen/eventstore/examples/eventsourcing"
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	_ "github.com/plaenen/eventstore/examples/pb/eventsourcing"
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -1559,7 +1558,10 @@ const file_account_v1_account_proto_rawDesc = "" +
 	"GetAccount\x12\x1d.account.v1.GetAccountRequest\x1a\x17.account.v1.AccountView\x12Q\n" +
 	"\fListAccounts\x12\x1f.account.v1.ListAccountsRequest\x1a .account.v1.ListAccountsResponse\x12R\n" +
 	"\x11GetAccountBalance\x12$.account.v1.GetAccountBalanceRequest\x1a\x17.account.v1.BalanceView\x12]\n" +
-	"\x11GetAccountHistory\x12$.account.v1.GetAccountHistoryRequest\x1a\".account.v1.AccountHistoryResponseBCZAgithub.com/plaenen/eventstore/examples/pb/account/v1;accountv1b\x06proto3"
+	"\x11GetAccountHistory\x12$.account.v1.GetAccountHistoryRequest\x1a\".account.v1.AccountHistoryResponseB\xa4\x01\n" +
+	"\x0ecom.account.v1B\fAccountProtoP\x01Z;github.com/plaenen/eventstore/examples/account/v1;accountv1\xa2\x02\x03AXX\xaa\x02\n" +
+	"Account.V1\xca\x02\n" +
+	"Account\\V1\xe2\x02\x16Account\\V1\\GPBMetadata\xea\x02\vAccount::V1b\x06proto3"
 
 var (
 	file_account_v1_account_proto_rawDescOnce sync.Once

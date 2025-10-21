@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package subscription.v1;
+
+option go_package = "github.com/plaenen/eventstore/examples/pb/subscription/v1;subscriptionv1";
+
+import "eventsourcing/options.proto";
+import "entity/v1/entity.proto";
+import "subscription/v1/model.proto";
+
+// SubscriptionCommandService handles write operations (commands)
+service SubscriptionCommandService {
+  option (eventsourcing.aggregate_name) = "Subscription";
+  // CreateSubscription creates a new subscription
+  rpc CreateSubscription(CreateSubscriptionCommand) returns (CreateSubscriptionResponse);
+  // CancelSubscription cancels a subscription
+  rpc CancelSubscription(CancelSubscriptionCommand) returns (CancelSubscriptionResponse);
+}
+
+// SubscriptionQueryService handles read operations (queries)
+service SubscriptionQueryService {
+  // GetSubscription retrieves subscription details by ID
+  rpc GetSubscription(GetSubscriptionRequest) returns (GetSubscriptionResponse);
+}
+
+// -- Commands (Write Side) ---
+
+message CreateSubscriptionCommand {
+  option (eventsourcing.aggregate_options) = {
+    aggregate: "Subscription"
+    produces_events: "SubscriptionCreatedEvent"
+  };
+
+  string admin_email = 1;
+}
+
+message CreateSubscriptionResponse {
+  string subscription_id = 1;
+  int64 version = 2;
+}
+
+message CancelSubscriptionCommand {
+  option (eventsourcing.aggregate_options) = {
+    aggregate: "Subscription"
+    produces_events: "SubscriptionCancelledEvent"
+  };
+
+  string subscription_id = 1;
+}
+
+message CancelSubscriptionResponse {
+  entity.v1.Status status = 1;
+  int64 version = 2;
+}
+
+
+// --- Queries (Read Side) ---
+
+message GetSubscriptionRequest {
+  string subscription_id = 1;
+}
+
+message GetSubscriptionResponse {
+  int64 version = 1;
+  string subscription_id = 2;
+  string admin_email = 3;
+  entity.v1.Status status = 4;
+  DisabledReason disabled_reason = 5;
+  string disabled_reason_description = 6;
+}

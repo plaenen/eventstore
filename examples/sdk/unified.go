@@ -4,6 +4,7 @@ package sdk
 
 import (
 	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
+	subscriptionv1 "github.com/plaenen/eventstore/examples/pb/subscription/v1"
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
 )
 
@@ -18,9 +19,12 @@ import (
 //
 //	// Use any service
 //	sdk.Account.OpenAccount(ctx, cmd)
+//	sdk.Subscription.OpenAccount(ctx, cmd)
 type SDK struct {
 	// Account provides access to Account service operations
 	Account *accountv1.AccountSDK
+	// Subscription provides access to Subscription service operations
+	Subscription *subscriptionv1.SubscriptionSDK
 
 	transport eventsourcing.Transport
 }
@@ -29,7 +33,8 @@ type SDK struct {
 // It only requires a single transport - all service SDKs are created automatically.
 func NewSDK(transport eventsourcing.Transport) *SDK {
 	return &SDK{
-		Account:   accountv1.NewAccountSDK(transport),
+		Account: accountv1.NewAccountSDK(transport),
+		Subscription: subscriptionv1.NewSubscriptionSDK(transport),
 		transport: transport,
 	}
 }

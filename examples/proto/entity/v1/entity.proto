@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package entity.v1;
+
+option go_package = "github.com/plaenen/eventstore/examples/pb/entity/v1;entityv1";
+
+enum Status {
+    STATUS_UNSPECIFIED = 0;
+    STATUS_ACTIVE = 1;
+    STATUS_DISABLED = 2;
+}
