@@ -7,7 +7,7 @@ package accountv1
 import (
 	"context"
 
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
 )
 
 // AccountCommandServiceHandler is the interface developers implement to handle AccountCommandService requests

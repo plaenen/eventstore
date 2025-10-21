@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	accountv1 "github.com/plaenen/eventsourcing/examples/pb/account/v1"
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
-	natspkg "github.com/plaenen/eventsourcing/pkg/nats"
+	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
+	natspkg "github.com/plaenen/eventstore/pkg/nats"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,9 +24,9 @@ func TestNATSTransportLoad(t *testing.T) {
 	defer deps.Cleanup()
 
 	const (
-		numClients       = 10
+		numClients        = 10
 		requestsPerClient = 100
-		initialBalance   = "1000000.00"
+		initialBalance    = "1000000.00"
 	)
 
 	// Create test account

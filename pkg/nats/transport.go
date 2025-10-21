@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
-	"github.com/plaenen/eventsourcing/pkg/observability"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
+	"github.com/plaenen/eventstore/pkg/observability"
 	"go.opentelemetry.io/otel/propagation"
 	"google.golang.org/protobuf/proto"
 )
@@ -157,9 +157,9 @@ func (t *Transport) isRetryableError(appErr *eventsourcing.AppError) bool {
 	if appErr.Code == "SAVE_FAILED" {
 		// Check if the message indicates a version mismatch
 		if len(appErr.Message) > 0 &&
-		   (containsString(appErr.Message, "concurrency conflict") ||
-		    containsString(appErr.Message, "version mismatch") ||
-		    containsString(appErr.Message, "optimistic lock")) {
+			(containsString(appErr.Message, "concurrency conflict") ||
+				containsString(appErr.Message, "version mismatch") ||
+				containsString(appErr.Message, "optimistic lock")) {
 			return true
 		}
 	}
@@ -170,8 +170,8 @@ func (t *Transport) isRetryableError(appErr *eventsourcing.AppError) bool {
 func containsString(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr ||
 		len(s) > len(substr) && (s[:len(substr)] == substr ||
-		s[len(s)-len(substr):] == substr ||
-		findSubstring(s, substr)))
+			s[len(s)-len(substr):] == substr ||
+			findSubstring(s, substr)))
 }
 
 // findSubstring performs a simple substring search

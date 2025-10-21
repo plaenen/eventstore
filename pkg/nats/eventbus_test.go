@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
-	natspkg "github.com/plaenen/eventsourcing/pkg/nats"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
+	natspkg "github.com/plaenen/eventstore/pkg/nats"
 )
 
 func TestEmbeddedNATSEventBus(t *testing.T) {

@@ -207,16 +207,16 @@ All examples import the shared `pb` package:
 
 ```go
 import (
-    pb "github.com/plaenen/eventsourcing/examples/pb"
+    pb "github.com/plaenen/eventstore/examples/pb"
 )
 ```
 
 ## Adding New Proto Definitions
 
 1. Add `.proto` file to `examples/proto/`
-2. Update `option go_package` to `"github.com/plaenen/eventsourcing/examples/pb"`
+2. Update `option go_package` to `"github.com/plaenen/eventstore/examples/pb"`
 3. Run `buf generate` from `examples/` directory
-4. Import generated code with `pb "github.com/plaenen/eventsourcing/examples/pb"`
+4. Import generated code with `pb "github.com/plaenen/eventstore/examples/pb"`
 
 ## Troubleshooting
 
@@ -237,7 +237,7 @@ The buf.gen.yaml uses `go run` which doesn't require installation. Ensure:
 
 Check that `option go_package` in `.proto` files points to:
 ```protobuf
-option go_package = "github.com/plaenen/eventsourcing/examples/pb";
+option go_package = "github.com/plaenen/eventstore/examples/pb";
 ```
 
 ## Next Steps

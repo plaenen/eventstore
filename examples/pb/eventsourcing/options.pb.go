@@ -7,12 +7,13 @@
 package eventsourcing
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	descriptorpb "google.golang.org/protobuf/types/descriptorpb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	descriptorpb "google.golang.org/protobuf/types/descriptorpb"
 )
 
 const (
@@ -433,7 +434,7 @@ const file_eventsourcing_options_proto_rawDesc = "" +
 	"\x11aggregate_options\x12\x1f.google.protobuf.MessageOptions\x18ц\x03 \x01(\v2\x1f.eventsourcing.AggregateOptionsR\x10aggregateOptions:m\n" +
 	"\x0eaggregate_root\x12\x1f.google.protobuf.MessageOptions\x18ӆ\x03 \x01(\v2#.eventsourcing.AggregateRootOptionsR\raggregateRoot:c\n" +
 	"\revent_options\x12\x1f.google.protobuf.MessageOptions\x18Ԇ\x03 \x01(\v2\x1b.eventsourcing.EventOptionsR\feventOptions:H\n" +
-	"\x0eaggregate_name\x12\x1f.google.protobuf.ServiceOptions\x18҆\x03 \x01(\tR\raggregateNameBJZHgithub.com/plaenen/eventsourcing/examples/pb/eventsourcing;eventsourcingb\x06proto3"
+	"\x0eaggregate_name\x12\x1f.google.protobuf.ServiceOptions\x18҆\x03 \x01(\tR\raggregateNameBJZHgithub.com/plaenen/eventstore/examples/pb/eventsourcing;eventsourcingb\x06proto3"
 
 var (
 	file_eventsourcing_options_proto_rawDescOnce sync.Once

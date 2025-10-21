@@ -187,7 +187,7 @@ package domain.v1;
 
 import "eventsourcing/options.proto";
 
-option go_package = "github.com/plaenen/eventsourcing/gen/pb/domain/v1;domainv1";
+option go_package = "github.com/plaenen/eventstore/gen/pb/domain/v1;domainv1";
 
 // 1. Enums first
 enum Status { ... }
@@ -267,10 +267,10 @@ import (
     "google.golang.org/protobuf/proto"
 
     // 3. Internal framework
-    "github.com/plaenen/eventsourcing/pkg/eventsourcing"
+    "github.com/plaenen/eventstore/pkg/eventsourcing"
 
     // 4. Generated code
-    accountv1 "github.com/plaenen/eventsourcing/examples/pb/account/v1"
+    accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
 )
 ```
 
@@ -601,7 +601,7 @@ response, err := client.OpenAccount(ctx, &accountv1.OpenAccountCommand{...})
 
    import (
        "context"
-       "github.com/plaenen/eventsourcing/pkg/eventsourcing"
+       "github.com/plaenen/eventstore/pkg/eventsourcing"
    )
 
    type MyMiddleware struct {
@@ -893,7 +893,7 @@ Use multi-tenancy when:
 All tenants share one database with tenant-scoped aggregate IDs:
 
 ```go
-import "github.com/plaenen/eventsourcing/pkg/multitenancy"
+import "github.com/plaenen/eventstore/pkg/multitenancy"
 
 // Create store
 multiStore, _ := multitenancy.NewMultiTenantEventStore(multitenancy.MultiTenantConfig{

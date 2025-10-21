@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
 )
 
 // Authorizer defines the interface for authorization checks.

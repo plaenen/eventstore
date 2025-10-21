@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
-	"github.com/plaenen/eventsourcing/pkg/sqlite"
-	natspkg "github.com/plaenen/eventsourcing/pkg/nats"
-	accountv1 "github.com/plaenen/eventsourcing/examples/pb/account/v1"
+	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
+	natspkg "github.com/plaenen/eventstore/pkg/nats"
+	"github.com/plaenen/eventstore/pkg/sqlite"
 )
 
 func TestFullStack_OpenAccount(t *testing.T) {

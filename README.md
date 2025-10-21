@@ -2,7 +2,7 @@
 
 [![Go Version](https://img.shields.io/badge/Go-1.25%2B-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Go Report Card](https://goreportcard.com/badge/github.com/plaenen/eventsourcing)](https://goreportcard.com/report/github.com/plaenen/eventsourcing)
+[![Go Report Card](https://goreportcard.com/badge/github.com/plaenen/eventstore)](https://goreportcard.com/report/github.com/plaenen/eventstore)
 
 A **alpha version**, type-safe CQRS and Event Sourcing framework for Go with code generation from Protocol Buffers.
 
@@ -69,8 +69,8 @@ go install github.com/go-task/task/v3/cmd/task@latest
 
 ```bash
 # Clone repository
-git clone https://github.com/plaenen/eventsourcing.git
-cd eventsourcing
+git clone https://github.com/plaenen/eventstore.git
+cd eventstore
 
 # Complete setup (install dependencies, generate code, run tests)
 task dev:setup
@@ -82,7 +82,7 @@ task --list
 **Add to your project:**
 
 ```bash
-go get github.com/plaenen/eventsourcing
+go get github.com/plaenen/eventstore
 ```
 
 ### 1️⃣ Define Your Domain (Proto)
@@ -212,7 +212,7 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	accountv1 "github.com/yourorg/project/pb/account/v1"
 )
 
@@ -283,11 +283,11 @@ import (
 	"log"
 	"time"
 
-	accountv1 "github.com/plaenen/eventsourcing/examples/pb/account/v1"
-	"github.com/plaenen/eventsourcing/examples/bankaccount/handlers"
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
-	natspkg "github.com/plaenen/eventsourcing/pkg/nats"
-	"github.com/plaenen/eventsourcing/pkg/sqlite"
+	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
+	"github.com/plaenen/eventstore/examples/bankaccount/handlers"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
+	natspkg "github.com/plaenen/eventstore/pkg/nats"
+	"github.com/plaenen/eventstore/pkg/sqlite"
 )
 
 func main() {
@@ -373,10 +373,10 @@ import (
 	"log"
 	"log/slog"
 
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
-	"github.com/plaenen/eventsourcing/pkg/middleware"
-	natspkg "github.com/plaenen/eventsourcing/pkg/nats"
-	"github.com/plaenen/eventsourcing/pkg/sqlite"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
+	"github.com/plaenen/eventstore/pkg/middleware"
+	natspkg "github.com/plaenen/eventstore/pkg/nats"
+	"github.com/plaenen/eventstore/pkg/sqlite"
 	accountv1 "github.com/yourorg/project/pb/account/v1"
 )
 
@@ -1071,7 +1071,7 @@ The framework supports two multi-tenancy strategies:
 All tenants share the same database with tenant-scoped aggregate IDs:
 
 ```go
-import "github.com/plaenen/eventsourcing/pkg/multitenancy"
+import "github.com/plaenen/eventstore/pkg/multitenancy"
 
 // Create multi-tenant store
 multiStore, _ := multitenancy.NewMultiTenantEventStore(multitenancy.MultiTenantConfig{
@@ -1129,7 +1129,7 @@ account := accountv1.NewAccount("acc-001")
 Add tenant isolation middleware to your command bus:
 
 ```go
-import "github.com/plaenen/eventsourcing/pkg/multitenancy"
+import "github.com/plaenen/eventstore/pkg/multitenancy"
 
 commandBus := eventsourcing.NewCommandBus()
 
@@ -1514,8 +1514,8 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for:
 Quick start for contributors:
 
 ```bash
-git clone https://github.com/plaenen/eventsourcing.git
-cd eventsourcing
+git clone https://github.com/plaenen/eventstore.git
+cd eventstore
 task dev:setup      # Install dependencies and generate code
 task dev:check      # Run checks before committing
 ```
@@ -1535,9 +1535,9 @@ Built with inspiration from:
 ## 🌟 Support
 
 - ⭐ Star this repo if you find it useful
-- 🐛 [Report bugs](https://github.com/plaenen/eventsourcing/issues)
-- 💡 [Request features](https://github.com/plaenen/eventsourcing/issues)
-- 📖 [Read the docs](https://github.com/plaenen/eventsourcing)
+- 🐛 [Report bugs](https://github.com/plaenen/eventstore/issues)
+- 💡 [Request features](https://github.com/plaenen/eventstore/issues)
+- 📖 [Read the docs](https://github.com/plaenen/eventstore)
 
 ---
 

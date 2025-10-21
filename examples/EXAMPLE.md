@@ -10,7 +10,7 @@ syntax = "proto3";
 
 package bankaccount;
 
-option go_package = "github.com/plaenen/eventsourcing/examples/bankaccount/proto";
+option go_package = "github.com/plaenen/eventstore/examples/bankaccount/proto";
 
 // Command Service (Write Side)
 service AccountCommandService {
@@ -125,7 +125,7 @@ import (
 	"context"
 	"fmt"
 	"time"
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -265,7 +265,7 @@ package domain
 import (
 	"errors"
 	"math/big"
-	pb "github.com/plaenen/eventsourcing/examples/bankaccount/proto"
+	pb "github.com/plaenen/eventstore/examples/bankaccount/proto"
 )
 
 // Add business logic methods to generated Account
@@ -307,8 +307,8 @@ package handlers
 
 import (
 	"context"
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
-	pb "github.com/plaenen/eventsourcing/examples/bankaccount/proto"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
+	pb "github.com/plaenen/eventstore/examples/bankaccount/proto"
 )
 
 type AccountCommandHandler struct {
@@ -375,8 +375,8 @@ package projections
 import (
 	"context"
 	"database/sql"
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
-	pb "github.com/plaenen/eventsourcing/examples/bankaccount/proto"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
+	pb "github.com/plaenen/eventstore/examples/bankaccount/proto"
 )
 
 type AccountViewProjection struct {
@@ -451,15 +451,15 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
-	"github.com/plaenen/eventsourcing/pkg/sqlite"
-	natspkg "github.com/plaenen/eventsourcing/pkg/nats"
-	"github.com/plaenen/eventsourcing/pkg/middleware"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
+	"github.com/plaenen/eventstore/pkg/sqlite"
+	natspkg "github.com/plaenen/eventstore/pkg/nats"
+	"github.com/plaenen/eventstore/pkg/middleware"
 
-	pb "github.com/plaenen/eventsourcing/examples/bankaccount/proto"
-	"github.com/plaenen/eventsourcing/examples/bankaccount/handlers"
-	"github.com/plaenen/eventsourcing/examples/bankaccount/projections"
-	"github.com/plaenen/eventsourcing/examples/bankaccount/proto/protoconnect"
+	pb "github.com/plaenen/eventstore/examples/bankaccount/proto"
+	"github.com/plaenen/eventstore/examples/bankaccount/handlers"
+	"github.com/plaenen/eventstore/examples/bankaccount/projections"
+	"github.com/plaenen/eventstore/examples/bankaccount/proto/protoconnect"
 
 	"connectrpc.com/connect"
 	"golang.org/x/net/http2"

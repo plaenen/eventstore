@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
@@ -250,15 +250,15 @@ func (b *CommandBus) Close() error {
 
 // CommandEnvelopeWire is the wire format for command envelopes.
 type CommandEnvelopeWire struct {
-	CommandData []byte                         `json:"command_data"`
-	Metadata    eventsourcing.CommandMetadata  `json:"metadata"`
+	CommandData []byte                        `json:"command_data"`
+	Metadata    eventsourcing.CommandMetadata `json:"metadata"`
 }
 
 // CommandResponse is sent back to command senders.
 type CommandResponse struct {
-	Success bool                      `json:"success"`
-	Error   string                    `json:"error,omitempty"`
-	Events  []*eventsourcing.Event    `json:"events,omitempty"`
+	Success bool                   `json:"success"`
+	Error   string                 `json:"error,omitempty"`
+	Events  []*eventsourcing.Event `json:"events,omitempty"`
 }
 
 // RawCommand is a placeholder for commands that haven't been deserialized yet.

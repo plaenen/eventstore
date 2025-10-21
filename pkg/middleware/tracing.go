@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -15,7 +15,7 @@ import (
 // Uses the global tracer provider by default, or a custom tracer can be provided.
 func OpenTelemetryMiddleware(tracerName string) eventsourcing.CommandMiddleware {
 	if tracerName == "" {
-		tracerName = "github.com/plaenen/eventsourcing"
+		tracerName = "github.com/plaenen/eventstore"
 	}
 
 	tracer := otel.Tracer(tracerName)

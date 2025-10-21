@@ -6,15 +6,15 @@ import (
 	"log"
 	"time"
 
-	accountv1 "github.com/plaenen/eventsourcing/examples/pb/account/v1"
-	"github.com/plaenen/eventsourcing/examples/bankaccount/handlers"
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
-	natspkg "github.com/plaenen/eventsourcing/pkg/nats"
-	"github.com/plaenen/eventsourcing/pkg/observability"
-	"github.com/plaenen/eventsourcing/pkg/sqlite"
 	"github.com/nats-io/nats-server/v2/server"
-	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
+	"github.com/plaenen/eventstore/examples/bankaccount/handlers"
+	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
+	natspkg "github.com/plaenen/eventstore/pkg/nats"
+	"github.com/plaenen/eventstore/pkg/observability"
+	"github.com/plaenen/eventstore/pkg/sqlite"
 	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
+	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 )
 

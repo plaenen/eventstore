@@ -21,10 +21,10 @@ import (
 	"strings"
 
 	"google.golang.org/protobuf/compiler/protogen"
-	"google.golang.org/protobuf/types/pluginpb"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/pluginpb"
 
-	eventsourcing "github.com/plaenen/eventsourcing/gen/go/eventsourcing"
+	eventsourcing "github.com/plaenen/eventstore/gen/go/eventsourcing"
 )
 
 func main() {
@@ -93,7 +93,7 @@ func generateHeader(g *protogen.GeneratedFile, file *protogen.File) {
 	g.P("import (")
 	g.P(`	"fmt"`)
 	g.P()
-	g.P(`	"github.com/plaenen/eventsourcing/pkg/eventsourcing"`)
+	g.P(`	"github.com/plaenen/eventstore/pkg/eventsourcing"`)
 	g.P(`	"google.golang.org/protobuf/proto"`)
 	g.P(")")
 	g.P()
@@ -578,10 +578,10 @@ func inferEventName(commandName string) string {
 
 // ServiceInfo holds information about gRPC services
 type ServiceInfo struct {
-	Name        string
-	Commands    []*protogen.Method
-	Queries     []*protogen.Method
-	Service     *protogen.Service
+	Name          string
+	Commands      []*protogen.Method
+	Queries       []*protogen.Method
+	Service       *protogen.Service
 	AggregateName string
 }
 
@@ -643,7 +643,7 @@ func generateSDKClient(gen *protogen.Plugin, file *protogen.File, aggregates []*
 	g.P("import (")
 	g.P(`	"context"`)
 	g.P()
-	g.P(`	"github.com/plaenen/eventsourcing/pkg/eventsourcing"`)
+	g.P(`	"github.com/plaenen/eventstore/pkg/eventsourcing"`)
 	g.P(")")
 	g.P()
 
@@ -778,7 +778,7 @@ func generateHandlerInterfaces(gen *protogen.Plugin, file *protogen.File, aggreg
 	g.P("import (")
 	g.P(`	"context"`)
 	g.P()
-	g.P(`	"github.com/plaenen/eventsourcing/pkg/eventsourcing"`)
+	g.P(`	"github.com/plaenen/eventstore/pkg/eventsourcing"`)
 	g.P(")")
 	g.P()
 
@@ -829,7 +829,7 @@ func generateServerService(gen *protogen.Plugin, file *protogen.File, aggregates
 	g.P(`	"context"`)
 	g.P(`	"fmt"`)
 	g.P()
-	g.P(`	"github.com/plaenen/eventsourcing/pkg/eventsourcing"`)
+	g.P(`	"github.com/plaenen/eventstore/pkg/eventsourcing"`)
 	g.P(`	"google.golang.org/protobuf/proto"`)
 	g.P(")")
 	g.P()
@@ -949,7 +949,7 @@ func generateUnifiedSDK(gen *protogen.Plugin, file *protogen.File, aggregates []
 	g.P("import (")
 	g.P(`	"context"`)
 	g.P()
-	g.P(`	"github.com/plaenen/eventsourcing/pkg/eventsourcing"`)
+	g.P(`	"github.com/plaenen/eventstore/pkg/eventsourcing"`)
 	g.P(")")
 	g.P()
 

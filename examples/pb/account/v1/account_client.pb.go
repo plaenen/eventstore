@@ -6,7 +6,7 @@ package accountv1
 import (
 	"context"
 
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
 )
 
 // AccountClient provides type-safe methods for Account commands and queries

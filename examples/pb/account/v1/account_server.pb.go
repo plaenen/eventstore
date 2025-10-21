@@ -7,7 +7,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"google.golang.org/protobuf/proto"
 )
 

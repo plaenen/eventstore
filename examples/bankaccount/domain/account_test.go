@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
-	accountv1 "github.com/plaenen/eventsourcing/examples/pb/account/v1"
+	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -51,7 +51,7 @@ func TestAccount_OpenAccount(t *testing.T) {
 			account := accountv1.NewAccount(tt.cmd.AccountId)
 
 			metadata := eventsourcing.EventMetadata{
-				CausationID:     eventsourcing.GenerateID(),
+				CausationID:   eventsourcing.GenerateID(),
 				CorrelationID: eventsourcing.GenerateID(),
 				PrincipalID:   "test-user",
 			}
@@ -129,9 +129,9 @@ func TestAccount_Deposit(t *testing.T) {
 			}
 
 			metadata := eventsourcing.EventMetadata{
-				CausationID:     eventsourcing.GenerateID(),
-				CorrelationID:   eventsourcing.GenerateID(),
-				PrincipalID:     "test-user",
+				CausationID:   eventsourcing.GenerateID(),
+				CorrelationID: eventsourcing.GenerateID(),
+				PrincipalID:   "test-user",
 			}
 
 			err := account.Deposit(context.Background(), cmd, metadata)
@@ -205,9 +205,9 @@ func TestAccount_Withdraw(t *testing.T) {
 			}
 
 			metadata := eventsourcing.EventMetadata{
-				CausationID:     eventsourcing.GenerateID(),
-				CorrelationID:   eventsourcing.GenerateID(),
-				PrincipalID:     "test-user",
+				CausationID:   eventsourcing.GenerateID(),
+				CorrelationID: eventsourcing.GenerateID(),
+				PrincipalID:   "test-user",
 			}
 
 			err := account.Withdraw(context.Background(), cmd, metadata)
@@ -246,7 +246,7 @@ func TestAccount_EventSourcing_Replay(t *testing.T) {
 			EventType:     "accountv1.AccountOpenedEvent",
 			Version:       1,
 			Timestamp:     time.Now(),
-			Data:          mustMarshal(&accountv1.AccountOpenedEvent{
+			Data: mustMarshal(&accountv1.AccountOpenedEvent{
 				AccountId:      "acc-123",
 				OwnerName:      "John Doe",
 				InitialBalance: "1000.00",
@@ -259,7 +259,7 @@ func TestAccount_EventSourcing_Replay(t *testing.T) {
 			EventType:     "accountv1.MoneyDepositedEvent",
 			Version:       2,
 			Timestamp:     time.Now(),
-			Data:          mustMarshal(&accountv1.MoneyDepositedEvent{
+			Data: mustMarshal(&accountv1.MoneyDepositedEvent{
 				AccountId:  "acc-123",
 				Amount:     "500.00",
 				NewBalance: "1500.00",
@@ -272,7 +272,7 @@ func TestAccount_EventSourcing_Replay(t *testing.T) {
 			EventType:     "accountv1.MoneyWithdrawnEvent",
 			Version:       3,
 			Timestamp:     time.Now(),
-			Data:          mustMarshal(&accountv1.MoneyWithdrawnEvent{
+			Data: mustMarshal(&accountv1.MoneyWithdrawnEvent{
 				AccountId:  "acc-123",
 				Amount:     "300.00",
 				NewBalance: "1200.00",
@@ -327,7 +327,7 @@ func TestAccount_Idempotency(t *testing.T) {
 	}
 
 	metadata := eventsourcing.EventMetadata{
-		CausationID:   commandID,
+		CausationID: commandID,
 		PrincipalID: "test-user",
 	}
 

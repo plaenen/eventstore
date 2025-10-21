@@ -7,12 +7,13 @@
 package eventsourcing
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	anypb "google.golang.org/protobuf/types/known/anypb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	anypb "google.golang.org/protobuf/types/known/anypb"
 )
 
 const (
@@ -177,7 +178,7 @@ const file_eventsourcing_response_proto_rawDesc = "" +
 	"\adetails\x18\x04 \x03(\v2$.eventsourcing.AppError.DetailsEntryR\adetails\x1a:\n" +
 	"\fDetailsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01BBZ@github.com/plaenen/eventsourcing/gen/eventsourcing;eventsourcingb\x06proto3"
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01BBZ@github.com/plaenen/eventstore/gen/eventsourcing;eventsourcingb\x06proto3"
 
 var (
 	file_eventsourcing_response_proto_rawDescOnce sync.Once

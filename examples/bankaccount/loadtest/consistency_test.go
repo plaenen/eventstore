@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	accountv1 "github.com/plaenen/eventsourcing/examples/pb/account/v1"
+	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

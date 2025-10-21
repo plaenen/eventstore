@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package account.v1;
 
-option go_package = "github.com/plaenen/eventsourcing/examples/pb/account/v1;accountv1";
+option go_package = "github.com/plaenen/eventstore/examples/pb/account/v1;accountv1";
 
 import "eventsourcing/options.proto";
 

@@ -5,8 +5,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
-	"github.com/plaenen/eventsourcing/pkg/sqlite"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
+	"github.com/plaenen/eventstore/pkg/sqlite"
 )
 
 // ExampleCheckpointStore_SaveInTx demonstrates how to use transactional

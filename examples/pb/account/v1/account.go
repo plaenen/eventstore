@@ -10,7 +10,7 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
 )
 
 // OpenAccount handles opening a new bank account with business validation

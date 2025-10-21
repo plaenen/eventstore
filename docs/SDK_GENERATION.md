@@ -98,10 +98,10 @@ The `generate-unified-sdk` tool scans all generated `*_sdk.pb.go` files and crea
 package sdk
 
 import (
-    accountv1 "github.com/plaenen/eventsourcing/examples/pb/account/v1"
-    userv1 "github.com/plaenen/eventsourcing/examples/pb/user/v1"
-    documentv1 "github.com/plaenen/eventsourcing/examples/pb/document/v1"
-    "github.com/plaenen/eventsourcing/pkg/eventsourcing"
+    accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
+    userv1 "github.com/plaenen/eventstore/examples/pb/user/v1"
+    documentv1 "github.com/plaenen/eventstore/examples/pb/document/v1"
+    "github.com/plaenen/eventstore/pkg/eventsourcing"
 )
 
 type SDK struct {
@@ -155,8 +155,8 @@ buf generate
 package main
 
 import (
-    "github.com/plaenen/eventsourcing/examples/sdk"
-    "github.com/plaenen/eventsourcing/pkg/nats"
+    "github.com/plaenen/eventstore/examples/sdk"
+    "github.com/plaenen/eventstore/pkg/nats"
 )
 
 func main() {

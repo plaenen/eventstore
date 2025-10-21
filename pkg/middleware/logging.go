@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
 )
 
 // LoggingMiddleware logs command execution with timing information using slog.

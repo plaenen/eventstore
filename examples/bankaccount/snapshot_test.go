@@ -4,10 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/plaenen/eventsourcing/examples/bankaccount"
-	accountv1 "github.com/plaenen/eventsourcing/examples/pb/account/v1"
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
-	"github.com/plaenen/eventsourcing/pkg/sqlite"
+	"github.com/plaenen/eventstore/examples/bankaccount"
+	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
+	"github.com/plaenen/eventstore/pkg/sqlite"
 )
 
 func TestSnapshots_BasicFlow(t *testing.T) {

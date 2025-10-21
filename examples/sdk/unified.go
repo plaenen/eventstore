@@ -3,8 +3,8 @@
 package sdk
 
 import (
-	accountv1 "github.com/plaenen/eventsourcing/examples/pb/account/v1"
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
+	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
 )
 
 // SDK provides a unified interface to all services in the application.
@@ -29,7 +29,7 @@ type SDK struct {
 // It only requires a single transport - all service SDKs are created automatically.
 func NewSDK(transport eventsourcing.Transport) *SDK {
 	return &SDK{
-		Account: accountv1.NewAccountSDK(transport),
+		Account:   accountv1.NewAccountSDK(transport),
 		transport: transport,
 	}
 }
