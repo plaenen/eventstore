@@ -6,13 +6,13 @@ import (
 	"log"
 	"time"
 
-	accountv1 "github.com/plaenen/eventsourcing/examples/pb/account/v1"
-	"github.com/plaenen/eventsourcing/examples/sdk"
-	"github.com/plaenen/eventsourcing/examples/bankaccount/handlers"
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
-	natspkg "github.com/plaenen/eventsourcing/pkg/nats"
-	"github.com/plaenen/eventsourcing/pkg/sqlite"
 	"github.com/nats-io/nats-server/v2/server"
+	"github.com/plaenen/eventstore/examples/bankaccount/handlers"
+	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
+	"github.com/plaenen/eventstore/examples/sdk"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
+	natspkg "github.com/plaenen/eventstore/pkg/nats"
+	"github.com/plaenen/eventstore/pkg/sqlite"
 )
 
 func main() {

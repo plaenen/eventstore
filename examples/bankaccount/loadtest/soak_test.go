@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	accountv1 "github.com/plaenen/eventsourcing/examples/pb/account/v1"
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
+	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -205,11 +205,11 @@ func TestMemoryLeak(t *testing.T) {
 
 	// Track memory usage across iterations
 	type memSnapshot struct {
-		iteration int
-		alloc     uint64
+		iteration  int
+		alloc      uint64
 		totalAlloc uint64
-		sys       uint64
-		numGC     uint32
+		sys        uint64
+		numGC      uint32
 	}
 
 	snapshots := make([]memSnapshot, 0, iterations)

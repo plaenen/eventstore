@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	accountv1 "github.com/plaenen/eventsourcing/examples/pb/account/v1"
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
+	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
 )
 
 // AccountQueryHandler implements the AccountQueryServiceHandler interface

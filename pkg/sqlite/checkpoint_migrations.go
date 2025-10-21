@@ -5,7 +5,7 @@ import (
 	"embed"
 	"fmt"
 
-	"github.com/plaenen/eventsourcing/pkg/sqlite/migrate"
+	"github.com/plaenen/eventstore/pkg/sqlite/migrate"
 )
 
 //go:embed checkpoint_migrations/*.sql

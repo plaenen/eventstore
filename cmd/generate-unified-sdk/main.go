@@ -14,7 +14,7 @@ import (
 
 type ServiceSDK struct {
 	PackageName string // e.g., "accountv1"
-	ImportPath  string // e.g., "github.com/plaenen/eventsourcing/examples/pb/account/v1"
+	ImportPath  string // e.g., "github.com/plaenen/eventstore/examples/pb/account/v1"
 	SDKType     string // e.g., "AccountSDK"
 	FieldName   string // e.g., "Account"
 }
@@ -98,7 +98,7 @@ func parseSDKFile(filePath, pbDir string) ([]ServiceSDK, error) {
 	if err != nil {
 		return nil, err
 	}
-	importPath := "github.com/plaenen/eventsourcing/examples/pb/" + filepath.ToSlash(relPath)
+	importPath := "github.com/plaenen/eventstore/examples/pb/" + filepath.ToSlash(relPath)
 
 	// Find all SDK types (types ending with "SDK")
 	for _, decl := range node.Decls {
@@ -170,7 +170,7 @@ package {{.PackageName}}
 
 import (
 {{range .Services}}	{{.PackageName}} "{{.ImportPath}}"
-{{end}}	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
+{{end}}	"github.com/plaenen/eventstore/pkg/eventsourcing"
 )
 
 // SDK provides a unified interface to all services in the application.

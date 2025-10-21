@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package eventsourcing;
 
-option go_package = "github.com/plaenen/eventsourcing/pkg/eventsourcing;eventsourcing";
+option go_package = "github.com/plaenen/eventstore/pkg/eventsourcing;eventsourcing";
 
 import "google/protobuf/any.proto";
 

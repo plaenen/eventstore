@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
-	"github.com/plaenen/eventsourcing/pkg/sqlite/sqlcgen"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
+	"github.com/plaenen/eventstore/pkg/sqlite/sqlcgen"
 )
 
 // GetCommandResult retrieves the result of a previously processed command.

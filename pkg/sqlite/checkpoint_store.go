@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
-	"github.com/plaenen/eventsourcing/pkg/sqlite/sqlcgen"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
+	"github.com/plaenen/eventstore/pkg/sqlite/sqlcgen"
 )
 
 // CheckpointStore is a SQLite-based implementation of eventsourcing.CheckpointStore.

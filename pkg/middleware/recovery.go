@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"runtime/debug"
 
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
 )
 
 // RecoveryMiddleware recovers from panics in command handlers.

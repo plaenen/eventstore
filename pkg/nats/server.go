@@ -8,8 +8,8 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/micro"
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
-	"github.com/plaenen/eventsourcing/pkg/observability"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
+	"github.com/plaenen/eventstore/pkg/observability"
 	"go.opentelemetry.io/otel/propagation"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"

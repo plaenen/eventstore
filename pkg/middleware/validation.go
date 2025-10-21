@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
 )
 
 // Validator defines the interface for validating commands.

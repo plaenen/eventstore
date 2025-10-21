@@ -146,7 +146,7 @@ EOF
 You can also query the data programmatically using the provided query helpers:
 
 ```go
-import "github.com/plaenen/eventsourcing/pkg/observability"
+import "github.com/plaenen/eventstore/pkg/observability"
 
 // Open the database
 db, _ := sql.Open("sqlite", "./observability.db")

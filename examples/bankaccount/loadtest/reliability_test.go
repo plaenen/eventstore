@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	accountv1 "github.com/plaenen/eventsourcing/examples/pb/account/v1"
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
+	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

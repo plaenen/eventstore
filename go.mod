@@ -1,4 +1,4 @@
-module github.com/plaenen/eventsourcing
+module github.com/plaenen/eventstore
 
 go 1.25.0
 

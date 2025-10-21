@@ -5,8 +5,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
-	accountv1 "github.com/plaenen/eventsourcing/examples/pb/account/v1"
+	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"google.golang.org/protobuf/proto"
 )
 

@@ -6,9 +6,9 @@ import (
 	"log"
 	"time"
 
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
-	natspkg "github.com/plaenen/eventsourcing/pkg/nats"
-	accountv1 "github.com/plaenen/eventsourcing/examples/pb/account/v1"
+	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
+	natspkg "github.com/plaenen/eventstore/pkg/nats"
 	"google.golang.org/protobuf/proto"
 )
 

@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	accountv1 "github.com/plaenen/eventsourcing/examples/pb/account/v1"
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
+	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,11 +25,11 @@ func TestConcurrentCommandsSingleAggregate(t *testing.T) {
 	defer deps.Cleanup()
 
 	const (
-		numWorkers      = 50
-		opsPerWorker    = 100
-		depositAmount   = "10.00"
-		withdrawAmount  = "5.00"
-		initialBalance  = "100000.00" // Large enough to avoid insufficient funds
+		numWorkers     = 50
+		opsPerWorker   = 100
+		depositAmount  = "10.00"
+		withdrawAmount = "5.00"
+		initialBalance = "100000.00" // Large enough to avoid insufficient funds
 	)
 
 	accountID := "concurrent-test-account"
@@ -126,10 +126,10 @@ func TestConcurrentCommandsMultipleAggregates(t *testing.T) {
 	defer deps.Cleanup()
 
 	const (
-		numAccounts     = 100
-		opsPerAccount   = 50
-		concurrency     = 20
-		initialBalance  = "10000.00"
+		numAccounts    = 100
+		opsPerAccount  = 50
+		concurrency    = 20
+		initialBalance = "10000.00"
 	)
 
 	// Create accounts
@@ -251,8 +251,8 @@ func TestConcurrentCommandsWithRetries(t *testing.T) {
 	defer deps.Cleanup()
 
 	const (
-		numWorkers = 100 // High contention
-		opsPerWorker = 10
+		numWorkers     = 100 // High contention
+		opsPerWorker   = 10
 		initialBalance = "100000.00"
 	)
 

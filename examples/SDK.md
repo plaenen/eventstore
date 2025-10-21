@@ -6,9 +6,9 @@ The Unified SDK provides a developer-friendly interface for interacting with eve
 
 ```go
 import (
-    accountv1 "github.com/plaenen/eventsourcing/examples/pb/account/v1"
-    natspkg "github.com/plaenen/eventsourcing/pkg/nats"
-    "github.com/plaenen/eventsourcing/pkg/eventsourcing"
+    accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
+    natspkg "github.com/plaenen/eventstore/pkg/nats"
+    "github.com/plaenen/eventstore/pkg/eventsourcing"
 )
 
 // Create transport

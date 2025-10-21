@@ -45,12 +45,12 @@ Before you begin, ensure you have the following installed:
 1. Fork the repository on GitHub
 2. Clone your fork locally:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/eventsourcing.git
-   cd eventsourcing
+   git clone https://github.com/YOUR_USERNAME/eventstore.git
+   cd eventstore
    ```
 3. Add the upstream repository:
    ```bash
-   git remote add upstream https://github.com/plaenen/eventsourcing.git
+   git remote add upstream https://github.com/plaenen/eventstore.git
    ```
 
 ### Initial Build
@@ -293,7 +293,7 @@ package account.v1;
 
 import "eventsourcing/options.proto";
 
-option go_package = "github.com/plaenen/eventsourcing/gen/pb/account/v1;accountv1";
+option go_package = "github.com/plaenen/eventstore/gen/pb/account/v1;accountv1";
 
 // 1. Enums
 enum AccountStatus { ... }

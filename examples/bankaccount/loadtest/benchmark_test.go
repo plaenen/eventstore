@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	accountv1 "github.com/plaenen/eventsourcing/examples/pb/account/v1"
+	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
 )
 
 // BenchmarkCommandProcessing benchmarks command processing performance

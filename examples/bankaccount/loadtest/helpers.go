@@ -8,13 +8,13 @@ import (
 	"testing"
 	"time"
 
-	accountv1 "github.com/plaenen/eventsourcing/examples/pb/account/v1"
-	"github.com/plaenen/eventsourcing/examples/bankaccount/handlers"
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
-	natspkg "github.com/plaenen/eventsourcing/pkg/nats"
-	"github.com/plaenen/eventsourcing/pkg/observability"
-	"github.com/plaenen/eventsourcing/pkg/sqlite"
 	"github.com/nats-io/nats-server/v2/server"
+	"github.com/plaenen/eventstore/examples/bankaccount/handlers"
+	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
+	natspkg "github.com/plaenen/eventstore/pkg/nats"
+	"github.com/plaenen/eventstore/pkg/observability"
+	"github.com/plaenen/eventstore/pkg/sqlite"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -22,18 +22,18 @@ import (
 
 // TestDeps holds all dependencies for load tests
 type TestDeps struct {
-	EventStore  eventsourcing.EventStore
-	Repo        *accountv1.AccountRepository
-	Handler     *handlers.AccountCommandHandler
+	EventStore   eventsourcing.EventStore
+	Repo         *accountv1.AccountRepository
+	Handler      *handlers.AccountCommandHandler
 	QueryHandler *handlers.AccountQueryHandler
-	NATSServer  *server.Server
-	Server      *natspkg.Server
-	Transport   eventsourcing.Transport
-	Client      *accountv1.AccountClient
-	Telemetry   *observability.Telemetry
-	ctx         context.Context
-	cancel      context.CancelFunc
-	t           testing.TB
+	NATSServer   *server.Server
+	Server       *natspkg.Server
+	Transport    eventsourcing.Transport
+	Client       *accountv1.AccountClient
+	Telemetry    *observability.Telemetry
+	ctx          context.Context
+	cancel       context.CancelFunc
+	t            testing.TB
 }
 
 // SetupTestDeps creates all test dependencies
@@ -221,15 +221,15 @@ func LogResourceUsage(t testing.TB) {
 
 // Metrics tracks test metrics
 type Metrics struct {
-	TotalOperations  int64
-	SuccessfulOps    int64
-	FailedOps        int64
-	BusinessErrors   int64
-	SystemErrors     int64
-	TotalLatency     int64 // nanoseconds
-	MinLatency       int64
-	MaxLatency       int64
-	StartTime        time.Time
+	TotalOperations int64
+	SuccessfulOps   int64
+	FailedOps       int64
+	BusinessErrors  int64
+	SystemErrors    int64
+	TotalLatency    int64 // nanoseconds
+	MinLatency      int64
+	MaxLatency      int64
+	StartTime       time.Time
 }
 
 // NewMetrics creates a new metrics tracker

@@ -6,7 +6,7 @@ package accountv1
 import (
 	"context"
 
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
 )
 
 // AccountSDK provides a unified, developer-friendly interface for the Account service.

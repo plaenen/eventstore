@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
-	"github.com/plaenen/eventsourcing/pkg/sqlite/sqlcgen"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
+	"github.com/plaenen/eventstore/pkg/sqlite/sqlcgen"
 	_ "modernc.org/sqlite" // Pure Go SQLite driver
 )
 
