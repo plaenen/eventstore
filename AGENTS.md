@@ -858,17 +858,136 @@ Before submitting changes:
 5. Push tags: `git push --tags`
 6. GitHub Actions builds and publishes
 
+## Multi-Tenancy Support
+
+The framework provides built-in multi-tenancy support for SaaS applications.
+
+### When to Use Multi-Tenancy
+
+Use multi-tenancy when:
+- Building a SaaS application serving multiple customers
+- Each customer (tenant) needs data isolation
+- You need to scale horizontally while maintaining isolation
+
+### Two Isolation Strategies
+
+**1. Shared Database (Recommended Start)**
+
+All tenants share one database with tenant-scoped aggregate IDs:
+
+```go
+import "github.com/plaenen/eventsourcing/pkg/multitenancy"
+
+// Create store
+multiStore, _ := multitenancy.NewMultiTenantEventStore(multitenancy.MultiTenantConfig{
+    Strategy:  multitenancy.SharedDatabase,
+    SharedDSN: "./events.db",
+})
+
+// Add tenant to context
+ctx := multitenancy.WithTenantID(context.Background(), "tenant-abc")
+
+// Compose tenant-scoped ID: "tenant-abc::acc-001"
+aggregateID := multitenancy.ComposeAggregateID("tenant-abc", "acc-001")
+```
+
+**Best for:** 100s-1000s of small tenants
+
+**2. Database-Per-Tenant (Enterprise)**
+
+Each tenant gets their own SQLite database file:
+
+```go
+multiStore, _ := multitenancy.NewMultiTenantEventStore(multitenancy.MultiTenantConfig{
+    Strategy:             multitenancy.DatabasePerTenant,
+    DatabasePathTemplate: "./data/tenant_%s.db",
+})
+```
+
+**Best for:** 10s-100s of large enterprise tenants
+
+### Middleware Integration
+
+Always add tenant middleware to enforce isolation:
+
+```go
+commandBus.Use(multitenancy.TenantExtractionMiddleware(extractor)) // Extract
+commandBus.Use(multitenancy.TenantIsolationMiddleware())           // Enforce
+commandBus.Use(multitenancy.TenantAuthorizationMiddleware(auth))   // Authorize
+```
+
+### HTTP Integration Pattern
+
+```go
+// Extract tenant from request
+func TenantMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        tenantID := r.Header.Get("X-Tenant-ID") // or subdomain, JWT, etc.
+        ctx := multitenancy.WithTenantID(r.Context(), tenantID)
+        next.ServeHTTP(w, r.WithContext(ctx))
+    })
+}
+
+// Use in handlers
+func (h *Handler) OpenAccount(w http.ResponseWriter, r *http.Request) {
+    tenantID := multitenancy.MustGetTenantID(r.Context())
+    aggregateID := multitenancy.ComposeAggregateID(tenantID, req.AccountID)
+    // ... process command
+}
+```
+
+### Testing Multi-Tenant Code
+
+```go
+func TestTenantIsolation(t *testing.T) {
+    // Tenant A
+    ctxA := multitenancy.WithTenantID(context.Background(), "tenant-a")
+    accountA := accountv1.NewAccount(multitenancy.ComposeAggregateID("tenant-a", "acc-001"))
+
+    // Tenant B - same local ID
+    ctxB := multitenancy.WithTenantID(context.Background(), "tenant-b")
+    accountB := accountv1.NewAccount(multitenancy.ComposeAggregateID("tenant-b", "acc-001"))
+
+    // Verify isolation
+    // ... both can exist independently
+}
+```
+
+### Key Functions
+
+- `multitenancy.WithTenantID(ctx, tenantID)` - Add tenant to context
+- `multitenancy.GetTenantID(ctx)` - Retrieve tenant (returns error if missing)
+- `multitenancy.MustGetTenantID(ctx)` - Retrieve or panic
+- `multitenancy.ComposeAggregateID(tenant, id)` - Create scoped ID
+- `multitenancy.DecomposeAggregateID(compositeID)` - Split into parts
+- `multitenancy.ValidateTenantID(id, expectedTenant)` - Verify tenant match
+
+### Complete Documentation
+
+See **docs/MULTITENANCY.md** for:
+- Detailed strategy comparison
+- Migration from single-tenant
+- Projection patterns with tenant filtering
+- Authorization implementation
+- Production deployment guide
+
+### Example
+
+Run: `go run ./examples/multitenant`
+
 ## Additional Resources
 
 - **README.md** - Human-focused project overview (includes snapshot guide)
 - **CONTRIBUTING.md** - Detailed contribution guidelines
+- **docs/MULTITENANCY.md** - Complete multi-tenancy guide
 - **examples/EXAMPLE.md** - Step-by-step tutorial
+- **examples/multitenant/** - Multi-tenancy example code
 - **go.dev/doc** - Go language documentation
 - **buf.build/docs** - Protocol Buffers tooling
 - **docs.nats.io** - NATS event bus documentation
 
 ---
 
-**Last Updated**: 2025-01-20
+**Last Updated**: 2025-01-21
 
 This file follows the [agents.md](https://agents.md/) specification for AI coding agent instructions.

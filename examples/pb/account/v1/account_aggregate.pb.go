@@ -70,45 +70,37 @@ func (a *AccountAggregate) EmitAccountClosedEvent(event *AccountClosedEvent, met
 }
 
 // ApplyEvent applies an event to the Account aggregate
+// This method routes events to their specific applier methods
 func (a *AccountAggregate) ApplyEvent(event proto.Message) error {
 	switch e := event.(type) {
 	case *AccountOpenedEvent:
-		return a.applyAccountOpenedEvent(e)
+		return a.ApplyAccountOpenedEvent(e)
 	case *MoneyDepositedEvent:
-		return a.applyMoneyDepositedEvent(e)
+		return a.ApplyMoneyDepositedEvent(e)
 	case *MoneyWithdrawnEvent:
-		return a.applyMoneyWithdrawnEvent(e)
+		return a.ApplyMoneyWithdrawnEvent(e)
 	case *AccountClosedEvent:
-		return a.applyAccountClosedEvent(e)
+		return a.ApplyAccountClosedEvent(e)
 	default:
 		return fmt.Errorf("unknown event type: %T", event)
 	}
 }
 
-func (a *AccountAggregate) applyAccountOpenedEvent(e *AccountOpenedEvent) error {
-	a.AccountId = e.AccountId
-	a.OwnerName = e.OwnerName
-	a.Balance = e.InitialBalance // field_mapping: initial_balance -> balance
-	a.Status = AccountStatus_ACCOUNT_STATUS_OPEN
-	return nil
+// AccountEventApplier defines methods for applying events to Account
+// Developers must implement these methods to define how events change aggregate state
+type AccountEventApplier interface {
+	// ApplyAccountOpenedEvent applies the AccountOpenedEvent to the aggregate state
+	ApplyAccountOpenedEvent(e *AccountOpenedEvent) error
+	// ApplyMoneyDepositedEvent applies the MoneyDepositedEvent to the aggregate state
+	ApplyMoneyDepositedEvent(e *MoneyDepositedEvent) error
+	// ApplyMoneyWithdrawnEvent applies the MoneyWithdrawnEvent to the aggregate state
+	ApplyMoneyWithdrawnEvent(e *MoneyWithdrawnEvent) error
+	// ApplyAccountClosedEvent applies the AccountClosedEvent to the aggregate state
+	ApplyAccountClosedEvent(e *AccountClosedEvent) error
 }
 
-func (a *AccountAggregate) applyMoneyDepositedEvent(e *MoneyDepositedEvent) error {
-	a.Balance = e.NewBalance // field_mapping: new_balance -> balance
-	return nil
-}
-
-func (a *AccountAggregate) applyMoneyWithdrawnEvent(e *MoneyWithdrawnEvent) error {
-	a.Balance = e.NewBalance // field_mapping: new_balance -> balance
-	return nil
-}
-
-func (a *AccountAggregate) applyAccountClosedEvent(e *AccountClosedEvent) error {
-	a.AccountId = e.AccountId
-	a.Balance = e.FinalBalance // field_mapping: final_balance -> balance
-	a.Status = AccountStatus_ACCOUNT_STATUS_CLOSED
-	return nil
-}
+// The AccountAggregate must implement AccountEventApplier
+// Developer implements these methods in a separate file (not generated)
 
 // AccountRepository provides persistence for Account
 type AccountRepository struct {
@@ -130,13 +122,7 @@ func NewAccountRepository(eventStore eventsourcing.EventStore) *AccountRepositor
 				if err != nil {
 					return err
 				}
-				// Apply the event to update state
-				if err := agg.ApplyEvent(msg); err != nil {
-					return err
-				}
-				// Update version by loading from history
-				agg.LoadFromHistory([]*eventsourcing.Event{event})
-				return nil
+				return agg.ApplyEvent(msg)
 			},
 		),
 	}

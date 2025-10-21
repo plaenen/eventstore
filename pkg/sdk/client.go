@@ -26,6 +26,12 @@ type Config struct {
 	// Mode determines if the client runs in development or production mode
 	Mode Mode
 
+	// Role determines what capabilities the client has
+	// - RoleFullStack: Has event store, can send and handle commands (default)
+	// - RoleCommandSender: Thin client, only sends commands (no event store)
+	// - RoleCommandHandler: Handles commands, has event store
+	Role Role
+
 	// NATS configuration (used in production mode)
 	NATS NATSConfig
 
@@ -47,6 +53,20 @@ const (
 	ProductionMode Mode = "production"
 )
 
+// Role represents the role of the client in the system.
+type Role string
+
+const (
+	// RoleFullStack - Client has event store, handles commands, sends commands (default)
+	RoleFullStack Role = "fullstack"
+
+	// RoleCommandSender - Thin client that only sends commands (no event store needed)
+	RoleCommandSender Role = "sender"
+
+	// RoleCommandHandler - Service that handles commands (requires event store)
+	RoleCommandHandler Role = "handler"
+)
+
 // NATSConfig holds NATS-specific configuration.
 type NATSConfig struct {
 	URL            string
@@ -66,6 +86,7 @@ type SQLiteConfig struct {
 func DefaultConfig() *Config {
 	return &Config{
 		Mode: DevelopmentMode,
+		Role: RoleFullStack, // Default: full-stack client
 		NATS: NATSConfig{
 			URL:            "nats://localhost:4222",
 			StreamName:     "EVENTS",
@@ -91,19 +112,32 @@ func NewClient(config *Config) (*Client, error) {
 		config: config,
 	}
 
-	// 1. Initialize Event Store (always SQLite)
-	eventStore, err := sqlite.NewEventStore(
-		sqlite.WithDSN(config.SQLite.DSN),
-		sqlite.WithWALMode(config.SQLite.WALMode),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create event store: %w", err)
+	// 1. Initialize Event Store (only if needed based on role)
+	needsEventStore := config.Role == RoleFullStack || config.Role == RoleCommandHandler
+
+	if needsEventStore {
+		// Validate DSN is provided
+		if config.SQLite.DSN == "" {
+			return nil, fmt.Errorf("SQLite DSN is required for role %s", config.Role)
+		}
+
+		eventStore, err := sqlite.NewEventStore(
+			sqlite.WithDSN(config.SQLite.DSN),
+			sqlite.WithWALMode(config.SQLite.WALMode),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create event store: %w", err)
+		}
+		client.eventStore = eventStore
+	} else {
+		// RoleCommandSender - no event store needed
+		client.eventStore = nil
 	}
-	client.eventStore = eventStore
 
 	// 2. Initialize Event Bus (always NATS for distribution)
 	var eventBus *natspkg.EventBus
 	var embeddedNATS *natspkg.EmbeddedServer
+	var err error
 
 	if config.Mode == DevelopmentMode {
 		// Use embedded NATS for development
@@ -267,6 +301,15 @@ func NewBuilder() *Builder {
 // WithMode sets the operational mode.
 func (b *Builder) WithMode(mode Mode) *Builder {
 	b.config.Mode = mode
+	return b
+}
+
+// WithRole sets the client role.
+// - RoleFullStack: Full client with event store (default)
+// - RoleCommandSender: Thin client, only sends commands (no event store)
+// - RoleCommandHandler: Handles commands, requires event store
+func (b *Builder) WithRole(role Role) *Builder {
+	b.config.Role = role
 	return b
 }
 

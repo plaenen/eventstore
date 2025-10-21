@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package eventsourcing;
+
+option go_package = "github.com/plaenen/eventsourcing/pkg/eventsourcing;eventsourcing";
+
+import "google/protobuf/any.proto";
+
+// Response is the standard wrapper for all RPC responses
+// Every command and query returns this structure
+message Response {
+  // success indicates if the operation completed successfully
+  bool success = 1;
+
+  // error contains details if success = false
+  AppError error = 2;
+
+  // data contains the actual response payload (e.g., OpenAccountResponse)
+  // Only populated if success = true
+  google.protobuf.Any data = 3;
+}
+
+// AppError provides structured error information
+message AppError {
+  // code is a machine-readable error code (e.g., "INSUFFICIENT_BALANCE")
+  string code = 1;
+
+  // message is a human-readable error message
+  string message = 2;
+
+  // solution suggests how to fix the error
+  string solution = 3;
+
+  // details provides additional context (field names, values, etc.)
+  map<string, string> details = 4;
+}

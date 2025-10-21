@@ -49,6 +49,16 @@ func WithMode(mode sdk.Mode) Option {
 	}
 }
 
+// WithRole sets the client role.
+// - sdk.RoleFullStack: Full client with event store (default)
+// - sdk.RoleCommandSender: Thin client, only sends commands (no event store)
+// - sdk.RoleCommandHandler: Handles commands, requires event store
+func WithRole(role sdk.Role) Option {
+	return func(c *sdk.Config) {
+		c.Role = role
+	}
+}
+
 // WithNATSURL sets the NATS server URL.
 func WithNATSURL(url string) Option {
 	return func(c *sdk.Config) {
@@ -57,6 +67,7 @@ func WithNATSURL(url string) Option {
 }
 
 // WithSQLiteDSN sets the SQLite database DSN.
+// Only required for RoleFullStack and RoleCommandHandler.
 func WithSQLiteDSN(dsn string) Option {
 	return func(c *sdk.Config) {
 		c.SQLite.DSN = dsn

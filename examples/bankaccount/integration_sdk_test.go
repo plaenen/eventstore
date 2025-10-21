@@ -58,7 +58,7 @@ func TestSDK_OpenAccount(t *testing.T) {
 	ctx := context.Background()
 
 	// Send command with clean API
-	_, err = accountClient.OpenAccount(ctx, &accountv1.OpenAccountCommand{
+	err = accountClient.OpenAccount(ctx, &accountv1.OpenAccountCommand{
 		AccountId:      "acc-sdk-123",
 		OwnerName:      "Jane Doe",
 		InitialBalance: "2000.00",
@@ -113,7 +113,7 @@ func TestSDK_AccountLifecycle(t *testing.T) {
 
 	// 1. Open account
 	t.Run("OpenAccount", func(t *testing.T) {
-		_, err := accountClient.OpenAccount(ctx, &accountv1.OpenAccountCommand{
+		err := accountClient.OpenAccount(ctx, &accountv1.OpenAccountCommand{
 			AccountId:      accountID,
 			OwnerName:      "Bob Smith",
 			InitialBalance: "1000.00",
@@ -136,7 +136,7 @@ func TestSDK_AccountLifecycle(t *testing.T) {
 
 	// 2. Deposit money
 	t.Run("Deposit", func(t *testing.T) {
-		_, err := accountClient.Deposit(ctx, &accountv1.DepositCommand{
+		err := accountClient.Deposit(ctx, &accountv1.DepositCommand{
 			AccountId: accountID,
 			Amount:    "500.00",
 		}, "user-bob")
@@ -159,7 +159,7 @@ func TestSDK_AccountLifecycle(t *testing.T) {
 
 	// 3. Withdraw money
 	t.Run("Withdraw", func(t *testing.T) {
-		_, err := accountClient.Withdraw(ctx, &accountv1.WithdrawCommand{
+		err := accountClient.Withdraw(ctx, &accountv1.WithdrawCommand{
 			AccountId: accountID,
 			Amount:    "300.00",
 		}, "user-bob")
@@ -181,7 +181,7 @@ func TestSDK_AccountLifecycle(t *testing.T) {
 
 	// 4. Attempt overdraft (should fail)
 	t.Run("OverdraftPrevention", func(t *testing.T) {
-		_, err := accountClient.Withdraw(ctx, &accountv1.WithdrawCommand{
+		err := accountClient.Withdraw(ctx, &accountv1.WithdrawCommand{
 			AccountId: accountID,
 			Amount:    "2000.00", // More than balance
 		}, "user-bob")
@@ -193,7 +193,7 @@ func TestSDK_AccountLifecycle(t *testing.T) {
 	// 5. Close account (must withdraw all money first)
 	t.Run("CloseAccount", func(t *testing.T) {
 		// First withdraw remaining balance
-		_, err := accountClient.Withdraw(ctx, &accountv1.WithdrawCommand{
+		err := accountClient.Withdraw(ctx, &accountv1.WithdrawCommand{
 			AccountId: accountID,
 			Amount:    "1200.00", // Withdraw all remaining money
 		}, "user-bob")
@@ -204,7 +204,7 @@ func TestSDK_AccountLifecycle(t *testing.T) {
 		time.Sleep(200 * time.Millisecond)
 
 		// Now close the account
-		_, err = accountClient.CloseAccount(ctx, &accountv1.CloseAccountCommand{
+		err = accountClient.CloseAccount(ctx, &accountv1.CloseAccountCommand{
 			AccountId: accountID,
 		}, "user-bob")
 		if err != nil {

@@ -52,6 +52,9 @@ type EventMetadata struct {
 	// PrincipalID is the identifier of the principal (user, service, system) who triggered this event
 	PrincipalID string
 
+	// TenantID is the identifier of the tenant this event belongs to (for multi-tenancy)
+	TenantID string
+
 	// Custom allows for application-specific metadata
 	Custom map[string]string
 }
