@@ -1,0 +1,109 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+.task/bin/
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.html
+coverage.out
+
+# Go workspace file
+go.work
+go.work.sum
+
+# SQLite database files
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Compiled demo binaries
+examples/bankaccount_demo
+examples/bankaccount_observability_demo
+examples/bankaccount_sqlite_obs_demo
+examples/*_demo
+examples/*/main
+examples/*/*/main
+
+# Task build artifacts
+.task/
+.task/checksum/
+*.checksum
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Log files
+*.log
+logs/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Generated code markers (keep the files, ignore temp markers)
+# Note: Generated .go files are checked in, this is just for build artifacts
+
+# Vendor directory (if using vendoring)
+vendor/
+
+# macOS specific
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux specific
+*~
+.directory
+
+# Windows specific
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# NATS server data directories (if running embedded NATS with persistence)
+jetstream/
+nats-data/
+
+# Observability data (if using file-based exporters)
+traces/
+metrics/
+observability-data/
+
+# Protobuf compiler cache
+.proto-cache/
+
+# Go module cache (local development)
+# go.sum should be committed, but these are temp
+go.mod.backup
+
+# Development databases (examples should use these names)
+events.db
+data.db
+test.db
+dev.db
+
+# Backup files
+*.bak
+*.backup

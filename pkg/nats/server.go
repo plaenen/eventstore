@@ -9,6 +9,8 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/micro"
 	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
+	"github.com/plaenen/eventsourcing/pkg/observability"
+	"go.opentelemetry.io/otel/propagation"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
@@ -27,6 +29,9 @@ type Server struct {
 	// Service metadata
 	serviceName    string
 	serviceVersion string
+
+	// Observability (optional)
+	telemetry *observability.Telemetry
 }
 
 // ServerConfig extends the base server config with NATS-specific options
@@ -49,6 +54,9 @@ type ServerConfig struct {
 	Token string
 	User  string
 	Pass  string
+
+	// Telemetry for observability (optional)
+	Telemetry *observability.Telemetry
 }
 
 // NewServer creates a new NATS server for handling requests
@@ -104,6 +112,7 @@ func NewServer(config *ServerConfig) (*Server, error) {
 		cancel:         cancel,
 		serviceName:    config.Name,
 		serviceVersion: config.Version,
+		telemetry:      config.Telemetry,
 	}, nil
 }
 
@@ -114,6 +123,12 @@ func (s *Server) RegisterHandler(subject string, handler eventsourcing.HandlerFu
 
 	if _, exists := s.handlers[subject]; exists {
 		return fmt.Errorf("handler already registered for subject: %s", subject)
+	}
+
+	// Wrap handler with observability middleware if telemetry is configured
+	if s.telemetry != nil {
+		middleware := observability.HandlerMiddleware(s.telemetry, subject)
+		handler = middleware(handler)
 	}
 
 	s.handlers[subject] = handler
@@ -169,6 +184,12 @@ func (s *Server) handleMicroRequest(req micro.Request, handler eventsourcing.Han
 	// Create context with timeout
 	ctx, cancel := context.WithTimeout(s.ctx, s.config.HandlerTimeout)
 	defer cancel()
+
+	// Extract trace context from NATS headers for distributed tracing
+	if s.telemetry != nil {
+		propagator := propagation.TraceContext{}
+		ctx = propagator.Extract(ctx, &natsMicroHeaderCarrier{headers: req.Headers()})
+	}
 
 	// Extract metadata from headers
 	if tenantID := req.Headers().Get("Tenant-ID"); tenantID != "" {
@@ -276,4 +297,26 @@ func (s *Server) Close() error {
 // IsConnected returns true if connected to NATS
 func (s *Server) IsConnected() bool {
 	return s.nc != nil && s.nc.IsConnected()
+}
+
+// natsMicroHeaderCarrier adapts NATS micro.Headers to propagation.TextMapCarrier
+type natsMicroHeaderCarrier struct {
+	headers micro.Headers
+}
+
+func (c *natsMicroHeaderCarrier) Get(key string) string {
+	return c.headers.Get(key)
+}
+
+func (c *natsMicroHeaderCarrier) Set(key, value string) {
+	// micro.Headers is a map[string][]string, so we need to set it directly
+	c.headers[key] = []string{value}
+}
+
+func (c *natsMicroHeaderCarrier) Keys() []string {
+	keys := make([]string, 0, len(c.headers))
+	for k := range c.headers {
+		keys = append(keys, k)
+	}
+	return keys
 }

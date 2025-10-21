@@ -30,6 +30,9 @@ type TransportConfig struct {
 
 	// ReconnectWait time between reconnection attempts
 	ReconnectWait time.Duration
+
+	// MaxRetries for request retry on version conflicts (0 = no retries, default 3)
+	MaxRetries int
 }
 
 // DefaultTransportConfig returns sensible defaults
@@ -38,6 +41,7 @@ func DefaultTransportConfig() *TransportConfig {
 		Timeout:              30 * time.Second,
 		MaxReconnectAttempts: 5,
 		ReconnectWait:        2 * time.Second,
+		MaxRetries:           3, // Retry up to 3 times on version conflicts
 	}
 }
 

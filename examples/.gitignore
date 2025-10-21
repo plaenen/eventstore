@@ -1,0 +1,19 @@
+# SQLite database files
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+
+# Compiled binaries
+bankaccount_demo
+bankaccount_observability_demo
+bankaccount_sqlite_obs_demo
+*_demo
+*/main
+
+# Temporary files
+*.tmp
+*.log
+
+# macOS
+.DS_Store

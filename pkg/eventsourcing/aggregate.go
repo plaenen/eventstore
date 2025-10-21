@@ -2,6 +2,7 @@ package eventsourcing
 
 import (
 	"fmt"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 )
@@ -199,10 +200,20 @@ func (r *BaseRepository[T]) Load(id string) (T, error) {
 	// Create new aggregate instance
 	aggregate := r.factory(id)
 
-	// Apply all events
+	// Apply all events to rebuild state
 	for _, event := range events {
 		if err := r.applier(aggregate, event); err != nil {
 			return zero, fmt.Errorf("failed to apply event: %w", err)
+		}
+	}
+
+	// Update version from loaded events
+	if len(events) > 0 {
+		// Set the aggregate version from the loaded history
+		if agg, ok := interface{}(aggregate).(interface{ LoadFromHistory([]*Event) error }); ok {
+			if err := agg.LoadFromHistory(events); err != nil {
+				return zero, fmt.Errorf("failed to load history: %w", err)
+			}
 		}
 	}
 
@@ -271,4 +282,60 @@ func (r *BaseRepository[T]) Exists(id string) (bool, error) {
 		return false, fmt.Errorf("failed to check aggregate existence: %w", err)
 	}
 	return version > 0, nil
+}
+
+// RetryOnConflict executes a function with retry logic for optimistic concurrency conflicts.
+// The function receives a freshly loaded aggregate on each attempt.
+// This is useful for command handlers that need to retry on version mismatch.
+func (r *BaseRepository[T]) RetryOnConflict(id string, maxRetries int, fn func(T) error) error {
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		// Load fresh aggregate
+		agg, err := r.Load(id)
+		if err != nil {
+			return err
+		}
+
+		// Execute the function
+		err = fn(agg)
+		if err == nil {
+			return nil
+		}
+
+		// Check if this is a concurrency conflict
+		if !isConcurrencyConflict(err) {
+			return err // Not a conflict, return error
+		}
+
+		// If last attempt, return the error
+		if attempt == maxRetries {
+			return err
+		}
+
+		// Brief backoff before retry (10ms, 20ms, 40ms)
+		backoff := time.Duration(10*(1<<uint(attempt))) * time.Millisecond
+		time.Sleep(backoff)
+	}
+	return fmt.Errorf("max retries exceeded")
+}
+
+// isConcurrencyConflict checks if an error is due to optimistic locking failure
+func isConcurrencyConflict(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return len(msg) > 0 && (
+		contains(msg, "concurrency conflict") ||
+		contains(msg, "version mismatch") ||
+		contains(msg, "optimistic lock"))
+}
+
+// contains checks if a string contains a substring
+func contains(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }

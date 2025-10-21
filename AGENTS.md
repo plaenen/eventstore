@@ -145,7 +145,7 @@ These directories contain generated code that will be overwritten:
 - `pkg/middleware/` - Middleware implementations
 - `pkg/sqlite/` - Event store and snapshot store (except `sqlc.go`)
 - `pkg/nats/` - NATS event bus and command bus implementation
-- `pkg/sdk/` - **Unified SDK client for commands/events/queries**
+- `pkg/observability/` - OpenTelemetry-based observability (tracing, metrics)
 - `cmd/protoc-gen-eventsourcing/` - Code generator plugin
 - `examples/bankaccount/domain/` - Example business logic
 - `examples/pb/account/v1/account.go` - Business logic for generated aggregate
@@ -463,22 +463,39 @@ Client → NATS CommandBus → NATS (request-reply) → Handler Service → Even
 - `pkg/eventsourcing/commandbus.go` - In-memory command bus
 - `pkg/nats/commandbus.go` - NATS-based distributed command bus
 - `pkg/nats/eventbus.go` - NATS JetStream event bus
-- `pkg/sdk/client.go` - Unified SDK client
+- `pkg/nats/server.go` - NATS microservices server for request/reply
+- `pkg/nats/transport.go` - NATS transport for client SDK
 
 ### Registering Command Handlers
 
-**With SDK (Development Mode):**
+**Server-side (NATS microservices):**
 ```go
-client.RegisterCommandHandler("account.v1.OpenAccountCommand",
-    eventsourcing.CommandHandlerFunc(func(ctx context.Context, cmd *eventsourcing.CommandEnvelope) ([]*eventsourcing.Event, error) {
-        // Handler logic
-        return events, nil
-    }),
-)
+// Create handlers
+commandHandler := handlers.NewAccountCommandHandler(repo)
+
+// Register with NATS server
+natsServer, _ := natspkg.NewServer(&natspkg.ServerConfig{
+    URL:         "nats://localhost:4222",
+    Name:        "AccountService",
+    Version:     "1.0.0",
+})
+
+// Generated service registration
+commandService := accountv1.NewAccountCommandServiceServer(natsServer, commandHandler)
+commandService.Start(ctx)
 ```
 
-**With SDK (Production Mode):**
-Same code! The SDK automatically subscribes to NATS when in production mode.
+**Client-side (Generated SDK):**
+```go
+// Create transport
+transport, _ := natspkg.NewTransport(&natspkg.TransportConfig{
+    URL: "nats://localhost:4222",
+})
+
+// Use generated client
+client := accountv1.NewAccountClient(transport)
+response, err := client.OpenAccount(ctx, &accountv1.OpenAccountCommand{...})
+```
 
 **Command Subject Pattern:**
 - Subject: `commands.{CommandType}`

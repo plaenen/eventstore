@@ -271,9 +271,9 @@ func (a *Account) Deposit(ctx context.Context, cmd *accountv1.DepositCommand, me
 }
 ```
 
-### 4️⃣ Use the Unified SDK (Recommended)
+### 4️⃣ Use the Generated Client (Recommended)
 
-The framework automatically generates a **unified SDK** that aggregates all service clients into a single entry point:
+The framework automatically generates **type-safe clients** from your proto definitions:
 
 ```go
 package main
@@ -281,76 +281,77 @@ package main
 import (
 	"context"
 	"log"
+	"time"
 
-	"github.com/plaenen/eventsourcing/pkg/unifiedsdk"
-	"github.com/plaenen/eventsourcing/pkg/sdk"
-	accountv1 "github.com/yourorg/project/pb/account/v1"
+	accountv1 "github.com/plaenen/eventsourcing/examples/pb/account/v1"
+	"github.com/plaenen/eventsourcing/examples/bankaccount/handlers"
+	"github.com/plaenen/eventsourcing/pkg/eventsourcing"
+	natspkg "github.com/plaenen/eventsourcing/pkg/nats"
+	"github.com/plaenen/eventsourcing/pkg/sqlite"
 )
 
 func main() {
-	// Create unified SDK - single entry point!
-	s, err := unifiedsdk.New(
-		unifiedsdk.WithMode(sdk.DevelopmentMode),
-		unifiedsdk.WithSQLiteDSN("./events.db"),
-		unifiedsdk.WithWALMode(true),
-	)
-	if err != nil {
-		log.Fatalf("Failed to create SDK: %v", err)
-	}
-	defer s.Close()
-
 	ctx := context.Background()
 
-	// Access all services via properties!
-	_, err = s.Account.OpenAccount(ctx, &accountv1.OpenAccountCommand{
+	// Setup infrastructure
+	eventStore, _ := sqlite.NewEventStore(sqlite.WithFilename("./events.db"))
+	defer eventStore.Close()
+
+	repo := accountv1.NewAccountRepository(eventStore)
+	commandHandler := handlers.NewAccountCommandHandler(repo)
+
+	// Start NATS server (server-side)
+	natsServer, _ := natspkg.NewServer(&natspkg.ServerConfig{
+		URL:  "nats://localhost:4222",
+		Name: "AccountService",
+	})
+	defer natsServer.Close()
+
+	// Register handlers
+	commandService := accountv1.NewAccountCommandServiceServer(natsServer, commandHandler)
+	commandService.Start(ctx)
+
+	// Create client transport (client-side)
+	transport, _ := natspkg.NewTransport(&natspkg.TransportConfig{
+		URL: "nats://localhost:4222",
+	})
+	defer transport.Close()
+
+	// Use generated client - fully type-safe!
+	client := accountv1.NewAccountClient(transport)
+
+	// Execute commands
+	resp, appErr := client.OpenAccount(ctx, &accountv1.OpenAccountCommand{
 		AccountId:      "acc-123",
 		OwnerName:      "Alice Johnson",
 		InitialBalance: "1000.00",
-	}, "user-alice")
-	if err != nil {
-		log.Fatalf("Failed: %v", err)
+	})
+	if appErr != nil {
+		log.Fatalf("Error: [%s] %s", appErr.Code, appErr.Message)
 	}
 
-	// All service clients accessible from one SDK instance
-	s.Account.Deposit(ctx, depositCmd, principalID)
-	s.Order.CreateOrder(ctx, orderCmd, principalID)     // Auto-added when you define Order service
-	s.User.RegisterUser(ctx, userCmd, principalID)      // Auto-added when you define User service
+	log.Printf("Account opened: %s", resp.AccountId)
 }
 ```
 
 **Benefits:**
-- ✅ **Single entry point** - `unifiedsdk.New()` for all services
-- ✅ **Property-based access** - `s.Account.OpenAccount()`, `s.Order.CreateOrder()`
-- ✅ **Auto-discovery** - New services automatically appear when you add proto definitions
-- ✅ **Type-safe API** - Compiler catches errors, full IntelliSense support
-- ✅ **Multi-file support** - Works across all your proto service definitions
-- ✅ **Dev/Prod modes** - Same API for local development and distributed production
-
-**Production Mode (NATS):**
-
-```go
-// Switch to production mode for distributed command processing
-s, _ := unifiedsdk.New(
-	unifiedsdk.WithMode(sdk.ProductionMode),       // Commands via NATS!
-	unifiedsdk.WithNATSURL("nats://cluster:4222"), // NATS cluster
-	unifiedsdk.WithSQLiteDSN("./events.db"),
-)
-
-// Same API - commands now distributed across services!
-s.Account.OpenAccount(ctx, cmd, principalID)
-s.Order.CreateOrder(ctx, cmd, principalID)
-```
+- ✅ **Type-safe** - Full compile-time checking from protobuf
+- ✅ **Auto-generated** - No manual client code needed
+- ✅ **Service discovery** - NATS microservices API
+- ✅ **Error handling** - Structured AppError responses
+- ✅ **Distributed** - Runs over NATS for microservices
+- ✅ **Observability-ready** - Works with OpenTelemetry
 
 **How It Works:**
 
-1. Each proto service generates an individual client (e.g., `AccountClient`, `OrderClient`)
-2. After proto generation, a post-processing tool scans for all generated clients
-3. The unified SDK is automatically generated with all clients as properties
-4. When you add new services, they're automatically included in the next generation
+1. Define your proto files with commands, queries, and events
+2. Run `task generate` to generate protobuf code
+3. Generated clients appear in `examples/pb/{service}/v1/*_sdk.pb.go`
+4. Use `NewAccountClient(transport)` for type-safe command execution
 
-See `examples/unified_sdk/` for a complete working example.
+See `examples/bankaccount_demo.go` for a complete working example.
 
-**Alternative: Individual Service Clients**
+**Alternative: Direct Handler Registration**
 
 If you prefer to use individual service clients directly:
 
