@@ -78,9 +78,9 @@ tasks:
     dir: .
     cmds:
       - task: build:sdk-generator
-      - ./bin/generate-unified-sdk ./examples/pb ./examples/sdk/unified.go
+      - ./bin/generate-unified-sdk -pb-dir ./examples/pb -output ./examples/sdk/unified.go
     sources:
-      - examples/pb/**/*_sdk.pb.go
+      - examples/pb/**/*_sdk.es.pb.go
     generates:
       - examples/sdk/unified.go
 
@@ -186,6 +186,7 @@ tasks:
     dir: "{{.EXAMPLES_DIR}}"
     cmds:
       - rm -rf pb/*.pb.go
+      - rm -rf pb/*.es.pb.go
       - rm -rf pb/*connect/
 
   clean:build:
