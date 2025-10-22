@@ -649,29 +649,196 @@ func NewAccount(id string, applier AccountEventApplier) *AccountAggregate {
 
 ### Unique Constraints
 
-Enforce uniqueness at database level integrated with event sourcing:
+Enforce business-level uniqueness (emails, account IDs, SKUs) at the database level, integrated atomically with event sourcing.
+
+#### Quick Start - Type-Safe API
+
+The framework generates type-safe helper methods for applying events with constraints:
 
 ```go
-constraints := []eventsourcing.UniqueConstraint{
-	{
-		IndexName: "user_email",
-		Value:     "alice@example.com",
-		Operation: eventsourcing.ConstraintClaim,  // Claim ownership
-	},
+// Opening an account - claim account_id
+event := &accountv1.AccountOpenedEvent{
+	AccountId:      "acc-123",
+	OwnerName:      "Alice",
+	InitialBalance: "1000.00",
 }
 
-a.ApplyChangeWithConstraints(event, eventType, metadata, constraints)
+// Use generated type-safe method with functional options
+err := agg.ApplyAccountOpenedEvent(event,
+	accountv1.WithUniqueConstraints(eventsourcing.UniqueConstraint{
+		IndexName: "account_id",
+		Value:     "acc-123",
+		Operation: eventsourcing.ConstraintClaim,  // Claims the value
+	}),
+)
+// ✅ Atomic: Either both event + constraint succeed, or both fail
+
+// Closing an account - release account_id
+closeEvent := &accountv1.AccountClosedEvent{
+	AccountId:    "acc-123",
+	FinalBalance: "1500.00",
+}
+
+err = agg.ApplyAccountClosedEvent(closeEvent,
+	accountv1.WithUniqueConstraints(eventsourcing.UniqueConstraint{
+		IndexName: "account_id",
+		Value:     "acc-123",
+		Operation: eventsourcing.ConstraintRelease,  // Releases the value
+	}),
+)
 ```
 
-**Operations:**
-- `ConstraintClaim` - Reserve a unique value
-- `ConstraintRelease` - Free a previously claimed value
+#### Operations
 
-**Features:**
-- ✅ Atomic with event persistence
-- ✅ Survives projection rebuilds
-- ✅ Returns detailed violation errors
-- ✅ Supports natural keys (email, account ID, SKU, etc.)
+| Operation | Purpose | Example Use Case |
+|-----------|---------|------------------|
+| `ConstraintClaim` | Reserve a unique value | User registration (claim email), account creation (claim account_id) |
+| `ConstraintRelease` | Free a previously claimed value | Account deletion, user deactivation |
+
+#### Dual-Storage Architecture
+
+Constraints use a **hybrid approach** for both performance and auditability:
+
+**1. Events Table** (Audit Trail):
+```sql
+CREATE TABLE events (
+    ...
+    constraints TEXT,  -- JSON: [{"index_name":"account_id","value":"acc-123","operation":"claim"}]
+    ...
+);
+```
+- Stores constraint history with events
+- Enables audit queries
+- Allows rebuild from event stream
+
+**2. Unique Constraints Table** (Enforcement):
+```sql
+CREATE TABLE unique_constraints (
+    index_name TEXT NOT NULL,
+    value TEXT NOT NULL,
+    aggregate_id TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (index_name, value)  -- Database-level uniqueness
+);
+```
+- Fast lookups during validation
+- Database enforces uniqueness via PRIMARY KEY
+- Current active constraints only
+
+#### Transactional Guarantees (ACID)
+
+All operations happen in a **single database transaction**:
+
+```go
+// Inside EventStore.AppendEvents():
+tx.Begin()                              // Start transaction
+
+1. Check version (optimistic concurrency)
+2. Validate constraints                 // Query unique_constraints table
+3. Claim/Release constraints            // INSERT/DELETE in unique_constraints
+4. Insert event with constraint JSON    // Store in events.constraints column
+5. Update positions
+
+tx.Commit()                             // All succeed or all fail!
+```
+
+**If any step fails** (duplicate constraint, version conflict, DB error):
+- ❌ Transaction rolls back
+- ❌ Event is NOT persisted
+- ❌ Constraint is NOT claimed/released
+- ✅ Database remains consistent
+
+#### Constraint Rebuild
+
+The `unique_constraints` table can be **rebuilt from the event stream**:
+
+```go
+// Rebuild constraints from event history
+err := eventStore.RebuildConstraints()
+```
+
+**Use cases:**
+- Recovery from constraint table corruption
+- Migrating to a new database
+- Audit verification ("does the constraint table match event history?")
+
+**How it works:**
+1. Clears `unique_constraints` table
+2. Replays all events in order
+3. Re-applies constraint operations from `events.constraints` JSON
+4. Rebuilds enforcement table from audit trail
+
+#### Audit Queries
+
+Since constraints are stored with events, you can query historical constraint activity:
+
+```sql
+-- Find all constraint operations for an account
+SELECT
+    event_id,
+    aggregate_id,
+    event_type,
+    json_extract(constraints, '$[0].operation') as operation,
+    json_extract(constraints, '$[0].value') as value,
+    datetime(timestamp, 'unixepoch') as occurred_at
+FROM events
+WHERE aggregate_id = 'acc-123'
+  AND constraints IS NOT NULL
+ORDER BY timestamp;
+
+-- When was an email address first claimed?
+SELECT
+    aggregate_id,
+    event_type,
+    datetime(timestamp, 'unixepoch') as claimed_at
+FROM events
+WHERE json_extract(constraints, '$[0].value') = 'alice@example.com'
+  AND json_extract(constraints, '$[0].operation') = 'claim'
+LIMIT 1;
+
+-- Current active constraints
+SELECT
+    index_name,
+    value,
+    aggregate_id,
+    datetime(created_at, 'unixepoch') as claimed_at
+FROM unique_constraints
+ORDER BY created_at DESC;
+```
+
+#### Error Handling
+
+```go
+err := agg.ApplyAccountOpenedEvent(event,
+	accountv1.WithUniqueConstraints(eventsourcing.UniqueConstraint{
+		IndexName: "account_id",
+		Value:     "acc-123",
+		Operation: eventsourcing.ConstraintClaim,
+	}),
+)
+
+if err != nil {
+	if errors.Is(err, eventsourcing.ErrUniqueConstraintViolation) {
+		// Constraint already claimed
+		return &eventsourcing.AppError{
+			Code:    "ACCOUNT_ID_TAKEN",
+			Message: fmt.Sprintf("Account ID 'acc-123' is already in use"),
+		}
+	}
+	// Other error
+	return err
+}
+```
+
+#### Features
+
+- ✅ **Type-safe** - Generated `Apply{Event}` methods with compile-time checking
+- ✅ **Atomic** - Constraints validated/applied in same transaction as events
+- ✅ **Auditable** - Full history stored with events
+- ✅ **Rebuildable** - Reconstruct from event stream
+- ✅ **Performant** - Separate table for fast lookups
+- ✅ **Consistent** - Database-level enforcement via PRIMARY KEY
+- ✅ **Portable** - Constraint history moves with events
 
 ### Idempotency (Three Layers)
 
