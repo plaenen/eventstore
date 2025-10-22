@@ -8,7 +8,7 @@ package subscriptionv1
 
 import (
 	v1 "github.com/plaenen/eventstore/examples/entity/v1"
-	_ "github.com/plaenen/eventstore/examples/eventsourcing"
+	_ "github.com/plaenen/eventstore/pkg/eventsourcing"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -265,15 +265,15 @@ var File_subscription_v1_model_proto protoreflect.FileDescriptor
 
 const file_subscription_v1_model_proto_rawDesc = "" +
 	"\n" +
-	"\x1bsubscription/v1/model.proto\x12\x0fsubscription.v1\x1a\x16entity/v1/entity.proto\x1a\x1beventsourcing/options.proto\"\xb2\x02\n" +
+	"\x1bsubscription/v1/model.proto\x12\x0fsubscription.v1\x1a\x16entity/v1/entity.proto\x1a\x1beventsourcing/options.proto\"\xa4\x02\n" +
 	"\fSubscription\x12'\n" +
 	"\x0fsubscription_id\x18\x01 \x01(\tR\x0esubscriptionId\x12\x1f\n" +
 	"\vadmin_email\x18\a \x01(\tR\n" +
 	"adminEmail\x12)\n" +
 	"\x06status\x18\x04 \x01(\x0e2\x11.entity.v1.StatusR\x06status\x12H\n" +
 	"\x0fdisabled_reason\x18\x05 \x01(\x0e2\x1f.subscription.v1.DisabledReasonR\x0edisabledReason\x12>\n" +
-	"\x1bdisabled_reason_description\x18\x06 \x01(\tR\x19disabledReasonDescription:#\x9a\xb5\x18\x1f\n" +
-	"\x0fsubscription_id\x12\fSubscription\"\x96\x01\n" +
+	"\x1bdisabled_reason_description\x18\x06 \x01(\tR\x19disabledReasonDescription:\x15\x9a\xb5\x18\x11\n" +
+	"\x0fsubscription_id\"\x96\x01\n" +
 	"\x18SubscriptionCreatedEvent\x12'\n" +
 	"\x0fsubscription_id\x18\x01 \x01(\tR\x0esubscriptionId\x12\x1f\n" +
 	"\vadmin_email\x18\x02 \x01(\tR\n" +

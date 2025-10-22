@@ -29,6 +29,22 @@ type Aggregate interface {
 	ClearUncommittedEvents()
 }
 
+// EventUpcaster is an optional interface that aggregates can implement
+// to convert old event versions to current versions.
+//
+// The generated ApplyEvent method will call this before routing events.
+type EventUpcaster interface {
+	UpcastEvent(event proto.Message) proto.Message
+}
+
+// SnapshotUpcaster is an optional interface that aggregates can implement
+// to convert old snapshot versions to current versions.
+//
+// The generated UnmarshalSnapshot method will call this after deserializing.
+type SnapshotUpcaster interface {
+	UpcastSnapshot(state proto.Message) proto.Message
+}
+
 // AggregateRoot provides base functionality for all aggregates.
 // Use this as an embedded type in your aggregate implementations.
 type AggregateRoot struct {

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats-server/v2/server"
+	"github.com/plaenen/eventstore/examples/bankaccount/domain"
 	"github.com/plaenen/eventstore/examples/bankaccount/handlers"
 	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
@@ -128,7 +129,7 @@ func main() {
 
 	// 4. Create Repository and Handlers
 	fmt.Println("4️⃣  Creating repository and handlers...")
-	repo := accountv1.NewAccountRepository(eventStore)
+	repo := accountv1.NewAccountRepository(eventStore, domain.NewAccount)
 	commandHandler := handlers.NewAccountCommandHandler(repo)
 	queryHandler := handlers.NewAccountQueryHandler(repo)
 	fmt.Println("   ✅ Ready")

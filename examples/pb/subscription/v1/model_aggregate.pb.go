@@ -3,6 +3,7 @@
 package subscriptionv1
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
@@ -14,13 +15,17 @@ import (
 type SubscriptionAggregate struct {
 	eventsourcing.AggregateRoot
 	*Subscription
+	applier SubscriptionEventApplier // Injected dependency for event application
 }
 
 // NewSubscription creates a new SubscriptionAggregate instance
-func NewSubscription(id string) *SubscriptionAggregate {
+// The applier parameter defines how events modify aggregate state
+// Implement SubscriptionEventApplier in your domain layer
+func NewSubscription(id string, applier SubscriptionEventApplier) *SubscriptionAggregate {
 	return &SubscriptionAggregate{
 		AggregateRoot: eventsourcing.NewAggregateRoot(id, "Subscription"),
 		Subscription:  &Subscription{},
+		applier:       applier,
 	}
 }
 
@@ -32,7 +37,16 @@ func (a *SubscriptionAggregate) MarshalSnapshot() ([]byte, error) {
 // UnmarshalSnapshot deserializes the aggregate state from snapshots
 func (a *SubscriptionAggregate) UnmarshalSnapshot(data []byte) error {
 	a.Subscription = &Subscription{}
-	return proto.Unmarshal(data, a.Subscription)
+	if err := proto.Unmarshal(data, a.Subscription); err != nil {
+		return err
+	}
+
+	// UPCAST HOOK: If aggregate implements SnapshotUpcaster, upgrade old snapshots
+	if upcaster, ok := interface{}(a).(eventsourcing.SnapshotUpcaster); ok {
+		a.Subscription = upcaster.UpcastSnapshot(a.Subscription).(*Subscription)
+	}
+
+	return nil
 }
 
 // ID returns the aggregate ID
@@ -46,29 +60,88 @@ func (a *SubscriptionAggregate) Type() string {
 }
 
 // ApplyEvent applies an event to the Subscription aggregate
-// This method routes events to their specific applier methods
+// This method delegates to the injected applier implementation
 func (a *SubscriptionAggregate) ApplyEvent(event proto.Message) error {
+	// UPCAST HOOK: If aggregate implements EventUpcaster, upgrade old events
+	if upcaster, ok := interface{}(a).(eventsourcing.EventUpcaster); ok {
+		event = upcaster.UpcastEvent(event)
+	}
+
 	switch e := event.(type) {
 	case *SubscriptionCreatedEvent:
-		return a.ApplySubscriptionCreatedEvent(e)
+		return a.applier.ApplySubscriptionCreatedEvent(a, e) // Delegate to injected applier
 	case *SubscriptionCancelledEvent:
-		return a.ApplySubscriptionCancelledEvent(e)
+		return a.applier.ApplySubscriptionCancelledEvent(a, e) // Delegate to injected applier
 	default:
 		return fmt.Errorf("unknown event type: %T", event)
 	}
 }
 
+// ============================================================================
+// Event Applier Interface
+// ============================================================================
+// The aggregate needs applier methods to handle events.
+// Implement these methods in your domain layer outside the pb/ directory.
+
 // SubscriptionEventApplier defines methods for applying events to Subscription
-// Developers must implement these methods to define how events change aggregate state
+// Implement this interface in your domain layer (outside pb/ directory)
 type SubscriptionEventApplier interface {
 	// ApplySubscriptionCreatedEvent applies the SubscriptionCreatedEvent to the aggregate state
-	ApplySubscriptionCreatedEvent(e *SubscriptionCreatedEvent) error
+	ApplySubscriptionCreatedEvent(agg *SubscriptionAggregate, e *SubscriptionCreatedEvent) error
 	// ApplySubscriptionCancelledEvent applies the SubscriptionCancelledEvent to the aggregate state
-	ApplySubscriptionCancelledEvent(e *SubscriptionCancelledEvent) error
+	ApplySubscriptionCancelledEvent(agg *SubscriptionAggregate, e *SubscriptionCancelledEvent) error
 }
 
-// The SubscriptionAggregate must implement SubscriptionEventApplier
-// Developer implements these methods in a separate file (not generated)
+// ============================================================================
+// Implementing Event Appliers (Recommended Pattern)
+// ============================================================================
+// Create your applier implementation in your domain layer, e.g.:
+//
+// // In bankaccount/domain/account_appliers.go
+// type AccountAppliers struct{}
+//
+// func (ap *AccountAppliers) ApplySubscriptionCreatedEvent(agg *accountv1.SubscriptionAggregate, e *accountv1.SubscriptionCreatedEvent) error {
+//     // Update aggregate state
+//     agg.SubscriptionId = e.SubscriptionId
+//     return nil
+// }
+//
+// func (ap *AccountAppliers) ApplySubscriptionCancelledEvent(agg *accountv1.SubscriptionAggregate, e *accountv1.SubscriptionCancelledEvent) error {
+//     // Update aggregate state
+//     agg.SubscriptionId = e.SubscriptionId
+//     return nil
+// }
+//
+// Then inject when creating aggregates:
+//   applier := &domain.AccountAppliers{}
+//   agg := accountv1.NewSubscription(id, applier)
+// ============================================================================
+
+// ============================================================================
+// OPTIONAL: Event and Snapshot Upcasting
+// ============================================================================
+// The aggregate can optionally implement these interfaces to handle event/snapshot evolution:
+//
+// type EventUpcaster interface {
+//     UpcastEvent(event proto.Message) proto.Message
+// }
+//
+// type SnapshotUpcaster interface {
+//     UpcastSnapshot(state proto.Message) proto.Message
+// }
+//
+// Example:
+//
+// func (a *SubscriptionAggregate) UpcastEvent(event proto.Message) proto.Message {
+//     switch old := event.(type) {
+//     case *EventV1:
+//         return &EventV2{...}  // Convert old version to new
+//     }
+//     return event  // Already current version
+// }
+
+// See: docs/aggregate_upcasting_design.md
+// ============================================================================
 
 // SubscriptionRepository provides persistence for Subscription
 type SubscriptionRepository struct {
@@ -76,14 +149,13 @@ type SubscriptionRepository struct {
 }
 
 // NewSubscriptionRepository creates a new repository
-func NewSubscriptionRepository(eventStore eventsourcing.EventStore) *SubscriptionRepository {
+// factory: function to create new aggregate instances (should inject appliers)
+func NewSubscriptionRepository(eventStore eventsourcing.EventStore, factory func(string) *SubscriptionAggregate) *SubscriptionRepository {
 	return &SubscriptionRepository{
 		BaseRepository: eventsourcing.NewRepository[*SubscriptionAggregate](
 			eventStore,
 			"Subscription",
-			func(id string) *SubscriptionAggregate {
-				return NewSubscription(id)
-			},
+			factory,
 			func(agg *SubscriptionAggregate, event *eventsourcing.Event) error {
 				// Deserialize and apply event
 				msg, err := deserializeEventSubscription(event)
@@ -113,4 +185,139 @@ func deserializeEventSubscription(event *eventsourcing.Event) (proto.Message, er
 	default:
 		return nil, fmt.Errorf("unknown event type: %s", event.EventType)
 	}
+}
+
+// Event type constants for Subscription
+const (
+	SubscriptionCreatedEventType   = "subscriptionv1.SubscriptionCreatedEvent"
+	SubscriptionCancelledEventType = "subscriptionv1.SubscriptionCancelledEvent"
+)
+
+// Typed event handlers for Subscription
+type SubscriptionCreatedEventHandler func(ctx context.Context, event *SubscriptionCreatedEvent, envelope *eventsourcing.EventEnvelope) error
+type SubscriptionCancelledEventHandler func(ctx context.Context, event *SubscriptionCancelledEvent, envelope *eventsourcing.EventEnvelope) error
+
+// SubscriptionProjectionBuilder provides a fluent API for building type-safe projections
+type SubscriptionProjectionBuilder struct {
+	name      string
+	handlers  map[string]func(context.Context, *eventsourcing.EventEnvelope) error
+	resetFunc func(context.Context) error
+}
+
+// NewSubscriptionProjectionBuilder creates a new projection builder
+func NewSubscriptionProjectionBuilder(name string) *SubscriptionProjectionBuilder {
+	return &SubscriptionProjectionBuilder{
+		name:     name,
+		handlers: make(map[string]func(context.Context, *eventsourcing.EventEnvelope) error),
+	}
+}
+
+// OnSubscriptionCreated registers a typed handler for SubscriptionCreatedEvent
+func (b *SubscriptionProjectionBuilder) OnSubscriptionCreated(handler SubscriptionCreatedEventHandler) *SubscriptionProjectionBuilder {
+	b.handlers[SubscriptionCreatedEventType] = func(ctx context.Context, envelope *eventsourcing.EventEnvelope) error {
+		// Deserialize event
+		event := &SubscriptionCreatedEvent{}
+		if err := proto.Unmarshal(envelope.Data, event); err != nil {
+			return fmt.Errorf("failed to unmarshal SubscriptionCreatedEvent: %w", err)
+		}
+		// Call typed handler
+		return handler(ctx, event, envelope)
+	}
+	return b
+}
+
+// OnSubscriptionCancelled registers a typed handler for SubscriptionCancelledEvent
+func (b *SubscriptionProjectionBuilder) OnSubscriptionCancelled(handler SubscriptionCancelledEventHandler) *SubscriptionProjectionBuilder {
+	b.handlers[SubscriptionCancelledEventType] = func(ctx context.Context, envelope *eventsourcing.EventEnvelope) error {
+		// Deserialize event
+		event := &SubscriptionCancelledEvent{}
+		if err := proto.Unmarshal(envelope.Data, event); err != nil {
+			return fmt.Errorf("failed to unmarshal SubscriptionCancelledEvent: %w", err)
+		}
+		// Call typed handler
+		return handler(ctx, event, envelope)
+	}
+	return b
+}
+
+// OnReset registers a function to reset the projection state
+func (b *SubscriptionProjectionBuilder) OnReset(resetFunc func(context.Context) error) *SubscriptionProjectionBuilder {
+	b.resetFunc = resetFunc
+	return b
+}
+
+// Standalone event handler wrappers for cross-domain projections
+// These can be used with eventsourcing.NewProjectionBuilder()
+
+// OnSubscriptionCreated creates an event handler registration for SubscriptionCreatedEvent
+// Use with eventsourcing.NewProjectionBuilder().On(OnSubscriptionCreated(handler))
+func OnSubscriptionCreated(handler SubscriptionCreatedEventHandler) eventsourcing.EventHandlerRegistration {
+	return eventsourcing.EventHandlerRegistration{
+		EventType: SubscriptionCreatedEventType,
+		Handler: func(ctx context.Context, envelope *eventsourcing.EventEnvelope) error {
+			// Deserialize event
+			event := &SubscriptionCreatedEvent{}
+			if err := proto.Unmarshal(envelope.Data, event); err != nil {
+				return fmt.Errorf("failed to unmarshal SubscriptionCreatedEvent: %w", err)
+			}
+			// Call typed handler
+			return handler(ctx, event, envelope)
+		},
+	}
+}
+
+// OnSubscriptionCancelled creates an event handler registration for SubscriptionCancelledEvent
+// Use with eventsourcing.NewProjectionBuilder().On(OnSubscriptionCancelled(handler))
+func OnSubscriptionCancelled(handler SubscriptionCancelledEventHandler) eventsourcing.EventHandlerRegistration {
+	return eventsourcing.EventHandlerRegistration{
+		EventType: SubscriptionCancelledEventType,
+		Handler: func(ctx context.Context, envelope *eventsourcing.EventEnvelope) error {
+			// Deserialize event
+			event := &SubscriptionCancelledEvent{}
+			if err := proto.Unmarshal(envelope.Data, event); err != nil {
+				return fmt.Errorf("failed to unmarshal SubscriptionCancelledEvent: %w", err)
+			}
+			// Call typed handler
+			return handler(ctx, event, envelope)
+		},
+	}
+}
+
+// Build creates the final Projection implementation
+func (b *SubscriptionProjectionBuilder) Build() eventsourcing.Projection {
+	return &SubscriptionProjection{
+		name:      b.name,
+		handlers:  b.handlers,
+		resetFunc: b.resetFunc,
+	}
+}
+
+// SubscriptionProjection implements eventsourcing.Projection with type-safe handlers
+type SubscriptionProjection struct {
+	name      string
+	handlers  map[string]func(context.Context, *eventsourcing.EventEnvelope) error
+	resetFunc func(context.Context) error
+}
+
+// Name returns the projection name
+func (p *SubscriptionProjection) Name() string {
+	return p.name
+}
+
+// Handle dispatches events to registered typed handlers
+func (p *SubscriptionProjection) Handle(ctx context.Context, envelope *eventsourcing.EventEnvelope) error {
+	handler, exists := p.handlers[envelope.EventType]
+	if !exists {
+		// No handler registered for this event type - skip it
+		return nil
+	}
+	return handler(ctx, envelope)
+}
+
+// Reset resets the projection state
+func (p *SubscriptionProjection) Reset(ctx context.Context) error {
+	if p.resetFunc == nil {
+		return nil // No reset function registered
+	}
+	return p.resetFunc(ctx)
 }

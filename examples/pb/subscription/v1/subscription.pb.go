@@ -8,7 +8,7 @@ package subscriptionv1
 
 import (
 	v1 "github.com/plaenen/eventstore/examples/entity/v1"
-	_ "github.com/plaenen/eventstore/examples/eventsourcing"
+	_ "github.com/plaenen/eventstore/pkg/eventsourcing"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -347,17 +347,15 @@ var File_subscription_v1_subscription_proto protoreflect.FileDescriptor
 
 const file_subscription_v1_subscription_proto_rawDesc = "" +
 	"\n" +
-	"\"subscription/v1/subscription.proto\x12\x0fsubscription.v1\x1a\x1beventsourcing/options.proto\x1a\x16entity/v1/entity.proto\x1a\x1bsubscription/v1/model.proto\"j\n" +
+	"\"subscription/v1/subscription.proto\x12\x0fsubscription.v1\x1a\x1beventsourcing/options.proto\x1a\x16entity/v1/entity.proto\x1a\x1bsubscription/v1/model.proto\"<\n" +
 	"\x19CreateSubscriptionCommand\x12\x1f\n" +
 	"\vadmin_email\x18\x01 \x01(\tR\n" +
-	"adminEmail:,\x8a\xb5\x18(\n" +
-	"\fSubscription\x1a\x18SubscriptionCreatedEvent\"_\n" +
+	"adminEmail\"_\n" +
 	"\x1aCreateSubscriptionResponse\x12'\n" +
 	"\x0fsubscription_id\x18\x01 \x01(\tR\x0esubscriptionId\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\x03R\aversion\"t\n" +
+	"\aversion\x18\x02 \x01(\x03R\aversion\"D\n" +
 	"\x19CancelSubscriptionCommand\x12'\n" +
-	"\x0fsubscription_id\x18\x01 \x01(\tR\x0esubscriptionId:.\x8a\xb5\x18*\n" +
-	"\fSubscription\x1a\x1aSubscriptionCancelledEvent\"a\n" +
+	"\x0fsubscription_id\x18\x01 \x01(\tR\x0esubscriptionId\"a\n" +
 	"\x1aCancelSubscriptionResponse\x12)\n" +
 	"\x06status\x18\x01 \x01(\x0e2\x11.entity.v1.StatusR\x06status\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x03R\aversion\"A\n" +
@@ -370,10 +368,11 @@ const file_subscription_v1_subscription_proto_rawDesc = "" +
 	"adminEmail\x12)\n" +
 	"\x06status\x18\x04 \x01(\x0e2\x11.entity.v1.StatusR\x06status\x12H\n" +
 	"\x0fdisabled_reason\x18\x05 \x01(\x0e2\x1f.subscription.v1.DisabledReasonR\x0edisabledReason\x12>\n" +
-	"\x1bdisabled_reason_description\x18\x06 \x01(\tR\x19disabledReasonDescription2\x8c\x02\n" +
+	"\x1bdisabled_reason_description\x18\x06 \x01(\tR\x19disabledReasonDescription2\x9c\x02\n" +
 	"\x1aSubscriptionCommandService\x12m\n" +
 	"\x12CreateSubscription\x12*.subscription.v1.CreateSubscriptionCommand\x1a+.subscription.v1.CreateSubscriptionResponse\x12m\n" +
-	"\x12CancelSubscription\x12*.subscription.v1.CancelSubscriptionCommand\x1a+.subscription.v1.CancelSubscriptionResponse\x1a\x10\x92\xb5\x18\fSubscription2\x80\x01\n" +
+	"\x12CancelSubscription\x12*.subscription.v1.CancelSubscriptionCommand\x1a+.subscription.v1.CancelSubscriptionResponse\x1a \x92\xb5\x18\x1c\n" +
+	"\fSubscription\x12\fSubscription2\x80\x01\n" +
 	"\x18SubscriptionQueryService\x12d\n" +
 	"\x0fGetSubscription\x12'.subscription.v1.GetSubscriptionRequest\x1a(.subscription.v1.GetSubscriptionResponseB\xcc\x01\n" +
 	"\x13com.subscription.v1B\x11SubscriptionProtoP\x01ZEgithub.com/plaenen/eventstore/examples/subscription/v1;subscriptionv1\xa2\x02\x03SXX\xaa\x02\x0fSubscription.V1\xca\x02\x0fSubscription\\V1\xe2\x02\x1bSubscription\\V1\\GPBMetadata\xea\x02\x10Subscription::V1b\x06proto3"

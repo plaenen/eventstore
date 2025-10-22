@@ -186,3 +186,17 @@ func (s *CheckpointStore) Delete(projectionName string) error {
 
 	return nil
 }
+
+// DeleteInTx deletes a checkpoint within the provided transaction.
+// This should be used when resetting projections atomically.
+func (s *CheckpointStore) DeleteInTx(tx *sql.Tx, projectionName string) error {
+	ctx := context.Background()
+	queries := sqlcgen.New(tx)
+
+	err := queries.DeleteCheckpoint(ctx, projectionName)
+	if err != nil {
+		return fmt.Errorf("failed to delete checkpoint in transaction: %w", err)
+	}
+
+	return nil
+}

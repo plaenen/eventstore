@@ -1,6 +1,7 @@
 version: v2
 modules:
   - path: .
+    name: buf.build/plaenen/eventstore
 lint:
   use:
     - STANDARD

@@ -10,7 +10,11 @@ import "subscription/v1/model.proto";
 
 // SubscriptionCommandService handles write operations (commands)
 service SubscriptionCommandService {
-  option (eventsourcing.aggregate_name) = "Subscription";
+  option (eventsourcing.service) = {
+    aggregate_name: "Subscription"
+    aggregate_root_message: "Subscription"
+  };
+
   // CreateSubscription creates a new subscription
   rpc CreateSubscription(CreateSubscriptionCommand) returns (CreateSubscriptionResponse);
   // CancelSubscription cancels a subscription
@@ -23,14 +27,9 @@ service SubscriptionQueryService {
   rpc GetSubscription(GetSubscriptionRequest) returns (GetSubscriptionResponse);
 }
 
-// -- Commands (Write Side) ---
+// Commands (Write Side) - NO OPTIONS
 
 message CreateSubscriptionCommand {
-  option (eventsourcing.aggregate_options) = {
-    aggregate: "Subscription"
-    produces_events: "SubscriptionCreatedEvent"
-  };
-
   string admin_email = 1;
 }
 
@@ -40,11 +39,6 @@ message CreateSubscriptionResponse {
 }
 
 message CancelSubscriptionCommand {
-  option (eventsourcing.aggregate_options) = {
-    aggregate: "Subscription"
-    produces_events: "SubscriptionCancelledEvent"
-  };
-
   string subscription_id = 1;
 }
 
@@ -53,8 +47,7 @@ message CancelSubscriptionResponse {
   int64 version = 2;
 }
 
-
-// --- Queries (Read Side) ---
+// Queries (Read Side)
 
 message GetSubscriptionRequest {
   string subscription_id = 1;

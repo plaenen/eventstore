@@ -251,8 +251,7 @@ const file_eventsourcing_options_proto_rawDesc = "" +
 	"\x0eaggregate_name\x18\x01 \x01(\tR\raggregateName:Z\n" +
 	"\aservice\x12\x1f.google.protobuf.ServiceOptions\x18҆\x03 \x01(\v2\x1d.eventsourcing.ServiceOptionsR\aservice:m\n" +
 	"\x0eaggregate_root\x12\x1f.google.protobuf.MessageOptions\x18ӆ\x03 \x01(\v2#.eventsourcing.AggregateRootOptionsR\raggregateRoot:T\n" +
-	"\x05event\x12\x1f.google.protobuf.MessageOptions\x18Ԇ\x03 \x01(\v2\x1b.eventsourcing.EventOptionsR\x05eventB\xa6\x01\n" +
-	"\x11com.eventsourcingB\fOptionsProtoP\x01Z/github.com/plaenen/eventstore/pkg/eventsourcing\xa2\x02\x03EXX\xaa\x02\rEventsourcing\xca\x02\rEventsourcing\xe2\x02\x19Eventsourcing\\GPBMetadata\xea\x02\rEventsourcingb\x06proto3"
+	"\x05event\x12\x1f.google.protobuf.MessageOptions\x18Ԇ\x03 \x01(\v2\x1b.eventsourcing.EventOptionsR\x05eventBBZ@github.com/plaenen/eventstore/gen/go/eventsourcing;eventsourcingb\x06proto3"
 
 var (
 	file_eventsourcing_options_proto_rawDescOnce sync.Once

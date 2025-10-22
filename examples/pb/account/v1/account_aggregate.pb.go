@@ -3,6 +3,7 @@
 package accountv1
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
@@ -14,13 +15,17 @@ import (
 type AccountAggregate struct {
 	eventsourcing.AggregateRoot
 	*Account
+	applier AccountEventApplier // Injected dependency for event application
 }
 
 // NewAccount creates a new AccountAggregate instance
-func NewAccount(id string) *AccountAggregate {
+// The applier parameter defines how events modify aggregate state
+// Implement AccountEventApplier in your domain layer
+func NewAccount(id string, applier AccountEventApplier) *AccountAggregate {
 	return &AccountAggregate{
 		AggregateRoot: eventsourcing.NewAggregateRoot(id, "Account"),
 		Account:       &Account{},
+		applier:       applier,
 	}
 }
 
@@ -32,7 +37,16 @@ func (a *AccountAggregate) MarshalSnapshot() ([]byte, error) {
 // UnmarshalSnapshot deserializes the aggregate state from snapshots
 func (a *AccountAggregate) UnmarshalSnapshot(data []byte) error {
 	a.Account = &Account{}
-	return proto.Unmarshal(data, a.Account)
+	if err := proto.Unmarshal(data, a.Account); err != nil {
+		return err
+	}
+
+	// UPCAST HOOK: If aggregate implements SnapshotUpcaster, upgrade old snapshots
+	if upcaster, ok := interface{}(a).(eventsourcing.SnapshotUpcaster); ok {
+		a.Account = upcaster.UpcastSnapshot(a.Account).(*Account)
+	}
+
+	return nil
 }
 
 // ID returns the aggregate ID
@@ -45,62 +59,109 @@ func (a *AccountAggregate) Type() string {
 	return "Account"
 }
 
-// EmitAccountOpenedEvent is a helper to emit AccountOpenedEvent after validation
-// Call this from your custom OpenAccount implementation
-func (a *AccountAggregate) EmitAccountOpenedEvent(event *AccountOpenedEvent, metadata eventsourcing.EventMetadata) error {
-	return a.ApplyChange(event, "accountv1.AccountOpenedEvent", metadata)
-}
-
-// EmitMoneyDepositedEvent is a helper to emit MoneyDepositedEvent after validation
-// Call this from your custom Deposit implementation
-func (a *AccountAggregate) EmitMoneyDepositedEvent(event *MoneyDepositedEvent, metadata eventsourcing.EventMetadata) error {
-	return a.ApplyChange(event, "accountv1.MoneyDepositedEvent", metadata)
-}
-
-// EmitMoneyWithdrawnEvent is a helper to emit MoneyWithdrawnEvent after validation
-// Call this from your custom Withdraw implementation
-func (a *AccountAggregate) EmitMoneyWithdrawnEvent(event *MoneyWithdrawnEvent, metadata eventsourcing.EventMetadata) error {
-	return a.ApplyChange(event, "accountv1.MoneyWithdrawnEvent", metadata)
-}
-
-// EmitAccountClosedEvent is a helper to emit AccountClosedEvent after validation
-// Call this from your custom CloseAccount implementation
-func (a *AccountAggregate) EmitAccountClosedEvent(event *AccountClosedEvent, metadata eventsourcing.EventMetadata) error {
-	return a.ApplyChange(event, "accountv1.AccountClosedEvent", metadata)
-}
-
 // ApplyEvent applies an event to the Account aggregate
-// This method routes events to their specific applier methods
+// This method delegates to the injected applier implementation
 func (a *AccountAggregate) ApplyEvent(event proto.Message) error {
+	// UPCAST HOOK: If aggregate implements EventUpcaster, upgrade old events
+	if upcaster, ok := interface{}(a).(eventsourcing.EventUpcaster); ok {
+		event = upcaster.UpcastEvent(event)
+	}
+
 	switch e := event.(type) {
 	case *AccountOpenedEvent:
-		return a.ApplyAccountOpenedEvent(e)
+		return a.applier.ApplyAccountOpenedEvent(a, e) // Delegate to injected applier
 	case *MoneyDepositedEvent:
-		return a.ApplyMoneyDepositedEvent(e)
+		return a.applier.ApplyMoneyDepositedEvent(a, e) // Delegate to injected applier
 	case *MoneyWithdrawnEvent:
-		return a.ApplyMoneyWithdrawnEvent(e)
+		return a.applier.ApplyMoneyWithdrawnEvent(a, e) // Delegate to injected applier
 	case *AccountClosedEvent:
-		return a.ApplyAccountClosedEvent(e)
+		return a.applier.ApplyAccountClosedEvent(a, e) // Delegate to injected applier
 	default:
 		return fmt.Errorf("unknown event type: %T", event)
 	}
 }
 
+// ============================================================================
+// Event Applier Interface
+// ============================================================================
+// The aggregate needs applier methods to handle events.
+// Implement these methods in your domain layer outside the pb/ directory.
+
 // AccountEventApplier defines methods for applying events to Account
-// Developers must implement these methods to define how events change aggregate state
+// Implement this interface in your domain layer (outside pb/ directory)
 type AccountEventApplier interface {
 	// ApplyAccountOpenedEvent applies the AccountOpenedEvent to the aggregate state
-	ApplyAccountOpenedEvent(e *AccountOpenedEvent) error
+	ApplyAccountOpenedEvent(agg *AccountAggregate, e *AccountOpenedEvent) error
 	// ApplyMoneyDepositedEvent applies the MoneyDepositedEvent to the aggregate state
-	ApplyMoneyDepositedEvent(e *MoneyDepositedEvent) error
+	ApplyMoneyDepositedEvent(agg *AccountAggregate, e *MoneyDepositedEvent) error
 	// ApplyMoneyWithdrawnEvent applies the MoneyWithdrawnEvent to the aggregate state
-	ApplyMoneyWithdrawnEvent(e *MoneyWithdrawnEvent) error
+	ApplyMoneyWithdrawnEvent(agg *AccountAggregate, e *MoneyWithdrawnEvent) error
 	// ApplyAccountClosedEvent applies the AccountClosedEvent to the aggregate state
-	ApplyAccountClosedEvent(e *AccountClosedEvent) error
+	ApplyAccountClosedEvent(agg *AccountAggregate, e *AccountClosedEvent) error
 }
 
-// The AccountAggregate must implement AccountEventApplier
-// Developer implements these methods in a separate file (not generated)
+// ============================================================================
+// Implementing Event Appliers (Recommended Pattern)
+// ============================================================================
+// Create your applier implementation in your domain layer, e.g.:
+//
+// // In bankaccount/domain/account_appliers.go
+// type AccountAppliers struct{}
+//
+// func (ap *AccountAppliers) ApplyAccountOpenedEvent(agg *accountv1.AccountAggregate, e *accountv1.AccountOpenedEvent) error {
+//     // Update aggregate state
+//     agg.AccountId = e.AccountId
+//     return nil
+// }
+//
+// func (ap *AccountAppliers) ApplyMoneyDepositedEvent(agg *accountv1.AccountAggregate, e *accountv1.MoneyDepositedEvent) error {
+//     // Update aggregate state
+//     agg.AccountId = e.AccountId
+//     return nil
+// }
+//
+// func (ap *AccountAppliers) ApplyMoneyWithdrawnEvent(agg *accountv1.AccountAggregate, e *accountv1.MoneyWithdrawnEvent) error {
+//     // Update aggregate state
+//     agg.AccountId = e.AccountId
+//     return nil
+// }
+//
+// func (ap *AccountAppliers) ApplyAccountClosedEvent(agg *accountv1.AccountAggregate, e *accountv1.AccountClosedEvent) error {
+//     // Update aggregate state
+//     agg.AccountId = e.AccountId
+//     return nil
+// }
+//
+// Then inject when creating aggregates:
+//   applier := &domain.AccountAppliers{}
+//   agg := accountv1.NewAccount(id, applier)
+// ============================================================================
+
+// ============================================================================
+// OPTIONAL: Event and Snapshot Upcasting
+// ============================================================================
+// The aggregate can optionally implement these interfaces to handle event/snapshot evolution:
+//
+// type EventUpcaster interface {
+//     UpcastEvent(event proto.Message) proto.Message
+// }
+//
+// type SnapshotUpcaster interface {
+//     UpcastSnapshot(state proto.Message) proto.Message
+// }
+//
+// Example:
+//
+// func (a *AccountAggregate) UpcastEvent(event proto.Message) proto.Message {
+//     switch old := event.(type) {
+//     case *EventV1:
+//         return &EventV2{...}  // Convert old version to new
+//     }
+//     return event  // Already current version
+// }
+
+// See: docs/aggregate_upcasting_design.md
+// ============================================================================
 
 // AccountRepository provides persistence for Account
 type AccountRepository struct {
@@ -108,14 +169,13 @@ type AccountRepository struct {
 }
 
 // NewAccountRepository creates a new repository
-func NewAccountRepository(eventStore eventsourcing.EventStore) *AccountRepository {
+// factory: function to create new aggregate instances (should inject appliers)
+func NewAccountRepository(eventStore eventsourcing.EventStore, factory func(string) *AccountAggregate) *AccountRepository {
 	return &AccountRepository{
 		BaseRepository: eventsourcing.NewRepository[*AccountAggregate](
 			eventStore,
 			"Account",
-			func(id string) *AccountAggregate {
-				return NewAccount(id)
-			},
+			factory,
 			func(agg *AccountAggregate, event *eventsourcing.Event) error {
 				// Deserialize and apply event
 				msg, err := deserializeEventAccount(event)
@@ -157,4 +217,205 @@ func deserializeEventAccount(event *eventsourcing.Event) (proto.Message, error) 
 	default:
 		return nil, fmt.Errorf("unknown event type: %s", event.EventType)
 	}
+}
+
+// Event type constants for Account
+const (
+	AccountOpenedEventType  = "accountv1.AccountOpenedEvent"
+	MoneyDepositedEventType = "accountv1.MoneyDepositedEvent"
+	MoneyWithdrawnEventType = "accountv1.MoneyWithdrawnEvent"
+	AccountClosedEventType  = "accountv1.AccountClosedEvent"
+)
+
+// Typed event handlers for Account
+type AccountOpenedEventHandler func(ctx context.Context, event *AccountOpenedEvent, envelope *eventsourcing.EventEnvelope) error
+type MoneyDepositedEventHandler func(ctx context.Context, event *MoneyDepositedEvent, envelope *eventsourcing.EventEnvelope) error
+type MoneyWithdrawnEventHandler func(ctx context.Context, event *MoneyWithdrawnEvent, envelope *eventsourcing.EventEnvelope) error
+type AccountClosedEventHandler func(ctx context.Context, event *AccountClosedEvent, envelope *eventsourcing.EventEnvelope) error
+
+// AccountProjectionBuilder provides a fluent API for building type-safe projections
+type AccountProjectionBuilder struct {
+	name      string
+	handlers  map[string]func(context.Context, *eventsourcing.EventEnvelope) error
+	resetFunc func(context.Context) error
+}
+
+// NewAccountProjectionBuilder creates a new projection builder
+func NewAccountProjectionBuilder(name string) *AccountProjectionBuilder {
+	return &AccountProjectionBuilder{
+		name:     name,
+		handlers: make(map[string]func(context.Context, *eventsourcing.EventEnvelope) error),
+	}
+}
+
+// OnAccountOpened registers a typed handler for AccountOpenedEvent
+func (b *AccountProjectionBuilder) OnAccountOpened(handler AccountOpenedEventHandler) *AccountProjectionBuilder {
+	b.handlers[AccountOpenedEventType] = func(ctx context.Context, envelope *eventsourcing.EventEnvelope) error {
+		// Deserialize event
+		event := &AccountOpenedEvent{}
+		if err := proto.Unmarshal(envelope.Data, event); err != nil {
+			return fmt.Errorf("failed to unmarshal AccountOpenedEvent: %w", err)
+		}
+		// Call typed handler
+		return handler(ctx, event, envelope)
+	}
+	return b
+}
+
+// OnMoneyDeposited registers a typed handler for MoneyDepositedEvent
+func (b *AccountProjectionBuilder) OnMoneyDeposited(handler MoneyDepositedEventHandler) *AccountProjectionBuilder {
+	b.handlers[MoneyDepositedEventType] = func(ctx context.Context, envelope *eventsourcing.EventEnvelope) error {
+		// Deserialize event
+		event := &MoneyDepositedEvent{}
+		if err := proto.Unmarshal(envelope.Data, event); err != nil {
+			return fmt.Errorf("failed to unmarshal MoneyDepositedEvent: %w", err)
+		}
+		// Call typed handler
+		return handler(ctx, event, envelope)
+	}
+	return b
+}
+
+// OnMoneyWithdrawn registers a typed handler for MoneyWithdrawnEvent
+func (b *AccountProjectionBuilder) OnMoneyWithdrawn(handler MoneyWithdrawnEventHandler) *AccountProjectionBuilder {
+	b.handlers[MoneyWithdrawnEventType] = func(ctx context.Context, envelope *eventsourcing.EventEnvelope) error {
+		// Deserialize event
+		event := &MoneyWithdrawnEvent{}
+		if err := proto.Unmarshal(envelope.Data, event); err != nil {
+			return fmt.Errorf("failed to unmarshal MoneyWithdrawnEvent: %w", err)
+		}
+		// Call typed handler
+		return handler(ctx, event, envelope)
+	}
+	return b
+}
+
+// OnAccountClosed registers a typed handler for AccountClosedEvent
+func (b *AccountProjectionBuilder) OnAccountClosed(handler AccountClosedEventHandler) *AccountProjectionBuilder {
+	b.handlers[AccountClosedEventType] = func(ctx context.Context, envelope *eventsourcing.EventEnvelope) error {
+		// Deserialize event
+		event := &AccountClosedEvent{}
+		if err := proto.Unmarshal(envelope.Data, event); err != nil {
+			return fmt.Errorf("failed to unmarshal AccountClosedEvent: %w", err)
+		}
+		// Call typed handler
+		return handler(ctx, event, envelope)
+	}
+	return b
+}
+
+// OnReset registers a function to reset the projection state
+func (b *AccountProjectionBuilder) OnReset(resetFunc func(context.Context) error) *AccountProjectionBuilder {
+	b.resetFunc = resetFunc
+	return b
+}
+
+// Standalone event handler wrappers for cross-domain projections
+// These can be used with eventsourcing.NewProjectionBuilder()
+
+// OnAccountOpened creates an event handler registration for AccountOpenedEvent
+// Use with eventsourcing.NewProjectionBuilder().On(OnAccountOpened(handler))
+func OnAccountOpened(handler AccountOpenedEventHandler) eventsourcing.EventHandlerRegistration {
+	return eventsourcing.EventHandlerRegistration{
+		EventType: AccountOpenedEventType,
+		Handler: func(ctx context.Context, envelope *eventsourcing.EventEnvelope) error {
+			// Deserialize event
+			event := &AccountOpenedEvent{}
+			if err := proto.Unmarshal(envelope.Data, event); err != nil {
+				return fmt.Errorf("failed to unmarshal AccountOpenedEvent: %w", err)
+			}
+			// Call typed handler
+			return handler(ctx, event, envelope)
+		},
+	}
+}
+
+// OnMoneyDeposited creates an event handler registration for MoneyDepositedEvent
+// Use with eventsourcing.NewProjectionBuilder().On(OnMoneyDeposited(handler))
+func OnMoneyDeposited(handler MoneyDepositedEventHandler) eventsourcing.EventHandlerRegistration {
+	return eventsourcing.EventHandlerRegistration{
+		EventType: MoneyDepositedEventType,
+		Handler: func(ctx context.Context, envelope *eventsourcing.EventEnvelope) error {
+			// Deserialize event
+			event := &MoneyDepositedEvent{}
+			if err := proto.Unmarshal(envelope.Data, event); err != nil {
+				return fmt.Errorf("failed to unmarshal MoneyDepositedEvent: %w", err)
+			}
+			// Call typed handler
+			return handler(ctx, event, envelope)
+		},
+	}
+}
+
+// OnMoneyWithdrawn creates an event handler registration for MoneyWithdrawnEvent
+// Use with eventsourcing.NewProjectionBuilder().On(OnMoneyWithdrawn(handler))
+func OnMoneyWithdrawn(handler MoneyWithdrawnEventHandler) eventsourcing.EventHandlerRegistration {
+	return eventsourcing.EventHandlerRegistration{
+		EventType: MoneyWithdrawnEventType,
+		Handler: func(ctx context.Context, envelope *eventsourcing.EventEnvelope) error {
+			// Deserialize event
+			event := &MoneyWithdrawnEvent{}
+			if err := proto.Unmarshal(envelope.Data, event); err != nil {
+				return fmt.Errorf("failed to unmarshal MoneyWithdrawnEvent: %w", err)
+			}
+			// Call typed handler
+			return handler(ctx, event, envelope)
+		},
+	}
+}
+
+// OnAccountClosed creates an event handler registration for AccountClosedEvent
+// Use with eventsourcing.NewProjectionBuilder().On(OnAccountClosed(handler))
+func OnAccountClosed(handler AccountClosedEventHandler) eventsourcing.EventHandlerRegistration {
+	return eventsourcing.EventHandlerRegistration{
+		EventType: AccountClosedEventType,
+		Handler: func(ctx context.Context, envelope *eventsourcing.EventEnvelope) error {
+			// Deserialize event
+			event := &AccountClosedEvent{}
+			if err := proto.Unmarshal(envelope.Data, event); err != nil {
+				return fmt.Errorf("failed to unmarshal AccountClosedEvent: %w", err)
+			}
+			// Call typed handler
+			return handler(ctx, event, envelope)
+		},
+	}
+}
+
+// Build creates the final Projection implementation
+func (b *AccountProjectionBuilder) Build() eventsourcing.Projection {
+	return &AccountProjection{
+		name:      b.name,
+		handlers:  b.handlers,
+		resetFunc: b.resetFunc,
+	}
+}
+
+// AccountProjection implements eventsourcing.Projection with type-safe handlers
+type AccountProjection struct {
+	name      string
+	handlers  map[string]func(context.Context, *eventsourcing.EventEnvelope) error
+	resetFunc func(context.Context) error
+}
+
+// Name returns the projection name
+func (p *AccountProjection) Name() string {
+	return p.name
+}
+
+// Handle dispatches events to registered typed handlers
+func (p *AccountProjection) Handle(ctx context.Context, envelope *eventsourcing.EventEnvelope) error {
+	handler, exists := p.handlers[envelope.EventType]
+	if !exists {
+		// No handler registered for this event type - skip it
+		return nil
+	}
+	return handler(ctx, envelope)
+}
+
+// Reset resets the projection state
+func (p *AccountProjection) Reset(ctx context.Context) error {
+	if p.resetFunc == nil {
+		return nil // No reset function registered
+	}
+	return p.resetFunc(ctx)
 }

@@ -2,18 +2,33 @@
 //
 // This plugin generates:
 //   - Aggregate root structs based on proto messages marked with (eventsourcing.aggregate_root)
-//   - Command handler helper methods
-//   - Event applier methods
-//   - Type-safe repositories
+//   - Event applier interface methods
+//   - Type-safe repositories with event deserializers
+//   - SDK clients for commands and queries
+//   - Server-side handlers and routing
 //
 // Configuration via Proto Options:
 //
 // The plugin uses custom proto options (defined in eventsourcing/options.proto):
 //
-//   - Message option: (eventsourcing.aggregate_root) marks a proto message as an aggregate
-//   - Message option: (eventsourcing.event_options) configures event-to-state mapping
-//   - Message option: (eventsourcing.aggregate_options) for commands (produces_events, constraints)
-//   - Service option: (eventsourcing.aggregate_name) = "AggregateName"
+//  Service level (required):
+//   - option (eventsourcing.service) = {
+//       aggregate_name: "Account"
+//       aggregate_root_message: "Account"
+//     }
+//
+//  Aggregate root (required):
+//   - option (eventsourcing.aggregate_root) = {id_field: "account_id"}
+//
+//  Events (required):
+//   - option (eventsourcing.event) = {aggregate_name: "Account"}
+//
+//  Commands: NO OPTIONS - inherit from service
+//
+// Developer responsibilities:
+//   - Implement ApplyEvent methods for state updates
+//   - Handle unique constraints in command handlers
+//   - Manage field mapping in ApplyEvent code
 package main
 
 import (
@@ -24,7 +39,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/pluginpb"
 
-	eventsourcing "github.com/plaenen/eventstore/gen/go/eventsourcing"
+	eventsourcing "github.com/plaenen/eventstore/pkg/eventsourcing"
 )
 
 func main() {
@@ -74,6 +89,7 @@ func generateFile(gen *protogen.Plugin, file *protogen.File) {
 	generateCommandHandlers(g, file)
 	generateEventAppliers(g, file)
 	generateRepository(g, file)
+	generateProjectionSDK(g, file)
 
 	// Generate SDK client if there are commands or queries
 	services := findServices(file)
@@ -91,6 +107,7 @@ func generateHeader(g *protogen.GeneratedFile, file *protogen.File) {
 	g.P("package ", file.GoPackageName)
 	g.P()
 	g.P("import (")
+	g.P(`	"context"`)
 	g.P(`	"fmt"`)
 	g.P()
 	g.P(`	"github.com/plaenen/eventstore/pkg/eventsourcing"`)
@@ -110,15 +127,19 @@ func generateAggregates(g *protogen.GeneratedFile, file *protogen.File) {
 		g.P("type ", aggregateType, " struct {")
 		g.P("	eventsourcing.AggregateRoot")
 		g.P("	*", agg.MessageName)
+		g.P("	applier ", agg.TypeName, "EventApplier  // Injected dependency for event application")
 		g.P("}")
 		g.P()
 
 		// Constructor
 		g.P("// New", agg.TypeName, " creates a new ", aggregateType, " instance")
-		g.P("func New", agg.TypeName, "(id string) *", aggregateType, " {")
+		g.P("// The applier parameter defines how events modify aggregate state")
+		g.P("// Implement ", agg.TypeName, "EventApplier in your domain layer")
+		g.P("func New", agg.TypeName, "(id string, applier ", agg.TypeName, "EventApplier) *", aggregateType, " {")
 		g.P("	return &", aggregateType, "{")
 		g.P("		AggregateRoot: eventsourcing.NewAggregateRoot(id, \"", agg.TypeName, "\"),")
 		g.P("		", agg.MessageName, ": &", agg.MessageName, "{},")
+		g.P("		applier:       applier,")
 		g.P("	}")
 		g.P("}")
 		g.P()
@@ -133,7 +154,16 @@ func generateAggregates(g *protogen.GeneratedFile, file *protogen.File) {
 		g.P("// UnmarshalSnapshot deserializes the aggregate state from snapshots")
 		g.P("func (a *", aggregateType, ") UnmarshalSnapshot(data []byte) error {")
 		g.P("	a.", agg.MessageName, " = &", agg.MessageName, "{}")
-		g.P("	return proto.Unmarshal(data, a.", agg.MessageName, ")")
+		g.P("	if err := proto.Unmarshal(data, a.", agg.MessageName, "); err != nil {")
+		g.P("		return err")
+		g.P("	}")
+		g.P()
+		g.P("	// UPCAST HOOK: If aggregate implements SnapshotUpcaster, upgrade old snapshots")
+		g.P("	if upcaster, ok := interface{}(a).(eventsourcing.SnapshotUpcaster); ok {")
+		g.P("		a.", agg.MessageName, " = upcaster.UpcastSnapshot(a.", agg.MessageName, ").(*", agg.MessageName, ")")
+		g.P("	}")
+		g.P()
+		g.P("	return nil")
 		g.P("}")
 		g.P()
 
@@ -154,57 +184,9 @@ func generateAggregates(g *protogen.GeneratedFile, file *protogen.File) {
 }
 
 func generateCommandHandlers(g *protogen.GeneratedFile, file *protogen.File) {
-	aggregates := findAggregates(file)
-
-	if len(aggregates) == 0 {
-		return
-	}
-
-	// Find commands and their associated events
-	commands := findCommands(file)
-
-	for _, cmd := range commands {
-		aggregateName := cmd.AggregateName
-
-		// Find the aggregate
-		var agg *AggregateInfo
-		for _, a := range aggregates {
-			if a.TypeName == aggregateName {
-				agg = a
-				break
-			}
-		}
-		if agg == nil {
-			continue
-		}
-
-		aggregateType := agg.TypeName + "Aggregate"
-
-		// Generate helper methods for each event the command produces
-		for _, eventName := range cmd.ProducesEvents {
-			g.P("// Emit", eventName, " is a helper to emit ", eventName, " after validation")
-			g.P("// Call this from your custom ", cmd.MethodName, " implementation")
-			g.P("func (a *", aggregateType, ") Emit", eventName, "(event *", eventName, ", metadata eventsourcing.EventMetadata) error {")
-
-			if len(cmd.UniqueConstraints) > 0 {
-				g.P("	constraints := []eventsourcing.UniqueConstraint{")
-				for _, constraint := range cmd.UniqueConstraints {
-					g.P("		{")
-					g.P("			IndexName: \"", constraint.IndexName, "\",")
-					g.P("			Value: event.", constraint.FieldGo, ",")
-					g.P("			Operation: eventsourcing.Constraint", strings.Title(strings.ToLower(constraint.Operation)), ",")
-					g.P("		},")
-				}
-				g.P("	}")
-				g.P("	return a.ApplyChangeWithConstraints(event, \"", file.GoPackageName, ".", eventName, "\", metadata, constraints)")
-			} else {
-				g.P("	return a.ApplyChange(event, \"", file.GoPackageName, ".", eventName, "\", metadata)")
-			}
-
-			g.P("}")
-			g.P()
-		}
-	}
+	// Command handlers are now fully implemented by developers
+	// No code generation needed - developers use aggregate.ApplyChange() directly
+	// This function is kept for backward compatibility but generates nothing
 }
 
 func generateEventAppliers(g *protogen.GeneratedFile, file *protogen.File) {
@@ -218,16 +200,21 @@ func generateEventAppliers(g *protogen.GeneratedFile, file *protogen.File) {
 			continue
 		}
 
-		// Generate the ApplyEvent dispatcher (routes to specific applier methods)
+		// Generate the ApplyEvent dispatcher (delegates to injected applier)
 		g.P("// ApplyEvent applies an event to the ", agg.TypeName, " aggregate")
-		g.P("// This method routes events to their specific applier methods")
+		g.P("// This method delegates to the injected applier implementation")
 		g.P("func (a *", aggregateType, ") ApplyEvent(event proto.Message) error {")
+		g.P("	// UPCAST HOOK: If aggregate implements EventUpcaster, upgrade old events")
+		g.P("	if upcaster, ok := interface{}(a).(eventsourcing.EventUpcaster); ok {")
+		g.P("		event = upcaster.UpcastEvent(event)")
+		g.P("	}")
+		g.P()
 		g.P("	switch e := event.(type) {")
 
 		for _, evt := range events {
 			methodName := "Apply" + evt.MessageName
 			g.P("	case *", evt.MessageName, ":")
-			g.P("		return a.", methodName, "(e)")
+			g.P("		return a.applier.", methodName, "(a, e)  // Delegate to injected applier")
 		}
 
 		g.P("	default:")
@@ -236,22 +223,76 @@ func generateEventAppliers(g *protogen.GeneratedFile, file *protogen.File) {
 		g.P("}")
 		g.P()
 
+		g.P("// ============================================================================")
+		g.P("// Event Applier Interface")
+		g.P("// ============================================================================")
+		g.P("// The aggregate needs applier methods to handle events.")
+		g.P("// Implement these methods in your domain layer outside the pb/ directory.")
+		g.P()
+
 		g.P("// ", agg.TypeName, "EventApplier defines methods for applying events to ", agg.TypeName)
-		g.P("// Developers must implement these methods to define how events change aggregate state")
+		g.P("// Implement this interface in your domain layer (outside pb/ directory)")
 		g.P("type ", agg.TypeName, "EventApplier interface {")
 
-		// Generate interface method signatures
+		// Generate interface method signatures with aggregate parameter
 		for _, evt := range events {
 			methodName := "Apply" + evt.MessageName
 			g.P("	// ", methodName, " applies the ", evt.MessageName, " to the aggregate state")
-			g.P("	", methodName, "(e *", evt.MessageName, ") error")
+			g.P("	", methodName, "(agg *", aggregateType, ", e *", evt.MessageName, ") error")
 		}
 
 		g.P("}")
 		g.P()
 
-		g.P("// The ", aggregateType, " must implement ", agg.TypeName, "EventApplier")
-		g.P("// Developer implements these methods in a separate file (not generated)")
+		g.P("// ============================================================================")
+		g.P("// Implementing Event Appliers (Recommended Pattern)")
+		g.P("// ============================================================================")
+		g.P("// Create your applier implementation in your domain layer, e.g.:")
+		g.P("//")
+		g.P("// // In bankaccount/domain/account_appliers.go")
+		g.P("// type AccountAppliers struct{}")
+		g.P("//")
+		for _, evt := range events {
+			methodName := "Apply" + evt.MessageName
+			g.P("// func (ap *AccountAppliers) ", methodName, "(agg *accountv1.", aggregateType, ", e *accountv1.", evt.MessageName, ") error {")
+			g.P("//     // Update aggregate state")
+			g.P("//     agg.", agg.IDFieldGo, " = e.", agg.IDFieldGo)
+			g.P("//     return nil")
+			g.P("// }")
+			g.P("//")
+		}
+		g.P("// Then inject when creating aggregates:")
+		g.P("//   applier := &domain.AccountAppliers{}")
+		g.P("//   agg := accountv1.New", agg.TypeName, "(id, applier)")
+		g.P("// ============================================================================")
+		g.P()
+
+		// Add optional upcaster interfaces documentation
+		g.P("// ============================================================================")
+		g.P("// OPTIONAL: Event and Snapshot Upcasting")
+		g.P("// ============================================================================")
+		g.P("// The aggregate can optionally implement these interfaces to handle event/snapshot evolution:")
+		g.P("//")
+		g.P("// type EventUpcaster interface {")
+		g.P("//     UpcastEvent(event proto.Message) proto.Message")
+		g.P("// }")
+		g.P("//")
+		g.P("// type SnapshotUpcaster interface {")
+		g.P("//     UpcastSnapshot(state proto.Message) proto.Message")
+		g.P("// }")
+		g.P("//")
+		g.P("// Example:")
+		g.P("//")
+		g.P("// func (a *", aggregateType, ") UpcastEvent(event proto.Message) proto.Message {")
+		g.P("//     switch old := event.(type) {")
+		g.P("//     case *EventV1:")
+		g.P("//         return &EventV2{...}  // Convert old version to new")
+		g.P("//     }")
+		g.P("//     return event  // Already current version")
+		g.P("// }")
+		g.P()
+		g.P("// See: docs/aggregate_upcasting_design.md")
+		g.P("// ============================================================================")
 		g.P()
 	}
 }
@@ -270,14 +311,13 @@ func generateRepository(g *protogen.GeneratedFile, file *protogen.File) {
 		g.P()
 
 		g.P("// New", repoName, " creates a new repository")
-		g.P("func New", repoName, "(eventStore eventsourcing.EventStore) *", repoName, " {")
+		g.P("// factory: function to create new aggregate instances (should inject appliers)")
+		g.P("func New", repoName, "(eventStore eventsourcing.EventStore, factory func(string) *", aggregateType, ") *", repoName, " {")
 		g.P("	return &", repoName, "{")
 		g.P("		BaseRepository: eventsourcing.NewRepository[*", aggregateType, "](")
 		g.P("			eventStore,")
 		g.P(`			"`, agg.TypeName, `",`)
-		g.P("			func(id string) *", aggregateType, " {")
-		g.P("				return New", agg.TypeName, "(id)")
-		g.P("			},")
+		g.P("			factory,")
 		g.P("			func(agg *", aggregateType, ", event *eventsourcing.Event) error {")
 		g.P("				// Deserialize and apply event")
 		g.P("				msg, err := deserializeEvent", agg.TypeName, "(event)")
@@ -326,71 +366,94 @@ type AggregateInfo struct {
 }
 
 type CommandInfo struct {
-	MessageName       string
-	MethodName        string
-	AggregateName     string
-	ProducesEvents    []string
-	UniqueConstraints []ConstraintInfo
+	MessageName   string
+	MethodName    string
+	AggregateName string
 }
 
 type EventInfo struct {
-	MessageName    string
-	AggregateName  string
-	AppliesToState []string
-	FieldMapping   map[string]string
+	MessageName   string
+	AggregateName string
 }
 
-type ConstraintInfo struct {
-	IndexName string
-	Field     string
-	FieldGo   string
-	Operation string
+// Helper functions for reading new proto options
+
+func getServiceOptions(svc *protogen.Service) *eventsourcing.ServiceOptions {
+	if proto.HasExtension(svc.Desc.Options(), eventsourcing.E_Service) {
+		return proto.GetExtension(
+			svc.Desc.Options(),
+			eventsourcing.E_Service,
+		).(*eventsourcing.ServiceOptions)
+	}
+	return nil
+}
+
+func getAggregateRootOptions(msg *protogen.Message) *eventsourcing.AggregateRootOptions {
+	if proto.HasExtension(msg.Desc.Options(), eventsourcing.E_AggregateRoot) {
+		return proto.GetExtension(
+			msg.Desc.Options(),
+			eventsourcing.E_AggregateRoot,
+		).(*eventsourcing.AggregateRootOptions)
+	}
+	return nil
+}
+
+func getEventOptions(msg *protogen.Message) *eventsourcing.EventOptions {
+	if proto.HasExtension(msg.Desc.Options(), eventsourcing.E_Event) {
+		return proto.GetExtension(
+			msg.Desc.Options(),
+			eventsourcing.E_Event,
+		).(*eventsourcing.EventOptions)
+	}
+	return nil
 }
 
 func findAggregates(file *protogen.File) []*AggregateInfo {
 	var aggregates []*AggregateInfo
 
-	// Look for proto messages that match aggregate pattern
-	// For now, look for messages that don't end in Command, Event, Request, Response, View
+	// Find all messages with aggregate_root option
 	for _, msg := range file.Messages {
-		name := string(msg.Desc.Name())
+		opts := getAggregateRootOptions(msg)
+		if opts == nil {
+			continue // Not an aggregate root
+		}
 
-		// Skip non-aggregate messages
-		if strings.HasSuffix(name, "Command") ||
-			strings.HasSuffix(name, "Event") ||
-			strings.HasSuffix(name, "Request") ||
-			strings.HasSuffix(name, "Response") ||
-			strings.HasSuffix(name, "View") ||
-			strings.HasSuffix(name, "Snapshot") {
+		messageName := string(msg.Desc.Name())
+
+		// Get type name (defaults to message name if not specified)
+		typeName := opts.GetTypeName()
+		if typeName == "" {
+			typeName = messageName
+		}
+
+		// Get ID field (required)
+		idField := opts.GetIdField()
+		if idField == "" {
+			// ERROR: id_field is required
 			continue
 		}
 
-		// Check if this message has an ID field (heuristic for aggregate)
-		idField := ""
+		// Find the Go field name for the ID field
 		idFieldGo := ""
 		for _, field := range msg.Fields {
-			fieldName := string(field.Desc.Name())
-			if strings.HasSuffix(fieldName, "_id") {
-				idField = fieldName
+			if string(field.Desc.Name()) == idField {
 				idFieldGo = field.GoName
 				break
 			}
 		}
 
-		if idField != "" {
-			aggregates = append(aggregates, &AggregateInfo{
-				Message:     msg,
-				MessageName: name,
-				TypeName:    name,
-				IDField:     idField,
-				IDFieldGo:   idFieldGo,
-			})
+		if idFieldGo == "" {
+			// ERROR: id_field not found in message
+			continue
 		}
-	}
 
-	// Fallback to service-based detection if no aggregates found
-	if len(aggregates) == 0 {
-		aggregates = findAggregatesFromServices(file)
+		aggregates = append(aggregates, &AggregateInfo{
+			Message:     msg,
+			MessageName: messageName,
+			TypeName:    typeName,
+			IDField:     idField,
+			IDFieldGo:   idFieldGo,
+		})
 	}
 
 	return aggregates
@@ -399,13 +462,23 @@ func findAggregates(file *protogen.File) []*AggregateInfo {
 func findCommands(file *protogen.File) []*CommandInfo {
 	var commands []*CommandInfo
 
-	// Find aggregate name from service
+	// Find aggregate name from service options
 	aggregateName := ""
 	for _, svc := range file.Services {
-		name := string(svc.Desc.Name())
-		if strings.HasSuffix(name, "CommandService") {
-			aggregateName = strings.TrimSuffix(name, "CommandService")
+		if opts := getServiceOptions(svc); opts != nil {
+			aggregateName = opts.GetAggregateName()
 			break
+		}
+	}
+
+	// If no service options found, fall back to naming convention
+	if aggregateName == "" {
+		for _, svc := range file.Services {
+			name := string(svc.Desc.Name())
+			if strings.HasSuffix(name, "CommandService") {
+				aggregateName = strings.TrimSuffix(name, "CommandService")
+				break
+			}
 		}
 	}
 
@@ -415,11 +488,9 @@ func findCommands(file *protogen.File) []*CommandInfo {
 		}
 
 		commands = append(commands, &CommandInfo{
-			MessageName:       string(msg.Desc.Name()),
-			MethodName:        extractMethodName(string(msg.Desc.Name())),
-			AggregateName:     aggregateName,
-			ProducesEvents:    []string{inferEventName(string(msg.Desc.Name()))},
-			UniqueConstraints: []ConstraintInfo{},
+			MessageName:   string(msg.Desc.Name()),
+			MethodName:    extractMethodName(string(msg.Desc.Name())),
+			AggregateName: aggregateName,
 		})
 	}
 
@@ -434,73 +505,24 @@ func findEventsForAggregate(file *protogen.File, aggregateName string) []*EventI
 			continue
 		}
 
-		eventName := string(msg.Desc.Name())
-
-		// Check if message has event_options annotation
-		if proto.HasExtension(msg.Desc.Options(), eventsourcing.E_EventOptions) {
-			opts := proto.GetExtension(msg.Desc.Options(), eventsourcing.E_EventOptions).(*eventsourcing.EventOptions)
-
-			// Only include events that belong to this aggregate
-			if opts.GetAggregate() == aggregateName || aggregateName == "" {
-				events = append(events, &EventInfo{
-					MessageName:    eventName,
-					AggregateName:  aggregateName,
-					AppliesToState: extractStateFieldsFromEvent(msg),
-					FieldMapping:   make(map[string]string),
-				})
-			}
-		} else {
-			// Fallback to name heuristic if no event_options annotation
-			if strings.Contains(eventName, aggregateName) || aggregateName == "" {
-				events = append(events, &EventInfo{
-					MessageName:    eventName,
-					AggregateName:  aggregateName,
-					AppliesToState: extractStateFieldsFromEvent(msg),
-					FieldMapping:   make(map[string]string),
-				})
-			}
+		// Check for event option (required in new design)
+		opts := getEventOptions(msg)
+		if opts == nil {
+			continue // Skip events without explicit event option
 		}
+
+		// Only include events that belong to this aggregate
+		if opts.GetAggregateName() != aggregateName {
+			continue
+		}
+
+		events = append(events, &EventInfo{
+			MessageName:   string(msg.Desc.Name()),
+			AggregateName: aggregateName,
+		})
 	}
 
 	return events
-}
-
-func extractStateFieldsFromEvent(msg *protogen.Message) []string {
-	var fields []string
-	for _, field := range msg.Fields {
-		fieldName := string(field.Desc.Name())
-		if fieldName != "timestamp" && fieldName != "version" {
-			fields = append(fields, fieldName)
-		}
-	}
-	return fields
-}
-
-func findAggregatesFromServices(file *protogen.File) []*AggregateInfo {
-	// Extract aggregate name from service
-	aggregateName := ""
-	for _, svc := range file.Services {
-		name := string(svc.Desc.Name())
-		if strings.HasSuffix(name, "CommandService") {
-			aggregateName = strings.TrimSuffix(name, "CommandService")
-			break
-		}
-	}
-
-	if aggregateName == "" {
-		return nil
-	}
-
-	// Create a synthetic aggregate info
-	return []*AggregateInfo{
-		{
-			Message:     nil,
-			MessageName: aggregateName,
-			TypeName:    aggregateName,
-			IDField:     strings.ToLower(aggregateName) + "_id",
-			IDFieldGo:   aggregateName + "Id",
-		},
-	}
 }
 
 // Helper functions
@@ -1082,5 +1104,162 @@ func extractDescription(methodName string) string {
 		return "removes money from an account"
 	default:
 		return "executes " + strings.ToLower(methodName)
+	}
+}
+
+func generateProjectionSDK(g *protogen.GeneratedFile, file *protogen.File) {
+	aggregates := findAggregates(file)
+
+	for _, agg := range aggregates {
+		events := findEventsForAggregate(file, agg.TypeName)
+		if len(events) == 0 {
+			continue
+		}
+
+		builderType := agg.TypeName + "ProjectionBuilder"
+
+		// Event type constants
+		g.P("// Event type constants for ", agg.TypeName)
+		g.P("const (")
+		for _, evt := range events {
+			constName := evt.MessageName + "Type"
+			fullEventType := string(file.GoPackageName) + "." + evt.MessageName
+			g.P("	", constName, " = \"", fullEventType, "\"")
+		}
+		g.P(")")
+		g.P()
+
+		// Typed event handler function types
+		g.P("// Typed event handlers for ", agg.TypeName)
+		for _, evt := range events {
+			handlerType := evt.MessageName + "Handler"
+			g.P("type ", handlerType, " func(ctx context.Context, event *", evt.MessageName, ", envelope *eventsourcing.EventEnvelope) error")
+		}
+		g.P()
+
+		// Projection builder struct
+		g.P("// ", builderType, " provides a fluent API for building type-safe projections")
+		g.P("type ", builderType, " struct {")
+		g.P("	name string")
+		g.P("	handlers map[string]func(context.Context, *eventsourcing.EventEnvelope) error")
+		g.P("	resetFunc func(context.Context) error")
+		g.P("}")
+		g.P()
+
+		// Constructor
+		g.P("// New", builderType, " creates a new projection builder")
+		g.P("func New", builderType, "(name string) *", builderType, " {")
+		g.P("	return &", builderType, "{")
+		g.P("		name: name,")
+		g.P("		handlers: make(map[string]func(context.Context, *eventsourcing.EventEnvelope) error),")
+		g.P("	}")
+		g.P("}")
+		g.P()
+
+		// On{Event} methods for each event type
+		for _, evt := range events {
+			methodName := "On" + strings.TrimSuffix(evt.MessageName, "Event")
+			handlerType := evt.MessageName + "Handler"
+			constName := evt.MessageName + "Type"
+
+			g.P("// ", methodName, " registers a typed handler for ", evt.MessageName)
+			g.P("func (b *", builderType, ") ", methodName, "(handler ", handlerType, ") *", builderType, " {")
+			g.P("	b.handlers[", constName, "] = func(ctx context.Context, envelope *eventsourcing.EventEnvelope) error {")
+			g.P("		// Deserialize event")
+			g.P("		event := &", evt.MessageName, "{}")
+			g.P("		if err := proto.Unmarshal(envelope.Data, event); err != nil {")
+			g.P("			return fmt.Errorf(\"failed to unmarshal ", evt.MessageName, ": %w\", err)")
+			g.P("		}")
+			g.P("		// Call typed handler")
+			g.P("		return handler(ctx, event, envelope)")
+			g.P("	}")
+			g.P("	return b")
+			g.P("}")
+			g.P()
+		}
+
+		// OnReset method
+		g.P("// OnReset registers a function to reset the projection state")
+		g.P("func (b *", builderType, ") OnReset(resetFunc func(context.Context) error) *", builderType, " {")
+		g.P("	b.resetFunc = resetFunc")
+		g.P("	return b")
+		g.P("}")
+		g.P()
+
+		// Generate standalone On{Event} wrapper functions for generic projection builder
+		g.P("// Standalone event handler wrappers for cross-domain projections")
+		g.P("// These can be used with eventsourcing.NewProjectionBuilder()")
+		g.P()
+		for _, evt := range events {
+			methodName := "On" + strings.TrimSuffix(evt.MessageName, "Event")
+			handlerType := evt.MessageName + "Handler"
+			constName := evt.MessageName + "Type"
+
+			g.P("// ", methodName, " creates an event handler registration for ", evt.MessageName)
+			g.P("// Use with eventsourcing.NewProjectionBuilder().On(", methodName, "(handler))")
+			g.P("func ", methodName, "(handler ", handlerType, ") eventsourcing.EventHandlerRegistration {")
+			g.P("	return eventsourcing.EventHandlerRegistration{")
+			g.P("		EventType: ", constName, ",")
+			g.P("		Handler: func(ctx context.Context, envelope *eventsourcing.EventEnvelope) error {")
+			g.P("			// Deserialize event")
+			g.P("			event := &", evt.MessageName, "{}")
+			g.P("			if err := proto.Unmarshal(envelope.Data, event); err != nil {")
+			g.P("				return fmt.Errorf(\"failed to unmarshal ", evt.MessageName, ": %w\", err)")
+			g.P("			}")
+			g.P("			// Call typed handler")
+			g.P("			return handler(ctx, event, envelope)")
+			g.P("		},")
+			g.P("	}")
+			g.P("}")
+			g.P()
+		}
+		g.P()
+
+		// Build method
+		g.P("// Build creates the final Projection implementation")
+		g.P("func (b *", builderType, ") Build() eventsourcing.Projection {")
+		g.P("	return &", agg.TypeName, "Projection{")
+		g.P("		name: b.name,")
+		g.P("		handlers: b.handlers,")
+		g.P("		resetFunc: b.resetFunc,")
+		g.P("	}")
+		g.P("}")
+		g.P()
+
+		// Projection implementation
+		projectionType := agg.TypeName + "Projection"
+		g.P("// ", projectionType, " implements eventsourcing.Projection with type-safe handlers")
+		g.P("type ", projectionType, " struct {")
+		g.P("	name string")
+		g.P("	handlers map[string]func(context.Context, *eventsourcing.EventEnvelope) error")
+		g.P("	resetFunc func(context.Context) error")
+		g.P("}")
+		g.P()
+
+		g.P("// Name returns the projection name")
+		g.P("func (p *", projectionType, ") Name() string {")
+		g.P("	return p.name")
+		g.P("}")
+		g.P()
+
+		g.P("// Handle dispatches events to registered typed handlers")
+		g.P("func (p *", projectionType, ") Handle(ctx context.Context, envelope *eventsourcing.EventEnvelope) error {")
+		g.P("	handler, exists := p.handlers[envelope.EventType]")
+		g.P("	if !exists {")
+		g.P("		// No handler registered for this event type - skip it")
+		g.P("		return nil")
+		g.P("	}")
+		g.P("	return handler(ctx, envelope)")
+		g.P("}")
+		g.P()
+
+		g.P("// Reset resets the projection state")
+		g.P("func (p *", projectionType, ") Reset(ctx context.Context) error {")
+		g.P("	if p.resetFunc == nil {")
+		g.P("		return nil // No reset function registered")
+		g.P("	}")
+		g.P("	return p.resetFunc(ctx)")
+		g.P("}")
+		g.P()
 	}
 }
