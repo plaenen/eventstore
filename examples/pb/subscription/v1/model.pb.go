@@ -149,118 +149,6 @@ func (x *Subscription) GetDisabledReasonDescription() string {
 	return ""
 }
 
-type SubscriptionCreatedEvent struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	SubscriptionId string                 `protobuf:"bytes,1,opt,name=subscription_id,json=subscriptionId,proto3" json:"subscription_id,omitempty"`
-	AdminEmail     string                 `protobuf:"bytes,2,opt,name=admin_email,json=adminEmail,proto3" json:"admin_email,omitempty"`
-	Timestamp      int64                  `protobuf:"varint,3,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *SubscriptionCreatedEvent) Reset() {
-	*x = SubscriptionCreatedEvent{}
-	mi := &file_subscription_v1_model_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SubscriptionCreatedEvent) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SubscriptionCreatedEvent) ProtoMessage() {}
-
-func (x *SubscriptionCreatedEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_subscription_v1_model_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SubscriptionCreatedEvent.ProtoReflect.Descriptor instead.
-func (*SubscriptionCreatedEvent) Descriptor() ([]byte, []int) {
-	return file_subscription_v1_model_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *SubscriptionCreatedEvent) GetSubscriptionId() string {
-	if x != nil {
-		return x.SubscriptionId
-	}
-	return ""
-}
-
-func (x *SubscriptionCreatedEvent) GetAdminEmail() string {
-	if x != nil {
-		return x.AdminEmail
-	}
-	return ""
-}
-
-func (x *SubscriptionCreatedEvent) GetTimestamp() int64 {
-	if x != nil {
-		return x.Timestamp
-	}
-	return 0
-}
-
-type SubscriptionCancelledEvent struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	SubscriptionId string                 `protobuf:"bytes,1,opt,name=subscription_id,json=subscriptionId,proto3" json:"subscription_id,omitempty"`
-	Timestamp      int64                  `protobuf:"varint,2,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *SubscriptionCancelledEvent) Reset() {
-	*x = SubscriptionCancelledEvent{}
-	mi := &file_subscription_v1_model_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SubscriptionCancelledEvent) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SubscriptionCancelledEvent) ProtoMessage() {}
-
-func (x *SubscriptionCancelledEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_subscription_v1_model_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SubscriptionCancelledEvent.ProtoReflect.Descriptor instead.
-func (*SubscriptionCancelledEvent) Descriptor() ([]byte, []int) {
-	return file_subscription_v1_model_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *SubscriptionCancelledEvent) GetSubscriptionId() string {
-	if x != nil {
-		return x.SubscriptionId
-	}
-	return ""
-}
-
-func (x *SubscriptionCancelledEvent) GetTimestamp() int64 {
-	if x != nil {
-		return x.Timestamp
-	}
-	return 0
-}
-
 var File_subscription_v1_model_proto protoreflect.FileDescriptor
 
 const file_subscription_v1_model_proto_rawDesc = "" +
@@ -273,17 +161,7 @@ const file_subscription_v1_model_proto_rawDesc = "" +
 	"\x06status\x18\x04 \x01(\x0e2\x11.entity.v1.StatusR\x06status\x12H\n" +
 	"\x0fdisabled_reason\x18\x05 \x01(\x0e2\x1f.subscription.v1.DisabledReasonR\x0edisabledReason\x12>\n" +
 	"\x1bdisabled_reason_description\x18\x06 \x01(\tR\x19disabledReasonDescription:\x15\x9a\xb5\x18\x11\n" +
-	"\x0fsubscription_id\"\x96\x01\n" +
-	"\x18SubscriptionCreatedEvent\x12'\n" +
-	"\x0fsubscription_id\x18\x01 \x01(\tR\x0esubscriptionId\x12\x1f\n" +
-	"\vadmin_email\x18\x02 \x01(\tR\n" +
-	"adminEmail\x12\x1c\n" +
-	"\ttimestamp\x18\x03 \x01(\x03R\ttimestamp:\x12\xa2\xb5\x18\x0e\n" +
-	"\fSubscription\"w\n" +
-	"\x1aSubscriptionCancelledEvent\x12'\n" +
-	"\x0fsubscription_id\x18\x01 \x01(\tR\x0esubscriptionId\x12\x1c\n" +
-	"\ttimestamp\x18\x02 \x01(\x03R\ttimestamp:\x12\xa2\xb5\x18\x0e\n" +
-	"\fSubscription*g\n" +
+	"\x0fsubscription_id*g\n" +
 	"\x0eDisabledReason\x12\x1f\n" +
 	"\x1bDISABLED_REASON_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15DISABLED_REASON_UNSET\x10\x01\x12\x19\n" +
@@ -304,16 +182,14 @@ func file_subscription_v1_model_proto_rawDescGZIP() []byte {
 }
 
 var file_subscription_v1_model_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_subscription_v1_model_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_subscription_v1_model_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_subscription_v1_model_proto_goTypes = []any{
-	(DisabledReason)(0),                // 0: subscription.v1.DisabledReason
-	(*Subscription)(nil),               // 1: subscription.v1.Subscription
-	(*SubscriptionCreatedEvent)(nil),   // 2: subscription.v1.SubscriptionCreatedEvent
-	(*SubscriptionCancelledEvent)(nil), // 3: subscription.v1.SubscriptionCancelledEvent
-	(v1.Status)(0),                     // 4: entity.v1.Status
+	(DisabledReason)(0),  // 0: subscription.v1.DisabledReason
+	(*Subscription)(nil), // 1: subscription.v1.Subscription
+	(v1.Status)(0),       // 2: entity.v1.Status
 }
 var file_subscription_v1_model_proto_depIdxs = []int32{
-	4, // 0: subscription.v1.Subscription.status:type_name -> entity.v1.Status
+	2, // 0: subscription.v1.Subscription.status:type_name -> entity.v1.Status
 	0, // 1: subscription.v1.Subscription.disabled_reason:type_name -> subscription.v1.DisabledReason
 	2, // [2:2] is the sub-list for method output_type
 	2, // [2:2] is the sub-list for method input_type
@@ -333,7 +209,7 @@ func file_subscription_v1_model_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_subscription_v1_model_proto_rawDesc), len(file_subscription_v1_model_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   3,
+			NumMessages:   1,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
