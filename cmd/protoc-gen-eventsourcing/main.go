@@ -45,7 +45,7 @@ import (
 	eventsourcing "github.com/plaenen/eventstore/pkg/eventsourcing"
 )
 
-var version = "0.0.4"
+var version = "0.0.5"
 
 func main() {
 	var flags flag.FlagSet
