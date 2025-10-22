@@ -66,9 +66,8 @@ func main() {
 }
 
 func generateFile(gen *protogen.Plugin, file *protogen.File) {
-	// Check if there are any aggregates, commands, or events to generate
+	// Check if there are any aggregates or events to generate
 	aggregates := findAggregates(file)
-	commands := findCommands(file)
 	hasEvents := false
 	for _, agg := range aggregates {
 		events := findEventsForAggregate(file, agg.TypeName)
@@ -78,29 +77,39 @@ func generateFile(gen *protogen.Plugin, file *protogen.File) {
 		}
 	}
 
+	// Find services for later use
+	services := findServices(file)
+
 	// Skip files that don't have anything to generate
-	if len(aggregates) == 0 && len(commands) == 0 && !hasEvents {
+	if len(aggregates) == 0 && len(services) == 0 && !hasEvents {
 		return
 	}
 
-	// Generate aggregate file
-	aggregateFilename := file.GeneratedFilenamePrefix + "_aggregate.es.pb.go"
-	g := gen.NewGeneratedFile(aggregateFilename, file.GoImportPath)
+	// Generate aggregate file only if there are aggregates or events
+	if len(aggregates) > 0 || hasEvents {
+		aggregateFilename := file.GeneratedFilenamePrefix + "_aggregate.es.pb.go"
+		g := gen.NewGeneratedFile(aggregateFilename, file.GoImportPath)
 
-	generateHeader(g, file)
-	generateAggregates(g, file)
-	generateCommandHandlers(g, file)
-	generateEventAppliers(g, file)
-	generateRepository(g, file)
-	generateProjectionSDK(g, file)
+		generateHeader(g, file)
+		generateAggregates(g, file)
+		generateCommandHandlers(g, file)
+		generateEventAppliers(g, file)
+		generateRepository(g, file)
+		generateProjectionSDK(g, file)
+	}
 
-	// Generate SDK client if there are commands or queries
-	services := findServices(file)
+	// Generate service-related files if there are commands or queries
 	if len(services) > 0 {
-		generateSDKClient(gen, file, aggregates, services)
-		generateUnifiedSDK(gen, file, aggregates, services)
-		generateServerService(gen, file, aggregates, services)
-		generateHandlerInterfaces(gen, file, aggregates, services)
+		// Only generate client/SDK files if there are matching aggregates
+		if hasServiceContent(aggregates, services) {
+			generateSDKClient(gen, file, aggregates, services)
+			generateUnifiedSDK(gen, file, aggregates, services)
+		}
+		// Always generate server and handler files if services have methods
+		if hasServiceMethods(services) {
+			generateServerService(gen, file, aggregates, services)
+			generateHandlerInterfaces(gen, file, aggregates, services)
+		}
 	}
 }
 
@@ -295,6 +304,76 @@ func generateEventAppliers(g *protogen.GeneratedFile, file *protogen.File) {
 		g.P("// }")
 		g.P()
 		g.P("// See: docs/aggregate_upcasting_design.md")
+		g.P("// ============================================================================")
+		g.P()
+
+		// Generate type-safe Apply{Event} helper methods with functional options
+		g.P("// ============================================================================")
+		g.P("// Type-Safe Event Application Helpers")
+		g.P("// ============================================================================")
+		g.P("// These methods provide a type-safe API for applying events with optional")
+		g.P("// metadata and unique constraints. They eliminate error-prone string event types.")
+		g.P()
+
+		// Generate option types
+		g.P("// ApplyEventOption configures event application with metadata and constraints")
+		g.P("type ApplyEventOption func(*ApplyEventOptions)")
+		g.P()
+
+		g.P("// ApplyEventOptions holds configuration for event application")
+		g.P("type ApplyEventOptions struct {")
+		g.P("	Metadata    eventsourcing.EventMetadata")
+		g.P("	Constraints []eventsourcing.UniqueConstraint")
+		g.P("}")
+		g.P()
+
+		g.P("// WithMetadata sets the event metadata")
+		g.P("func WithMetadata(metadata eventsourcing.EventMetadata) ApplyEventOption {")
+		g.P("	return func(o *ApplyEventOptions) {")
+		g.P("		o.Metadata = metadata")
+		g.P("	}")
+		g.P("}")
+		g.P()
+
+		g.P("// WithUniqueConstraints adds unique constraints to the event")
+		g.P("func WithUniqueConstraints(constraints ...eventsourcing.UniqueConstraint) ApplyEventOption {")
+		g.P("	return func(o *ApplyEventOptions) {")
+		g.P("		o.Constraints = constraints")
+		g.P("	}")
+		g.P("}")
+		g.P()
+
+		// Generate type-safe Apply methods for each event
+		for _, evt := range events {
+			methodName := "Apply" + evt.MessageName
+			fullEventType := string(file.GoPackageName) + "." + evt.MessageName
+
+			g.P("// ", methodName, " applies the ", evt.MessageName, " with type safety and optional configuration")
+			g.P("// This eliminates the need to manually specify event type strings")
+			g.P("func (a *", aggregateType, ") ", methodName, "(event *", evt.MessageName, ", opts ...ApplyEventOption) error {")
+			g.P("	options := &ApplyEventOptions{}")
+			g.P("	for _, opt := range opts {")
+			g.P("		opt(options)")
+			g.P("	}")
+			g.P()
+			g.P("	if len(options.Constraints) > 0 {")
+			g.P("		return a.AggregateRoot.ApplyChangeWithConstraints(")
+			g.P("			event,")
+			g.P(`			"`, fullEventType, `",`)
+			g.P("			options.Metadata,")
+			g.P("			options.Constraints,")
+			g.P("		)")
+			g.P("	}")
+			g.P()
+			g.P("	return a.AggregateRoot.ApplyChange(")
+			g.P("		event,")
+			g.P(`		"`, fullEventType, `",`)
+			g.P("		options.Metadata,")
+			g.P("	)")
+			g.P("}")
+			g.P()
+		}
+
 		g.P("// ============================================================================")
 		g.P()
 	}
@@ -608,6 +687,42 @@ type ServiceInfo struct {
 	Queries       []*protogen.Method
 	Service       *protogen.Service
 	AggregateName string
+}
+
+// hasServiceContent checks if services have any content to generate for client/SDK files
+// Returns true if there are aggregates matching the services and those services have methods
+func hasServiceContent(aggregates []*AggregateInfo, services []*ServiceInfo) bool {
+	if len(aggregates) == 0 || len(services) == 0 {
+		return false
+	}
+
+	// Check if any service has methods that match an aggregate
+	for _, svc := range services {
+		// Check if this service has any commands or queries
+		if len(svc.Commands) == 0 && len(svc.Queries) == 0 {
+			continue
+		}
+
+		// Check if there's an aggregate that matches this service
+		for _, agg := range aggregates {
+			if agg.TypeName == svc.AggregateName {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// hasServiceMethods checks if any service has commands or queries to generate
+// Returns true if there are services with at least one command or query
+func hasServiceMethods(services []*ServiceInfo) bool {
+	for _, svc := range services {
+		if len(svc.Commands) > 0 || len(svc.Queries) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // findServices finds all command and query services in the proto file

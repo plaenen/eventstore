@@ -7,7 +7,7 @@
 package subscriptionv1
 
 import (
-	v1 "github.com/plaenen/eventstore/examples/entity/v1"
+	v1 "github.com/plaenen/eventstore/examples/pb/entity/v1"
 	_ "github.com/plaenen/eventstore/pkg/eventsourcing"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -287,9 +287,9 @@ const file_subscription_v1_model_proto_rawDesc = "" +
 	"\x0eDisabledReason\x12\x1f\n" +
 	"\x1bDISABLED_REASON_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15DISABLED_REASON_UNSET\x10\x01\x12\x19\n" +
-	"\x15DISABLED_REASON_OTHER\x10dB\xc5\x01\n" +
+	"\x15DISABLED_REASON_OTHER\x10dB\xc8\x01\n" +
 	"\x13com.subscription.v1B\n" +
-	"ModelProtoP\x01ZEgithub.com/plaenen/eventstore/examples/subscription/v1;subscriptionv1\xa2\x02\x03SXX\xaa\x02\x0fSubscription.V1\xca\x02\x0fSubscription\\V1\xe2\x02\x1bSubscription\\V1\\GPBMetadata\xea\x02\x10Subscription::V1b\x06proto3"
+	"ModelProtoP\x01ZHgithub.com/plaenen/eventstore/examples/pb/subscription/v1;subscriptionv1\xa2\x02\x03SXX\xaa\x02\x0fSubscription.V1\xca\x02\x0fSubscription\\V1\xe2\x02\x1bSubscription\\V1\\GPBMetadata\xea\x02\x10Subscription::V1b\x06proto3"
 
 var (
 	file_subscription_v1_model_proto_rawDescOnce sync.Once

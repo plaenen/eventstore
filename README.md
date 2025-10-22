@@ -4,7 +4,7 @@
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/plaenen/eventstore)](https://goreportcard.com/report/github.com/plaenen/eventstore)
 
-A **alpha version**, type-safe CQRS and Event Sourcing framework for Go with code generation from Protocol Buffers.
+An **alpha version**, type-safe CQRS and Event Sourcing framework for Go with code generation from Protocol Buffers.
 
 ## ✨ Features
 
@@ -96,26 +96,35 @@ package account.v1;
 
 import "eventsourcing/options.proto";
 
-// Command service defines write operations
+// ============================================================================
+// Service defines aggregate binding (single declaration)
+// ============================================================================
+
+// AccountCommandService handles write operations (commands)
 service AccountCommandService {
-  option (eventsourcing.aggregate_name) = "Account";
+  option (eventsourcing.service) = {
+    aggregate_name: "Account"
+    aggregate_root_message: "Account"
+  };
 
   rpc OpenAccount(OpenAccountCommand) returns (OpenAccountResponse);
   rpc Deposit(DepositCommand) returns (DepositResponse);
   rpc Withdraw(WithdrawCommand) returns (WithdrawResponse);
 }
 
-// Query service defines read operations
+// AccountQueryService handles read operations (queries)
 service AccountQueryService {
   rpc GetAccount(GetAccountRequest) returns (AccountView);
   rpc ListAccounts(ListAccountsRequest) returns (ListAccountsResponse);
 }
 
-// 🆕 Aggregate State - Single source of truth for aggregate structure
+// ============================================================================
+// Aggregate State - Single source of truth
+// ============================================================================
+
 message Account {
   option (eventsourcing.aggregate_root) = {
     id_field: "account_id"
-    type_name: "Account"
   };
 
   string account_id = 1;
@@ -124,18 +133,11 @@ message Account {
   AccountStatus status = 4;
 }
 
-// Commands represent intentions
-message OpenAccountCommand {
-  option (eventsourcing.aggregate_options) = {
-    aggregate: "Account"
-    produces_events: "AccountOpenedEvent"
-    unique_constraints: {
-      index_name: "account_id"
-      field: "account_id"
-      operation: CONSTRAINT_OPERATION_CLAIM
-    }
-  };
+// ============================================================================
+// Commands - NO OPTIONS NEEDED (inherited from service)
+// ============================================================================
 
+message OpenAccountCommand {
   string account_id = 1;
   string owner_name = 2;
   string initial_balance = 3;
@@ -146,24 +148,46 @@ message OpenAccountResponse {
   int64 version = 2;
 }
 
-// Events represent facts (past tense)
+message DepositCommand {
+  string account_id = 1;
+  string amount = 2;
+}
+
+message DepositResponse {
+  string new_balance = 1;
+  int64 version = 2;
+}
+
+// ============================================================================
+// Events - Minimal options (just aggregate_name)
+// ============================================================================
+
 message AccountOpenedEvent {
-  option (eventsourcing.event_options) = {
-    aggregate: "Account"
-    applies_to_state: ["account_id", "owner_name", "balance"]
-    field_mapping: {
-      key: "initial_balance"
-      value: "balance"
-    }
+  option (eventsourcing.event) = {
+    aggregate_name: "Account"
   };
 
   string account_id = 1;
   string owner_name = 2;
-  string initial_balance = 3;  // Maps to "balance" on aggregate
+  string initial_balance = 3;
   int64 timestamp = 4;
 }
 
-// Views represent read models
+message MoneyDepositedEvent {
+  option (eventsourcing.event) = {
+    aggregate_name: "Account"
+  };
+
+  string account_id = 1;
+  string amount = 2;
+  string new_balance = 3;
+  int64 timestamp = 4;
+}
+
+// ============================================================================
+// Views - Read models (no options needed)
+// ============================================================================
+
 message AccountView {
   string account_id = 1;
   string owner_name = 2;
@@ -192,16 +216,17 @@ buf generate
 
 The code generator creates:
 - ✅ `AccountAggregate` struct embedding the proto `Account` message
-- ✅ Event emitter helper methods (`EmitAccountOpenedEvent`, etc.)
-- ✅ Event applier methods that update aggregate state
+- ✅ `AccountEventApplier` interface for dependency injection
+- ✅ `NewAccount(id, applier)` constructor with applier injection
 - ✅ Type-safe repository (`AccountRepository`)
 - ✅ **`AccountClient` SDK** with type-safe command/query methods
+- ✅ **Service handlers** and **server implementations**
 - ✅ Automatic snapshot serialization via proto marshal
-- ✅ Event serialization/deserialization helpers
+- ✅ Projection helper methods (`OnAccountOpened`, `OnMoneyDeposited`, etc.)
 
 ### 3️⃣ Implement Business Logic
 
-Add your business rules to the generated aggregate:
+The framework uses **dependency injection** for event appliers. Implement the applier interface in your domain layer:
 
 ```go
 package domain
@@ -216,23 +241,74 @@ import (
 	accountv1 "github.com/yourorg/project/pb/account/v1"
 )
 
-// Generated by protoc-gen-eventsourcing:
-// - Account aggregate struct
-// - AccountRepository
-// - Method stubs for OpenAccount, Deposit, Withdraw
+// AccountAppliers implements the generated AccountEventApplier interface
+type AccountAppliers struct{}
 
-// OpenAccount implements business logic for opening an account
-func (a *Account) OpenAccount(ctx context.Context, cmd *accountv1.OpenAccountCommand, metadata eventsourcing.EventMetadata) error {
+// ApplyAccountOpenedEvent updates aggregate state when account is opened
+func (ap *AccountAppliers) ApplyAccountOpenedEvent(agg *accountv1.AccountAggregate, e *accountv1.AccountOpenedEvent) error {
+	agg.AccountId = e.AccountId
+	agg.OwnerName = e.OwnerName
+	agg.Balance = e.InitialBalance
+	agg.Status = accountv1.AccountStatus_ACCOUNT_STATUS_OPEN
+	return nil
+}
+
+// ApplyMoneyDepositedEvent updates balance after deposit
+func (ap *AccountAppliers) ApplyMoneyDepositedEvent(agg *accountv1.AccountAggregate, e *accountv1.MoneyDepositedEvent) error {
+	agg.Balance = e.NewBalance
+	return nil
+}
+
+// ApplyMoneyWithdrawnEvent updates balance after withdrawal
+func (ap *AccountAppliers) ApplyMoneyWithdrawnEvent(agg *accountv1.AccountAggregate, e *accountv1.MoneyWithdrawnEvent) error {
+	agg.Balance = e.NewBalance
+	return nil
+}
+
+// ApplyAccountClosedEvent marks account as closed
+func (ap *AccountAppliers) ApplyAccountClosedEvent(agg *accountv1.AccountAggregate, e *accountv1.AccountClosedEvent) error {
+	agg.Status = accountv1.AccountStatus_ACCOUNT_STATUS_CLOSED
+	return nil
+}
+
+// ============================================================================
+// Command Handlers - Implement business logic
+// ============================================================================
+
+// AccountCommandHandler handles account commands
+type AccountCommandHandler struct {
+	repo     *accountv1.AccountRepository
+	appliers *AccountAppliers
+}
+
+func NewAccountCommandHandler(repo *accountv1.AccountRepository) *AccountCommandHandler {
+	return &AccountCommandHandler{
+		repo:     repo,
+		appliers: &AccountAppliers{},
+	}
+}
+
+// OpenAccount implements command handler for opening accounts
+func (h *AccountCommandHandler) OpenAccount(ctx context.Context, cmd *accountv1.OpenAccountCommand) (*accountv1.OpenAccountResponse, *eventsourcing.AppError) {
 	// Business validation
 	balance := new(big.Float)
 	if _, ok := balance.SetString(cmd.InitialBalance); !ok {
-		return fmt.Errorf("invalid initial balance: %s", cmd.InitialBalance)
+		return nil, &eventsourcing.AppError{
+			Code:    "INVALID_BALANCE",
+			Message: fmt.Sprintf("invalid initial balance: %s", cmd.InitialBalance),
+		}
 	}
 	if balance.Cmp(big.NewFloat(0)) < 0 {
-		return fmt.Errorf("initial balance cannot be negative")
+		return nil, &eventsourcing.AppError{
+			Code:    "NEGATIVE_BALANCE",
+			Message: "initial balance cannot be negative",
+		}
 	}
 
-	// Create domain event
+	// Create aggregate with injected applier
+	account := accountv1.NewAccount(cmd.AccountId, h.appliers)
+
+	// Create and apply event
 	event := &accountv1.AccountOpenedEvent{
 		AccountId:      cmd.AccountId,
 		OwnerName:      cmd.OwnerName,
@@ -240,34 +316,22 @@ func (a *Account) OpenAccount(ctx context.Context, cmd *accountv1.OpenAccountCom
 		Timestamp:      time.Now().Unix(),
 	}
 
-	// Apply event with unique constraint (account_id must be unique)
-	return a.EmitAccountOpenedEvent(event, metadata)
-}
-
-func (a *Account) Deposit(ctx context.Context, cmd *accountv1.DepositCommand, metadata eventsourcing.EventMetadata) error {
-	// Validation
-	if a.Status != accountv1.AccountStatus_ACCOUNT_STATUS_OPEN {
-		return fmt.Errorf("account is not open")
+	// Apply event to aggregate (uses injected applier)
+	if err := account.ApplyChange(event, "account.v1.AccountOpenedEvent"); err != nil {
+		return nil, &eventsourcing.AppError{Code: "APPLY_ERROR", Message: err.Error()}
 	}
 
-	amount := new(big.Float)
-	if _, ok := amount.SetString(cmd.Amount); !ok || amount.Cmp(big.NewFloat(0)) <= 0 {
-		return fmt.Errorf("invalid deposit amount: %s", cmd.Amount)
+	// Save to event store
+	commandID := eventsourcing.GenerateID()
+	result, err := h.repo.SaveWithCommand(account, commandID)
+	if err != nil {
+		return nil, &eventsourcing.AppError{Code: "SAVE_ERROR", Message: err.Error()}
 	}
 
-	// Calculate new balance
-	currentBalance := new(big.Float)
-	currentBalance.SetString(a.Balance)
-	newBalance := new(big.Float).Add(currentBalance, amount)
-
-	event := &accountv1.MoneyDepositedEvent{
-		AccountId:  cmd.AccountId,
-		Amount:     cmd.Amount,
-		NewBalance: newBalance.String(),
-		Timestamp:  time.Now().Unix(),
-	}
-
-	return a.EmitMoneyDepositedEvent(event, metadata)
+	return &accountv1.OpenAccountResponse{
+		AccountId: cmd.AccountId,
+		Version:   result.Version,
+	}, nil
 }
 ```
 
@@ -543,7 +607,6 @@ Aggregates are consistency boundaries that:
 message Account {
   option (eventsourcing.aggregate_root) = {
     id_field: "account_id"
-    type_name: "Account"
   };
 
   string account_id = 1;
@@ -559,47 +622,223 @@ message Account {
 type AccountAggregate struct {
 	eventsourcing.AggregateRoot
 	*Account  // Embeds the proto-defined state
+	applier AccountEventApplier  // Injected dependency
+}
+
+func NewAccount(id string, applier AccountEventApplier) *AccountAggregate {
+	return &AccountAggregate{
+		AggregateRoot: eventsourcing.NewAggregateRoot(id, "Account"),
+		Account:       &Account{},
+		applier:       applier,
+	}
 }
 ```
 
-**Key generated methods:**
-- `EmitAccountOpenedEvent()` - Event emitter helper
-- `applyAccountOpenedEvent()` - Event applier (auto-generated state updates)
+**Key generated components:**
+- `AccountEventApplier` interface - Implement event handlers in your domain
+- `ApplyEvent(event)` - Dispatcher that delegates to your applier implementation
 - `MarshalSnapshot()` / `UnmarshalSnapshot()` - Automatic proto serialization
 - `ID()` / `Type()` - Aggregate metadata
 
-**Benefits of proto-defined state:**
-- ✅ Single source of truth (no duplication)
-- ✅ Automatic serialization for snapshots
-- ✅ Language-agnostic state definition
+**Benefits of dependency injection pattern:**
+- ✅ Clean separation: generated code stays in pb/, domain logic outside
+- ✅ Testable: easily mock appliers for unit tests
+- ✅ Flexible: swap implementations for different use cases
+- ✅ Language-agnostic state definition via protobuf
 - ✅ Schema evolution via protobuf versioning
-- ✅ No manual field mapping needed
 
 ### Unique Constraints
 
-Enforce uniqueness at database level integrated with event sourcing:
+Enforce business-level uniqueness (emails, account IDs, SKUs) at the database level, integrated atomically with event sourcing.
+
+#### Quick Start - Type-Safe API
+
+The framework generates type-safe helper methods for applying events with constraints:
 
 ```go
-constraints := []eventsourcing.UniqueConstraint{
-	{
-		IndexName: "user_email",
-		Value:     "alice@example.com",
-		Operation: eventsourcing.ConstraintClaim,  // Claim ownership
-	},
+// Opening an account - claim account_id
+event := &accountv1.AccountOpenedEvent{
+	AccountId:      "acc-123",
+	OwnerName:      "Alice",
+	InitialBalance: "1000.00",
 }
 
-a.ApplyChangeWithConstraints(event, eventType, metadata, constraints)
+// Use generated type-safe method with functional options
+err := agg.ApplyAccountOpenedEvent(event,
+	accountv1.WithUniqueConstraints(eventsourcing.UniqueConstraint{
+		IndexName: "account_id",
+		Value:     "acc-123",
+		Operation: eventsourcing.ConstraintClaim,  // Claims the value
+	}),
+)
+// ✅ Atomic: Either both event + constraint succeed, or both fail
+
+// Closing an account - release account_id
+closeEvent := &accountv1.AccountClosedEvent{
+	AccountId:    "acc-123",
+	FinalBalance: "1500.00",
+}
+
+err = agg.ApplyAccountClosedEvent(closeEvent,
+	accountv1.WithUniqueConstraints(eventsourcing.UniqueConstraint{
+		IndexName: "account_id",
+		Value:     "acc-123",
+		Operation: eventsourcing.ConstraintRelease,  // Releases the value
+	}),
+)
 ```
 
-**Operations:**
-- `ConstraintClaim` - Reserve a unique value
-- `ConstraintRelease` - Free a previously claimed value
+#### Operations
 
-**Features:**
-- ✅ Atomic with event persistence
-- ✅ Survives projection rebuilds
-- ✅ Returns detailed violation errors
-- ✅ Supports natural keys (email, account ID, SKU, etc.)
+| Operation | Purpose | Example Use Case |
+|-----------|---------|------------------|
+| `ConstraintClaim` | Reserve a unique value | User registration (claim email), account creation (claim account_id) |
+| `ConstraintRelease` | Free a previously claimed value | Account deletion, user deactivation |
+
+#### Dual-Storage Architecture
+
+Constraints use a **hybrid approach** for both performance and auditability:
+
+**1. Events Table** (Audit Trail):
+```sql
+CREATE TABLE events (
+    ...
+    constraints TEXT,  -- JSON: [{"index_name":"account_id","value":"acc-123","operation":"claim"}]
+    ...
+);
+```
+- Stores constraint history with events
+- Enables audit queries
+- Allows rebuild from event stream
+
+**2. Unique Constraints Table** (Enforcement):
+```sql
+CREATE TABLE unique_constraints (
+    index_name TEXT NOT NULL,
+    value TEXT NOT NULL,
+    aggregate_id TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (index_name, value)  -- Database-level uniqueness
+);
+```
+- Fast lookups during validation
+- Database enforces uniqueness via PRIMARY KEY
+- Current active constraints only
+
+#### Transactional Guarantees (ACID)
+
+All operations happen in a **single database transaction**:
+
+```go
+// Inside EventStore.AppendEvents():
+tx.Begin()                              // Start transaction
+
+1. Check version (optimistic concurrency)
+2. Validate constraints                 // Query unique_constraints table
+3. Claim/Release constraints            // INSERT/DELETE in unique_constraints
+4. Insert event with constraint JSON    // Store in events.constraints column
+5. Update positions
+
+tx.Commit()                             // All succeed or all fail!
+```
+
+**If any step fails** (duplicate constraint, version conflict, DB error):
+- ❌ Transaction rolls back
+- ❌ Event is NOT persisted
+- ❌ Constraint is NOT claimed/released
+- ✅ Database remains consistent
+
+#### Constraint Rebuild
+
+The `unique_constraints` table can be **rebuilt from the event stream**:
+
+```go
+// Rebuild constraints from event history
+err := eventStore.RebuildConstraints()
+```
+
+**Use cases:**
+- Recovery from constraint table corruption
+- Migrating to a new database
+- Audit verification ("does the constraint table match event history?")
+
+**How it works:**
+1. Clears `unique_constraints` table
+2. Replays all events in order
+3. Re-applies constraint operations from `events.constraints` JSON
+4. Rebuilds enforcement table from audit trail
+
+#### Audit Queries
+
+Since constraints are stored with events, you can query historical constraint activity:
+
+```sql
+-- Find all constraint operations for an account
+SELECT
+    event_id,
+    aggregate_id,
+    event_type,
+    json_extract(constraints, '$[0].operation') as operation,
+    json_extract(constraints, '$[0].value') as value,
+    datetime(timestamp, 'unixepoch') as occurred_at
+FROM events
+WHERE aggregate_id = 'acc-123'
+  AND constraints IS NOT NULL
+ORDER BY timestamp;
+
+-- When was an email address first claimed?
+SELECT
+    aggregate_id,
+    event_type,
+    datetime(timestamp, 'unixepoch') as claimed_at
+FROM events
+WHERE json_extract(constraints, '$[0].value') = 'alice@example.com'
+  AND json_extract(constraints, '$[0].operation') = 'claim'
+LIMIT 1;
+
+-- Current active constraints
+SELECT
+    index_name,
+    value,
+    aggregate_id,
+    datetime(created_at, 'unixepoch') as claimed_at
+FROM unique_constraints
+ORDER BY created_at DESC;
+```
+
+#### Error Handling
+
+```go
+err := agg.ApplyAccountOpenedEvent(event,
+	accountv1.WithUniqueConstraints(eventsourcing.UniqueConstraint{
+		IndexName: "account_id",
+		Value:     "acc-123",
+		Operation: eventsourcing.ConstraintClaim,
+	}),
+)
+
+if err != nil {
+	if errors.Is(err, eventsourcing.ErrUniqueConstraintViolation) {
+		// Constraint already claimed
+		return &eventsourcing.AppError{
+			Code:    "ACCOUNT_ID_TAKEN",
+			Message: fmt.Sprintf("Account ID 'acc-123' is already in use"),
+		}
+	}
+	// Other error
+	return err
+}
+```
+
+#### Features
+
+- ✅ **Type-safe** - Generated `Apply{Event}` methods with compile-time checking
+- ✅ **Atomic** - Constraints validated/applied in same transaction as events
+- ✅ **Auditable** - Full history stored with events
+- ✅ **Rebuildable** - Reconstruct from event stream
+- ✅ **Performant** - Separate table for fast lookups
+- ✅ **Consistent** - Database-level enforcement via PRIMARY KEY
+- ✅ **Portable** - Constraint history moves with events
 
 ### Idempotency (Three Layers)
 
@@ -906,78 +1145,136 @@ The `protoc-gen-eventsourcing` plugin generates type-safe boilerplate from proto
 
 ### What Gets Generated
 
-**Aggregate Struct:**
+**1. Aggregate Struct (embeds proto message):**
 ```go
-type Account struct {
+type AccountAggregate struct {
 	eventsourcing.AggregateRoot
-	AccountId string
-	OwnerName string
-	Balance   string
-	Status    AccountStatus
+	*Account  // Embeds the proto-defined Account message
+	applier AccountEventApplier  // Injected dependency
 }
 
-func NewAccount(id string) *Account {
-	return &Account{
+func NewAccount(id string, applier AccountEventApplier) *AccountAggregate {
+	return &AccountAggregate{
 		AggregateRoot: eventsourcing.NewAggregateRoot(id, "Account"),
+		Account:       &Account{},
+		applier:       applier,
 	}
 }
 ```
 
-**Command Handler Stub:**
+**2. Event Applier Interface (implement in your domain):**
 ```go
-func (a *Account) OpenAccount(ctx context.Context, cmd *OpenAccountCommand, metadata eventsourcing.EventMetadata) error {
-	// TODO: Add business logic validation
-	event := &AccountOpenedEvent{
-		AccountId:      cmd.AccountId,
-		OwnerName:      cmd.OwnerName,
-		InitialBalance: cmd.InitialBalance,
-		Timestamp:      time.Now().Unix(),
+type AccountEventApplier interface {
+	ApplyAccountOpenedEvent(agg *AccountAggregate, e *AccountOpenedEvent) error
+	ApplyMoneyDepositedEvent(agg *AccountAggregate, e *MoneyDepositedEvent) error
+	ApplyMoneyWithdrawnEvent(agg *AccountAggregate, e *MoneyWithdrawnEvent) error
+	ApplyAccountClosedEvent(agg *AccountAggregate, e *AccountClosedEvent) error
+}
+```
+
+**3. ApplyEvent Dispatcher (delegates to injected applier):**
+```go
+func (a *AccountAggregate) ApplyEvent(event proto.Message) error {
+	switch e := event.(type) {
+	case *AccountOpenedEvent:
+		return a.applier.ApplyAccountOpenedEvent(a, e)
+	case *MoneyDepositedEvent:
+		return a.applier.ApplyMoneyDepositedEvent(a, e)
+	// ... more events
+	default:
+		return fmt.Errorf("unknown event type: %T", event)
 	}
-	return a.EmitAccountOpenedEvent(event, metadata)
 }
 ```
 
-**Event Applier:**
-```go
-func (a *Account) applyAccountOpenedEvent(e *AccountOpenedEvent) error {
-	a.AccountId = e.AccountId
-	a.OwnerName = e.OwnerName
-	a.Balance = e.InitialBalance
-	return nil
-}
-```
-
-**Type-Safe Repository:**
+**4. Type-Safe Repository:**
 ```go
 type AccountRepository struct {
-	*eventsourcing.BaseRepository[*Account]
+	*eventsourcing.BaseRepository[*AccountAggregate]
 }
 
-func NewAccountRepository(eventStore eventsourcing.EventStore) *AccountRepository {
+func NewAccountRepository(eventStore eventsourcing.EventStore, factory func(string) *AccountAggregate) *AccountRepository {
 	return &AccountRepository{
-		BaseRepository: eventsourcing.NewRepository[*Account](
+		BaseRepository: eventsourcing.NewRepository[*AccountAggregate](
 			eventStore,
 			"Account",
-			func(id string) *Account { return NewAccount(id) },
-			func(agg *Account, event *eventsourcing.Event) error {
-				// Deserialize and apply
+			factory,
+			func(agg *AccountAggregate, event *eventsourcing.Event) error {
+				msg, err := deserializeEventAccount(event)
+				if err != nil {
+					return err
+				}
+				return agg.ApplyEvent(msg)
 			},
 		),
 	}
 }
 ```
 
+**5. Projection Helpers:**
+```go
+// OnAccountOpened creates an event handler registration
+func OnAccountOpened(handler AccountOpenedEventHandler) eventsourcing.EventHandlerRegistration {
+	return eventsourcing.EventHandlerRegistration{
+		EventType: AccountOpenedEventType,
+		Handler: func(ctx context.Context, envelope *eventsourcing.EventEnvelope) error {
+			event := &AccountOpenedEvent{}
+			if err := proto.Unmarshal(envelope.Data, event); err != nil {
+				return err
+			}
+			return handler(ctx, event, envelope)
+		},
+	}
+}
+```
+
+**6. Service Handler Interfaces:**
+```go
+type AccountCommandServiceHandler interface {
+	OpenAccount(ctx context.Context, cmd *OpenAccountCommand) (*OpenAccountResponse, *eventsourcing.AppError)
+	Deposit(ctx context.Context, cmd *DepositCommand) (*DepositResponse, *eventsourcing.AppError)
+	// ... more methods
+}
+```
+
+**7. Type-Safe SDK Clients:**
+```go
+type AccountClient struct {
+	transport eventsourcing.Transport
+}
+
+func (c *AccountClient) OpenAccount(ctx context.Context, cmd *OpenAccountCommand) (*OpenAccountResponse, *eventsourcing.AppError) {
+	resp, err := c.transport.Request(ctx, "account.v1.AccountCommandService.OpenAccount", cmd)
+	// ... handle response
+	return result, nil
+}
+```
+
 ### Safe Regeneration Pattern
 
-Generated code lives in `*_aggregate.pb.go` files. Your business logic lives in separate files:
+Generated code lives in `*_aggregate.es.pb.go` files. Your business logic lives in separate files:
 
 ```
-account.proto           → account_aggregate.pb.go (generated, don't edit)
-                       → account.pb.go (protobuf, generated)
+# Proto files
+account.proto                    → Your domain model
 
-account.go             → Your business logic (safe to edit)
-account_test.go        → Your tests (safe to edit)
+# Generated files (DO NOT EDIT - will be regenerated)
+account.pb.go                    → Standard protobuf messages
+account_aggregate.es.pb.go       → Aggregate, repository, applier interface
+account_handler.es.pb.go         → Service handler interfaces
+account_server.es.pb.go          → Server implementations
+account_client.es.pb.go          → SDK clients (if aggregates exist)
+account_sdk.es.pb.go             → Unified SDK (if aggregates exist)
+
+# Your implementation (SAFE TO EDIT)
+domain/account_appliers.go       → Event applier implementations
+domain/account_handlers.go       → Command handler implementations
+domain/account_test.go           → Your tests
 ```
+
+**File extension meaning:**
+- `.es.pb.go` = Generated by **e**vent**s**ourcing plugin
+- `.pb.go` = Generated by standard protobuf compiler
 
 Regenerating code won't overwrite your business logic!
 
