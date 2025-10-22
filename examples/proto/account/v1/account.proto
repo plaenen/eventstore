@@ -178,7 +178,6 @@ enum TransactionType {
 message Account {
   option (eventsourcing.aggregate_root) = {
     id_field: "account_id"
-    // type_name defaults to message name "Account"
   };
 
   string account_id = 1;

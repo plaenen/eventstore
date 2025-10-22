@@ -11,6 +11,7 @@ import (
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	natspkg "github.com/plaenen/eventstore/pkg/nats"
 	"github.com/plaenen/eventstore/pkg/sqlite"
+	"google.golang.org/protobuf/proto"
 	_ "modernc.org/sqlite"
 )
 
@@ -53,18 +54,16 @@ func main() {
 	}
 
 	// NATS server (embedded)
-	natsServer, err := natspkg.NewServer(&natspkg.ServerConfig{
-		Port: -1, // Random port
-	})
+	natsServer, err := natspkg.StartEmbeddedServer()
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer natsServer.Shutdown()
 
 	// NATS EventBus
-	eventBus, err := natspkg.NewEventBus(natspkg.EventBusConfig{
-		URL:    natsServer.ClientURL(),
-		Stream: "events",
+	eventBus, err := natspkg.NewEventBus(natspkg.Config{
+		URL:        natsServer.URL(),
+		StreamName: "events",
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -388,8 +387,8 @@ func main() {
 	fmt.Println("   SELECT * FROM account_balance WHERE account_id = ?")
 }
 
-func mustMarshalProto(msg eventsourcing.ProtoMessage) []byte {
-	data, err := eventsourcing.MarshalEvent(msg)
+func mustMarshalProto(msg proto.Message) []byte {
+	data, err := proto.Marshal(msg)
 	if err != nil {
 		panic(err)
 	}

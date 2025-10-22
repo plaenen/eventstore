@@ -78,8 +78,8 @@ const file_entity_v1_entity_proto_rawDesc = "" +
 	"\x06Status\x12\x16\n" +
 	"\x12STATUS_UNSPECIFIED\x10\x00\x12\x11\n" +
 	"\rSTATUS_ACTIVE\x10\x01\x12\x13\n" +
-	"\x0fSTATUS_DISABLED\x10\x02B\x9c\x01\n" +
-	"\rcom.entity.v1B\vEntityProtoP\x01Z9github.com/plaenen/eventstore/examples/entity/v1;entityv1\xa2\x02\x03EXX\xaa\x02\tEntity.V1\xca\x02\tEntity\\V1\xe2\x02\x15Entity\\V1\\GPBMetadata\xea\x02\n" +
+	"\x0fSTATUS_DISABLED\x10\x02B\x9f\x01\n" +
+	"\rcom.entity.v1B\vEntityProtoP\x01Z<github.com/plaenen/eventstore/examples/pb/entity/v1;entityv1\xa2\x02\x03EXX\xaa\x02\tEntity.V1\xca\x02\tEntity\\V1\xe2\x02\x15Entity\\V1\\GPBMetadata\xea\x02\n" +
 	"Entity::V1b\x06proto3"
 
 var (

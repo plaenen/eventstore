@@ -143,6 +143,85 @@ type SubscriptionEventApplier interface {
 // See: docs/aggregate_upcasting_design.md
 // ============================================================================
 
+// ============================================================================
+// Type-Safe Event Application Helpers
+// ============================================================================
+// These methods provide a type-safe API for applying events with optional
+// metadata and unique constraints. They eliminate error-prone string event types.
+
+// ApplyEventOption configures event application with metadata and constraints
+type ApplyEventOption func(*ApplyEventOptions)
+
+// ApplyEventOptions holds configuration for event application
+type ApplyEventOptions struct {
+	Metadata    eventsourcing.EventMetadata
+	Constraints []eventsourcing.UniqueConstraint
+}
+
+// WithMetadata sets the event metadata
+func WithMetadata(metadata eventsourcing.EventMetadata) ApplyEventOption {
+	return func(o *ApplyEventOptions) {
+		o.Metadata = metadata
+	}
+}
+
+// WithUniqueConstraints adds unique constraints to the event
+func WithUniqueConstraints(constraints ...eventsourcing.UniqueConstraint) ApplyEventOption {
+	return func(o *ApplyEventOptions) {
+		o.Constraints = constraints
+	}
+}
+
+// ApplySubscriptionCreatedEvent applies the SubscriptionCreatedEvent with type safety and optional configuration
+// This eliminates the need to manually specify event type strings
+func (a *SubscriptionAggregate) ApplySubscriptionCreatedEvent(event *SubscriptionCreatedEvent, opts ...ApplyEventOption) error {
+	options := &ApplyEventOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	if len(options.Constraints) > 0 {
+		return a.AggregateRoot.ApplyChangeWithConstraints(
+			event,
+			"subscriptionv1.SubscriptionCreatedEvent",
+			options.Metadata,
+			options.Constraints,
+		)
+	}
+
+	return a.AggregateRoot.ApplyChange(
+		event,
+		"subscriptionv1.SubscriptionCreatedEvent",
+		options.Metadata,
+	)
+}
+
+// ApplySubscriptionCancelledEvent applies the SubscriptionCancelledEvent with type safety and optional configuration
+// This eliminates the need to manually specify event type strings
+func (a *SubscriptionAggregate) ApplySubscriptionCancelledEvent(event *SubscriptionCancelledEvent, opts ...ApplyEventOption) error {
+	options := &ApplyEventOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	if len(options.Constraints) > 0 {
+		return a.AggregateRoot.ApplyChangeWithConstraints(
+			event,
+			"subscriptionv1.SubscriptionCancelledEvent",
+			options.Metadata,
+			options.Constraints,
+		)
+	}
+
+	return a.AggregateRoot.ApplyChange(
+		event,
+		"subscriptionv1.SubscriptionCancelledEvent",
+		options.Metadata,
+	)
+}
+
+// ============================================================================
+
 // SubscriptionRepository provides persistence for Subscription
 type SubscriptionRepository struct {
 	*eventsourcing.BaseRepository[*SubscriptionAggregate]

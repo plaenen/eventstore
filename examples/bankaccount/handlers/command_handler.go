@@ -55,7 +55,7 @@ func (h *AccountCommandHandler) OpenAccount(ctx context.Context, cmd *accountv1.
 	// Create new aggregate (appliers are injected by domain factory)
 	agg := domain.NewAccount(cmd.AccountId)
 
-	// Create and emit event
+	// Create and emit event using type-safe helper
 	event := &accountv1.AccountOpenedEvent{
 		AccountId:      cmd.AccountId,
 		OwnerName:      cmd.OwnerName,
@@ -63,7 +63,14 @@ func (h *AccountCommandHandler) OpenAccount(ctx context.Context, cmd *accountv1.
 		Timestamp:      time.Now().Unix(),
 	}
 
-	if err := agg.AggregateRoot.ApplyChange(event, "accountv1.AccountOpenedEvent", eventsourcing.EventMetadata{}); err != nil {
+	// Use generated type-safe Apply method with unique constraint
+	if err := agg.ApplyAccountOpenedEvent(event,
+		accountv1.WithUniqueConstraints(eventsourcing.UniqueConstraint{
+			IndexName: "account_id",
+			Value:     cmd.AccountId,
+			Operation: eventsourcing.ConstraintClaim,
+		}),
+	); err != nil {
 		return nil, &eventsourcing.AppError{
 			Code:    "EVENT_EMIT_FAILED",
 			Message: fmt.Sprintf("Failed to emit event: %v", err),
@@ -117,7 +124,7 @@ func (h *AccountCommandHandler) Deposit(ctx context.Context, cmd *accountv1.Depo
 		currentBalance, _ := decimal.NewFromString(agg.Balance)
 		newBalance := currentBalance.Add(amount)
 
-		// Create and emit event
+		// Create and emit event using type-safe helper
 		event := &accountv1.MoneyDepositedEvent{
 			AccountId:  cmd.AccountId,
 			Amount:     cmd.Amount,
@@ -125,7 +132,8 @@ func (h *AccountCommandHandler) Deposit(ctx context.Context, cmd *accountv1.Depo
 			Timestamp:  time.Now().Unix(),
 		}
 
-		if err := agg.AggregateRoot.ApplyChange(event, "accountv1.MoneyDepositedEvent", eventsourcing.EventMetadata{}); err != nil {
+		// Use generated type-safe Apply method (no constraints needed)
+		if err := agg.ApplyMoneyDepositedEvent(event); err != nil {
 			return fmt.Errorf("EVENT_EMIT_FAILED: Failed to emit event: %v", err)
 		}
 
@@ -192,7 +200,7 @@ func (h *AccountCommandHandler) Withdraw(ctx context.Context, cmd *accountv1.Wit
 			return fmt.Errorf("INSUFFICIENT_FUNDS: Insufficient funds. Current balance: %s, Withdrawal amount: %s", currentBalance, amount)
 		}
 
-		// Create and emit event
+		// Create and emit event using type-safe helper
 		event := &accountv1.MoneyWithdrawnEvent{
 			AccountId:  cmd.AccountId,
 			Amount:     cmd.Amount,
@@ -200,7 +208,8 @@ func (h *AccountCommandHandler) Withdraw(ctx context.Context, cmd *accountv1.Wit
 			Timestamp:  time.Now().Unix(),
 		}
 
-		if err := agg.AggregateRoot.ApplyChange(event, "accountv1.MoneyWithdrawnEvent", eventsourcing.EventMetadata{}); err != nil {
+		// Use generated type-safe Apply method (no constraints needed)
+		if err := agg.ApplyMoneyWithdrawnEvent(event); err != nil {
 			return fmt.Errorf("EVENT_EMIT_FAILED: Failed to emit event: %v", err)
 		}
 
@@ -258,14 +267,21 @@ func (h *AccountCommandHandler) CloseAccount(ctx context.Context, cmd *accountv1
 		}
 	}
 
-	// Create and emit event
+	// Create and emit event using type-safe helper
 	event := &accountv1.AccountClosedEvent{
 		AccountId:    cmd.AccountId,
 		FinalBalance: agg.Balance,
 		Timestamp:    time.Now().Unix(),
 	}
 
-	if err := agg.AggregateRoot.ApplyChange(event, "accountv1.AccountClosedEvent", eventsourcing.EventMetadata{}); err != nil {
+	// Use generated type-safe Apply method with constraint release
+	if err := agg.ApplyAccountClosedEvent(event,
+		accountv1.WithUniqueConstraints(eventsourcing.UniqueConstraint{
+			IndexName: "account_id",
+			Value:     cmd.AccountId,
+			Operation: eventsourcing.ConstraintRelease,
+		}),
+	); err != nil {
 		return nil, &eventsourcing.AppError{
 			Code:    "EVENT_EMIT_FAILED",
 			Message: fmt.Sprintf("Failed to emit event: %v", err),

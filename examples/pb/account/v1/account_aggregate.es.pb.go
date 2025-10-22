@@ -163,6 +163,133 @@ type AccountEventApplier interface {
 // See: docs/aggregate_upcasting_design.md
 // ============================================================================
 
+// ============================================================================
+// Type-Safe Event Application Helpers
+// ============================================================================
+// These methods provide a type-safe API for applying events with optional
+// metadata and unique constraints. They eliminate error-prone string event types.
+
+// ApplyEventOption configures event application with metadata and constraints
+type ApplyEventOption func(*ApplyEventOptions)
+
+// ApplyEventOptions holds configuration for event application
+type ApplyEventOptions struct {
+	Metadata    eventsourcing.EventMetadata
+	Constraints []eventsourcing.UniqueConstraint
+}
+
+// WithMetadata sets the event metadata
+func WithMetadata(metadata eventsourcing.EventMetadata) ApplyEventOption {
+	return func(o *ApplyEventOptions) {
+		o.Metadata = metadata
+	}
+}
+
+// WithUniqueConstraints adds unique constraints to the event
+func WithUniqueConstraints(constraints ...eventsourcing.UniqueConstraint) ApplyEventOption {
+	return func(o *ApplyEventOptions) {
+		o.Constraints = constraints
+	}
+}
+
+// ApplyAccountOpenedEvent applies the AccountOpenedEvent with type safety and optional configuration
+// This eliminates the need to manually specify event type strings
+func (a *AccountAggregate) ApplyAccountOpenedEvent(event *AccountOpenedEvent, opts ...ApplyEventOption) error {
+	options := &ApplyEventOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	if len(options.Constraints) > 0 {
+		return a.AggregateRoot.ApplyChangeWithConstraints(
+			event,
+			"accountv1.AccountOpenedEvent",
+			options.Metadata,
+			options.Constraints,
+		)
+	}
+
+	return a.AggregateRoot.ApplyChange(
+		event,
+		"accountv1.AccountOpenedEvent",
+		options.Metadata,
+	)
+}
+
+// ApplyMoneyDepositedEvent applies the MoneyDepositedEvent with type safety and optional configuration
+// This eliminates the need to manually specify event type strings
+func (a *AccountAggregate) ApplyMoneyDepositedEvent(event *MoneyDepositedEvent, opts ...ApplyEventOption) error {
+	options := &ApplyEventOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	if len(options.Constraints) > 0 {
+		return a.AggregateRoot.ApplyChangeWithConstraints(
+			event,
+			"accountv1.MoneyDepositedEvent",
+			options.Metadata,
+			options.Constraints,
+		)
+	}
+
+	return a.AggregateRoot.ApplyChange(
+		event,
+		"accountv1.MoneyDepositedEvent",
+		options.Metadata,
+	)
+}
+
+// ApplyMoneyWithdrawnEvent applies the MoneyWithdrawnEvent with type safety and optional configuration
+// This eliminates the need to manually specify event type strings
+func (a *AccountAggregate) ApplyMoneyWithdrawnEvent(event *MoneyWithdrawnEvent, opts ...ApplyEventOption) error {
+	options := &ApplyEventOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	if len(options.Constraints) > 0 {
+		return a.AggregateRoot.ApplyChangeWithConstraints(
+			event,
+			"accountv1.MoneyWithdrawnEvent",
+			options.Metadata,
+			options.Constraints,
+		)
+	}
+
+	return a.AggregateRoot.ApplyChange(
+		event,
+		"accountv1.MoneyWithdrawnEvent",
+		options.Metadata,
+	)
+}
+
+// ApplyAccountClosedEvent applies the AccountClosedEvent with type safety and optional configuration
+// This eliminates the need to manually specify event type strings
+func (a *AccountAggregate) ApplyAccountClosedEvent(event *AccountClosedEvent, opts ...ApplyEventOption) error {
+	options := &ApplyEventOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	if len(options.Constraints) > 0 {
+		return a.AggregateRoot.ApplyChangeWithConstraints(
+			event,
+			"accountv1.AccountClosedEvent",
+			options.Metadata,
+			options.Constraints,
+		)
+	}
+
+	return a.AggregateRoot.ApplyChange(
+		event,
+		"accountv1.AccountClosedEvent",
+		options.Metadata,
+	)
+}
+
+// ============================================================================
+
 // AccountRepository provides persistence for Account
 type AccountRepository struct {
 	*eventsourcing.BaseRepository[*AccountAggregate]

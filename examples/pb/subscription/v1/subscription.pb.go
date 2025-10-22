@@ -7,7 +7,7 @@
 package subscriptionv1
 
 import (
-	v1 "github.com/plaenen/eventstore/examples/entity/v1"
+	v1 "github.com/plaenen/eventstore/examples/pb/entity/v1"
 	_ "github.com/plaenen/eventstore/pkg/eventsourcing"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -374,8 +374,8 @@ const file_subscription_v1_subscription_proto_rawDesc = "" +
 	"\x12CancelSubscription\x12*.subscription.v1.CancelSubscriptionCommand\x1a+.subscription.v1.CancelSubscriptionResponse\x1a \x92\xb5\x18\x1c\n" +
 	"\fSubscription\x12\fSubscription2\x80\x01\n" +
 	"\x18SubscriptionQueryService\x12d\n" +
-	"\x0fGetSubscription\x12'.subscription.v1.GetSubscriptionRequest\x1a(.subscription.v1.GetSubscriptionResponseB\xcc\x01\n" +
-	"\x13com.subscription.v1B\x11SubscriptionProtoP\x01ZEgithub.com/plaenen/eventstore/examples/subscription/v1;subscriptionv1\xa2\x02\x03SXX\xaa\x02\x0fSubscription.V1\xca\x02\x0fSubscription\\V1\xe2\x02\x1bSubscription\\V1\\GPBMetadata\xea\x02\x10Subscription::V1b\x06proto3"
+	"\x0fGetSubscription\x12'.subscription.v1.GetSubscriptionRequest\x1a(.subscription.v1.GetSubscriptionResponseB\xcf\x01\n" +
+	"\x13com.subscription.v1B\x11SubscriptionProtoP\x01ZHgithub.com/plaenen/eventstore/examples/pb/subscription/v1;subscriptionv1\xa2\x02\x03SXX\xaa\x02\x0fSubscription.V1\xca\x02\x0fSubscription\\V1\xe2\x02\x1bSubscription\\V1\\GPBMetadata\xea\x02\x10Subscription::V1b\x06proto3"
 
 var (
 	file_subscription_v1_subscription_proto_rawDescOnce sync.Once
