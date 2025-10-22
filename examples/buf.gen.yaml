@@ -1,6 +1,12 @@
 version: v2
 managed:
-  enabled: false
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/plaenen/eventstore/examples
+  disable:
+    - file_option: go_package
+      path: eventsourcing/options.proto
 plugins:
   # Generate protobuf messages
   - remote: buf.build/protocolbuffers/go

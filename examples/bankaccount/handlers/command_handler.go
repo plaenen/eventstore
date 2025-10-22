@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/plaenen/eventstore/examples/bankaccount/domain"
 	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"github.com/shopspring/decimal"
@@ -51,8 +52,8 @@ func (h *AccountCommandHandler) OpenAccount(ctx context.Context, cmd *accountv1.
 		}
 	}
 
-	// Create new aggregate
-	agg := accountv1.NewAccount(cmd.AccountId)
+	// Create new aggregate (appliers are injected by domain factory)
+	agg := domain.NewAccount(cmd.AccountId)
 
 	// Create and emit event
 	event := &accountv1.AccountOpenedEvent{
@@ -62,7 +63,7 @@ func (h *AccountCommandHandler) OpenAccount(ctx context.Context, cmd *accountv1.
 		Timestamp:      time.Now().Unix(),
 	}
 
-	if err := agg.EmitAccountOpenedEvent(event, eventsourcing.EventMetadata{}); err != nil {
+	if err := agg.AggregateRoot.ApplyChange(event, "accountv1.AccountOpenedEvent", eventsourcing.EventMetadata{}); err != nil {
 		return nil, &eventsourcing.AppError{
 			Code:    "EVENT_EMIT_FAILED",
 			Message: fmt.Sprintf("Failed to emit event: %v", err),
@@ -124,7 +125,7 @@ func (h *AccountCommandHandler) Deposit(ctx context.Context, cmd *accountv1.Depo
 			Timestamp:  time.Now().Unix(),
 		}
 
-		if err := agg.EmitMoneyDepositedEvent(event, eventsourcing.EventMetadata{}); err != nil {
+		if err := agg.AggregateRoot.ApplyChange(event, "accountv1.MoneyDepositedEvent", eventsourcing.EventMetadata{}); err != nil {
 			return fmt.Errorf("EVENT_EMIT_FAILED: Failed to emit event: %v", err)
 		}
 
@@ -199,7 +200,7 @@ func (h *AccountCommandHandler) Withdraw(ctx context.Context, cmd *accountv1.Wit
 			Timestamp:  time.Now().Unix(),
 		}
 
-		if err := agg.EmitMoneyWithdrawnEvent(event, eventsourcing.EventMetadata{}); err != nil {
+		if err := agg.AggregateRoot.ApplyChange(event, "accountv1.MoneyWithdrawnEvent", eventsourcing.EventMetadata{}); err != nil {
 			return fmt.Errorf("EVENT_EMIT_FAILED: Failed to emit event: %v", err)
 		}
 
@@ -264,7 +265,7 @@ func (h *AccountCommandHandler) CloseAccount(ctx context.Context, cmd *accountv1
 		Timestamp:    time.Now().Unix(),
 	}
 
-	if err := agg.EmitAccountClosedEvent(event, eventsourcing.EventMetadata{}); err != nil {
+	if err := agg.AggregateRoot.ApplyChange(event, "accountv1.AccountClosedEvent", eventsourcing.EventMetadata{}); err != nil {
 		return nil, &eventsourcing.AppError{
 			Code:    "EVENT_EMIT_FAILED",
 			Message: fmt.Sprintf("Failed to emit event: %v", err),

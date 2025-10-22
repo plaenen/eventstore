@@ -2,84 +2,74 @@ syntax = "proto3";
 
 package eventsourcing;
 
-option go_package = "github.com/plaenen/eventstore/examples/pb/eventsourcing;eventsourcing";
+option go_package = "github.com/plaenen/eventstore/pkg/eventsourcing";
 
 import "google/protobuf/descriptor.proto";
 
-// AggregateOptions defines options for aggregate configuration
-message AggregateOptions {
-  // The name of the aggregate this message belongs to
-  string aggregate = 1;
+// =============================================================================
+// EVENT SOURCING PROTO OPTIONS
+// =============================================================================
+// Design principles:
+// 1. Single source of truth - service declares aggregate and root message
+// 2. Convention over configuration - minimal required annotations
+// 3. Developer control - business logic (constraints, field mapping) in code, not proto
+// 4. Tooling enablement - explicit event marking for projection SDK generation
+//
+// Event Evolution Strategy:
+// - Use protobuf field evolution (deprecated fields, new optional fields)
+// - Developer implements ApplyEvent methods handling all field variations
+// - Optional: Developer can provide custom EventUpcaster for complex transformations
+// - See: https://protobuf.dev/programming-guides/proto3/#updating
+// =============================================================================
 
-  // For events: optional field mapping when event field names differ from aggregate field names
-  // Maps event field -> aggregate field (e.g., "initial_balance" -> "balance")
-  // If not specified, direct field name mapping is used (event.field_name -> aggregate.field_name)
-  map<string, string> field_mapping = 2;
+// ServiceOptions declares which aggregate a command service operates on
+// This is the PRIMARY source of truth for aggregate association
+message ServiceOptions {
+  // REQUIRED: The name of the aggregate this service operates on
+  // Example: "Account", "Order", "User"
+  string aggregate_name = 1;
 
-  // For commands: the event(s) that this command produces
-  // A command can produce one or more events
-  repeated string produces_events = 3;
-
-  // For commands: unique constraints to enforce (domain rules)
-  // These represent domain-level uniqueness requirements (e.g., "email must be unique")
-  // Exposed at API level for better error messages and client-side validation hints
-  repeated UniqueConstraint unique_constraints = 4;
-}
-
-message UniqueConstraint {
-  // Name of the unique index
-  string index_name = 1;
-
-  // Field in the command that provides the value
-  string field = 2;
-
-  // Operation type (claim or release)
-  ConstraintOperation operation = 3;
-}
-
-enum ConstraintOperation {
-  CONSTRAINT_OPERATION_UNSPECIFIED = 0;
-  CONSTRAINT_OPERATION_CLAIM = 1;
-  CONSTRAINT_OPERATION_RELEASE = 2;
+  // REQUIRED: The proto message name that represents the aggregate root
+  // Example: "Account" (refers to message Account)
+  // This allows the generator to find the aggregate root message even across multiple files
+  string aggregate_root_message = 2;
 }
 
 // AggregateRootOptions marks a proto message as an aggregate root
-// and configures how it should be generated
+// This is the ONLY option needed on the aggregate state message
 message AggregateRootOptions {
-  // The field name that contains the aggregate ID (e.g., "account_id")
+  // REQUIRED: The field name that contains the aggregate ID
+  // Example: "account_id", "order_id", "user_id"
   string id_field = 1;
 
-  // The aggregate type name (e.g., "Account")
-  // If not specified, uses the message name
+  // OPTIONAL: Override the aggregate type name (defaults to message name)
+  // Usually not needed unless message name differs from aggregate name
   string type_name = 2;
 }
 
-// EventOptions defines options for event configuration
+// EventOptions marks a message as an event and associates it with an aggregate
+// This is REQUIRED for all events to enable:
+// - Projection SDK generation
+// - Event catalog/discovery
+// - Cross-file event organization
+//
+// Field Mapping & State Updates:
+// - NO field_mapping option - developer handles in ApplyEvent implementation
+// - NO applies_to_state option - developer controls which fields update
+// - More flexible, explicit, and testable
 message EventOptions {
-  // The name of the aggregate this event belongs to
-  string aggregate = 1;
+  // REQUIRED: The aggregate this event belongs to
+  // Must match the aggregate_name from the service
+  string aggregate_name = 1;
+}
 
-  // List of aggregate fields that this event updates
-  // If empty, all event fields (except timestamp, version) are applied
-  repeated string applies_to_state = 2;
-
-  // Optional field mapping when event field names differ from aggregate field names
-  // Maps event field -> aggregate field (e.g., "initial_balance" -> "balance")
-  map<string, string> field_mapping = 3;
-
-  // For events that release unique constraints
-  repeated UniqueConstraint unique_constraints = 4;
+// Extend service options
+extend google.protobuf.ServiceOptions {
+  ServiceOptions service = 50002;
 }
 
 // Extend message options
 extend google.protobuf.MessageOptions {
-  AggregateOptions aggregate_options = 50001;
   AggregateRootOptions aggregate_root = 50003;
-  EventOptions event_options = 50004;
-}
-
-// Extend service options to mark aggregate services
-extend google.protobuf.ServiceOptions {
-  // The name of the aggregate this service operates on
-  string aggregate_name = 50002;
+  EventOptions event = 50004;
 }

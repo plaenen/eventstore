@@ -7,13 +7,12 @@
 package accountv1
 
 import (
+	_ "github.com/plaenen/eventstore/pkg/eventsourcing"
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	_ "github.com/plaenen/eventstore/examples/pb/eventsourcing"
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -1068,11 +1067,14 @@ func (x *TransactionView) GetTimestamp() int64 {
 }
 
 type Account struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	AccountId     string                 `protobuf:"bytes,1,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
-	OwnerName     string                 `protobuf:"bytes,2,opt,name=owner_name,json=ownerName,proto3" json:"owner_name,omitempty"`
-	Balance       string                 `protobuf:"bytes,3,opt,name=balance,proto3" json:"balance,omitempty"`
-	Status        AccountStatus          `protobuf:"varint,4,opt,name=status,proto3,enum=account.v1.AccountStatus" json:"status,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	AccountId string                 `protobuf:"bytes,1,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
+	OwnerName string                 `protobuf:"bytes,2,opt,name=owner_name,json=ownerName,proto3" json:"owner_name,omitempty"`
+	Balance   string                 `protobuf:"bytes,3,opt,name=balance,proto3" json:"balance,omitempty"`
+	Status    AccountStatus          `protobuf:"varint,4,opt,name=status,proto3,enum=account.v1.AccountStatus" json:"status,omitempty"`
+	// NEW FIELDS demonstrating proto field evolution for upcasting
+	Currency      string `protobuf:"bytes,5,opt,name=currency,proto3" json:"currency,omitempty"`                     // Added later - defaults to "" for old snapshots
+	CreatedAt     int64  `protobuf:"varint,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"` // Added later - defaults to 0 for old snapshots
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1135,14 +1137,35 @@ func (x *Account) GetStatus() AccountStatus {
 	return AccountStatus_ACCOUNT_STATUS_UNSPECIFIED
 }
 
+func (x *Account) GetCurrency() string {
+	if x != nil {
+		return x.Currency
+	}
+	return ""
+}
+
+func (x *Account) GetCreatedAt() int64 {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return 0
+}
+
 type AccountOpenedEvent struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	AccountId      string                 `protobuf:"bytes,1,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
-	OwnerName      string                 `protobuf:"bytes,2,opt,name=owner_name,json=ownerName,proto3" json:"owner_name,omitempty"`
-	InitialBalance string                 `protobuf:"bytes,3,opt,name=initial_balance,json=initialBalance,proto3" json:"initial_balance,omitempty"`
-	Timestamp      int64                  `protobuf:"varint,4,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	AccountId string                 `protobuf:"bytes,1,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
+	OwnerName string                 `protobuf:"bytes,2,opt,name=owner_name,json=ownerName,proto3" json:"owner_name,omitempty"`
+	// FIELD EVOLUTION EXAMPLE: Field renamed over time
+	//
+	// Deprecated: Marked as deprecated in account/v1/account.proto.
+	InitialBalance string `protobuf:"bytes,3,opt,name=initial_balance,json=initialBalance,proto3" json:"initial_balance,omitempty"` // V1: Old field name
+	OpeningAmount  string `protobuf:"bytes,7,opt,name=opening_amount,json=openingAmount,proto3" json:"opening_amount,omitempty"`    // V2: New field name
+	// NEW FIELDS: Added in V2
+	Currency      string `protobuf:"bytes,5,opt,name=currency,proto3" json:"currency,omitempty"`                     // Defaults to "" for V1 events
+	CreatedAt     int64  `protobuf:"varint,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"` // Defaults to 0 for V1 events
+	Timestamp     int64  `protobuf:"varint,4,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AccountOpenedEvent) Reset() {
@@ -1189,11 +1212,33 @@ func (x *AccountOpenedEvent) GetOwnerName() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in account/v1/account.proto.
 func (x *AccountOpenedEvent) GetInitialBalance() string {
 	if x != nil {
 		return x.InitialBalance
 	}
 	return ""
+}
+
+func (x *AccountOpenedEvent) GetOpeningAmount() string {
+	if x != nil {
+		return x.OpeningAmount
+	}
+	return ""
+}
+
+func (x *AccountOpenedEvent) GetCurrency() string {
+	if x != nil {
+		return x.Currency
+	}
+	return ""
+}
+
+func (x *AccountOpenedEvent) GetCreatedAt() int64 {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return 0
 }
 
 func (x *AccountOpenedEvent) GetTimestamp() int64 {
@@ -1399,51 +1444,109 @@ func (x *AccountClosedEvent) GetTimestamp() int64 {
 	return 0
 }
 
+type AccountOpenedEventV1 struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	AccountId      string                 `protobuf:"bytes,1,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
+	OwnerName      string                 `protobuf:"bytes,2,opt,name=owner_name,json=ownerName,proto3" json:"owner_name,omitempty"`
+	InitialBalance string                 `protobuf:"bytes,3,opt,name=initial_balance,json=initialBalance,proto3" json:"initial_balance,omitempty"` // Old field name
+	Timestamp      int64                  `protobuf:"varint,4,opt,name=timestamp,proto3" json:"timestamp,omitempty"`                                // Missing: currency, created_at, opening_amount
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *AccountOpenedEventV1) Reset() {
+	*x = AccountOpenedEventV1{}
+	mi := &file_account_v1_account_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AccountOpenedEventV1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AccountOpenedEventV1) ProtoMessage() {}
+
+func (x *AccountOpenedEventV1) ProtoReflect() protoreflect.Message {
+	mi := &file_account_v1_account_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AccountOpenedEventV1.ProtoReflect.Descriptor instead.
+func (*AccountOpenedEventV1) Descriptor() ([]byte, []int) {
+	return file_account_v1_account_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *AccountOpenedEventV1) GetAccountId() string {
+	if x != nil {
+		return x.AccountId
+	}
+	return ""
+}
+
+func (x *AccountOpenedEventV1) GetOwnerName() string {
+	if x != nil {
+		return x.OwnerName
+	}
+	return ""
+}
+
+func (x *AccountOpenedEventV1) GetInitialBalance() string {
+	if x != nil {
+		return x.InitialBalance
+	}
+	return ""
+}
+
+func (x *AccountOpenedEventV1) GetTimestamp() int64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
 var File_account_v1_account_proto protoreflect.FileDescriptor
 
 const file_account_v1_account_proto_rawDesc = "" +
 	"\n" +
 	"\x18account/v1/account.proto\x12\n" +
-	"account.v1\x1a\x1beventsourcing/options.proto\"\xba\x01\n" +
+	"account.v1\x1a\x1beventsourcing/options.proto\"{\n" +
 	"\x12OpenAccountCommand\x12\x1d\n" +
 	"\n" +
 	"account_id\x18\x01 \x01(\tR\taccountId\x12\x1d\n" +
 	"\n" +
 	"owner_name\x18\x02 \x01(\tR\townerName\x12'\n" +
-	"\x0finitial_balance\x18\x03 \x01(\tR\x0einitialBalance:=\x8a\xb5\x189\n" +
-	"\aAccount\x1a\x12AccountOpenedEvent\"\x1a\n" +
-	"\n" +
-	"account_id\x12\n" +
-	"account_id\x18\x01\"N\n" +
+	"\x0finitial_balance\x18\x03 \x01(\tR\x0einitialBalance\"N\n" +
 	"\x13OpenAccountResponse\x12\x1d\n" +
 	"\n" +
 	"account_id\x18\x01 \x01(\tR\taccountId\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\x03R\aversion\"k\n" +
+	"\aversion\x18\x02 \x01(\x03R\aversion\"G\n" +
 	"\x0eDepositCommand\x12\x1d\n" +
 	"\n" +
 	"account_id\x18\x01 \x01(\tR\taccountId\x12\x16\n" +
-	"\x06amount\x18\x02 \x01(\tR\x06amount:\"\x8a\xb5\x18\x1e\n" +
-	"\aAccount\x1a\x13MoneyDepositedEvent\"L\n" +
+	"\x06amount\x18\x02 \x01(\tR\x06amount\"L\n" +
 	"\x0fDepositResponse\x12\x1f\n" +
 	"\vnew_balance\x18\x01 \x01(\tR\n" +
 	"newBalance\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\x03R\aversion\"l\n" +
+	"\aversion\x18\x02 \x01(\x03R\aversion\"H\n" +
 	"\x0fWithdrawCommand\x12\x1d\n" +
 	"\n" +
 	"account_id\x18\x01 \x01(\tR\taccountId\x12\x16\n" +
-	"\x06amount\x18\x02 \x01(\tR\x06amount:\"\x8a\xb5\x18\x1e\n" +
-	"\aAccount\x1a\x13MoneyWithdrawnEvent\"M\n" +
+	"\x06amount\x18\x02 \x01(\tR\x06amount\"M\n" +
 	"\x10WithdrawResponse\x12\x1f\n" +
 	"\vnew_balance\x18\x01 \x01(\tR\n" +
 	"newBalance\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\x03R\aversion\"s\n" +
+	"\aversion\x18\x02 \x01(\x03R\aversion\"4\n" +
 	"\x13CloseAccountCommand\x12\x1d\n" +
 	"\n" +
-	"account_id\x18\x01 \x01(\tR\taccountId:=\x8a\xb5\x189\n" +
-	"\aAccount\x1a\x12AccountClosedEvent\"\x1a\n" +
-	"\n" +
-	"account_id\x12\n" +
-	"account_id\x18\x02\"U\n" +
+	"account_id\x18\x01 \x01(\tR\taccountId\"U\n" +
 	"\x14CloseAccountResponse\x12#\n" +
 	"\rfinal_balance\x18\x01 \x01(\tR\ffinalBalance\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x03R\aversion\"2\n" +
@@ -1490,55 +1593,61 @@ const file_account_v1_account_proto_rawDesc = "" +
 	"\x04type\x18\x02 \x01(\x0e2\x1b.account.v1.TransactionTypeR\x04type\x12\x16\n" +
 	"\x06amount\x18\x03 \x01(\tR\x06amount\x12#\n" +
 	"\rbalance_after\x18\x04 \x01(\tR\fbalanceAfter\x12\x1c\n" +
-	"\ttimestamp\x18\x05 \x01(\x03R\ttimestamp\"\xaf\x01\n" +
+	"\ttimestamp\x18\x05 \x01(\x03R\ttimestamp\"\xe1\x01\n" +
 	"\aAccount\x12\x1d\n" +
 	"\n" +
 	"account_id\x18\x01 \x01(\tR\taccountId\x12\x1d\n" +
 	"\n" +
 	"owner_name\x18\x02 \x01(\tR\townerName\x12\x18\n" +
 	"\abalance\x18\x03 \x01(\tR\abalance\x121\n" +
-	"\x06status\x18\x04 \x01(\x0e2\x19.account.v1.AccountStatusR\x06status:\x19\x9a\xb5\x18\x15\n" +
+	"\x06status\x18\x04 \x01(\x0e2\x19.account.v1.AccountStatusR\x06status\x12\x1a\n" +
+	"\bcurrency\x18\x05 \x01(\tR\bcurrency\x12\x1d\n" +
 	"\n" +
-	"account_id\x12\aAccount\"\xe5\x01\n" +
+	"created_at\x18\x06 \x01(\x03R\tcreatedAt:\x10\x9a\xb5\x18\f\n" +
+	"\n" +
+	"account_id\"\x8e\x02\n" +
 	"\x12AccountOpenedEvent\x12\x1d\n" +
 	"\n" +
 	"account_id\x18\x01 \x01(\tR\taccountId\x12\x1d\n" +
 	"\n" +
-	"owner_name\x18\x02 \x01(\tR\townerName\x12'\n" +
-	"\x0finitial_balance\x18\x03 \x01(\tR\x0einitialBalance\x12\x1c\n" +
-	"\ttimestamp\x18\x04 \x01(\x03R\ttimestamp:J\xa2\xb5\x18F\n" +
-	"\aAccount\x12\n" +
-	"account_id\x12\n" +
-	"owner_name\x12\abalance\x1a\x1a\n" +
-	"\x0finitial_balance\x12\abalance\"\xbb\x01\n" +
+	"owner_name\x18\x02 \x01(\tR\townerName\x12+\n" +
+	"\x0finitial_balance\x18\x03 \x01(\tB\x02\x18\x01R\x0einitialBalance\x12%\n" +
+	"\x0eopening_amount\x18\a \x01(\tR\ropeningAmount\x12\x1a\n" +
+	"\bcurrency\x18\x05 \x01(\tR\bcurrency\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\x06 \x01(\x03R\tcreatedAt\x12\x1c\n" +
+	"\ttimestamp\x18\x04 \x01(\x03R\ttimestamp:\r\xa2\xb5\x18\t\n" +
+	"\aAccount\"\x9a\x01\n" +
 	"\x13MoneyDepositedEvent\x12\x1d\n" +
 	"\n" +
 	"account_id\x18\x01 \x01(\tR\taccountId\x12\x16\n" +
 	"\x06amount\x18\x02 \x01(\tR\x06amount\x12\x1f\n" +
 	"\vnew_balance\x18\x03 \x01(\tR\n" +
 	"newBalance\x12\x1c\n" +
-	"\ttimestamp\x18\x04 \x01(\x03R\ttimestamp:.\xa2\xb5\x18*\n" +
-	"\aAccount\x12\abalance\x1a\x16\n" +
-	"\vnew_balance\x12\abalance\"\xbb\x01\n" +
+	"\ttimestamp\x18\x04 \x01(\x03R\ttimestamp:\r\xa2\xb5\x18\t\n" +
+	"\aAccount\"\x9a\x01\n" +
 	"\x13MoneyWithdrawnEvent\x12\x1d\n" +
 	"\n" +
 	"account_id\x18\x01 \x01(\tR\taccountId\x12\x16\n" +
 	"\x06amount\x18\x02 \x01(\tR\x06amount\x12\x1f\n" +
 	"\vnew_balance\x18\x03 \x01(\tR\n" +
 	"newBalance\x12\x1c\n" +
-	"\ttimestamp\x18\x04 \x01(\x03R\ttimestamp:.\xa2\xb5\x18*\n" +
-	"\aAccount\x12\abalance\x1a\x16\n" +
-	"\vnew_balance\x12\abalance\"\xc3\x01\n" +
+	"\ttimestamp\x18\x04 \x01(\x03R\ttimestamp:\r\xa2\xb5\x18\t\n" +
+	"\aAccount\"\x85\x01\n" +
 	"\x12AccountClosedEvent\x12\x1d\n" +
 	"\n" +
 	"account_id\x18\x01 \x01(\tR\taccountId\x12#\n" +
 	"\rfinal_balance\x18\x02 \x01(\tR\ffinalBalance\x12\x1c\n" +
-	"\ttimestamp\x18\x03 \x01(\x03R\ttimestamp:K\xa2\xb5\x18G\n" +
-	"\aAccount\x12\x06status\x1a\x18\n" +
-	"\rfinal_balance\x12\abalance\"\x1a\n" +
+	"\ttimestamp\x18\x03 \x01(\x03R\ttimestamp:\r\xa2\xb5\x18\t\n" +
+	"\aAccount\"\xaa\x01\n" +
+	"\x14AccountOpenedEventV1\x12\x1d\n" +
 	"\n" +
-	"account_id\x12\n" +
-	"account_id\x18\x02*c\n" +
+	"account_id\x18\x01 \x01(\tR\taccountId\x12\x1d\n" +
+	"\n" +
+	"owner_name\x18\x02 \x01(\tR\townerName\x12'\n" +
+	"\x0finitial_balance\x18\x03 \x01(\tR\x0einitialBalance\x12\x1c\n" +
+	"\ttimestamp\x18\x04 \x01(\x03R\ttimestamp:\r\xa2\xb5\x18\t\n" +
+	"\aAccount*c\n" +
 	"\rAccountStatus\x12\x1e\n" +
 	"\x1aACCOUNT_STATUS_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13ACCOUNT_STATUS_OPEN\x10\x01\x12\x19\n" +
@@ -1548,18 +1657,22 @@ const file_account_v1_account_proto_rawDesc = "" +
 	"\x17TRANSACTION_TYPE_OPENED\x10\x01\x12\x1c\n" +
 	"\x18TRANSACTION_TYPE_DEPOSIT\x10\x02\x12\x1f\n" +
 	"\x1bTRANSACTION_TYPE_WITHDRAWAL\x10\x03\x12\x1b\n" +
-	"\x17TRANSACTION_TYPE_CLOSED\x10\x042\xd2\x02\n" +
+	"\x17TRANSACTION_TYPE_CLOSED\x10\x042\xdd\x02\n" +
 	"\x15AccountCommandService\x12N\n" +
 	"\vOpenAccount\x12\x1e.account.v1.OpenAccountCommand\x1a\x1f.account.v1.OpenAccountResponse\x12B\n" +
 	"\aDeposit\x12\x1a.account.v1.DepositCommand\x1a\x1b.account.v1.DepositResponse\x12E\n" +
 	"\bWithdraw\x12\x1b.account.v1.WithdrawCommand\x1a\x1c.account.v1.WithdrawResponse\x12Q\n" +
-	"\fCloseAccount\x12\x1f.account.v1.CloseAccountCommand\x1a .account.v1.CloseAccountResponse\x1a\v\x92\xb5\x18\aAccount2\xe1\x02\n" +
+	"\fCloseAccount\x12\x1f.account.v1.CloseAccountCommand\x1a .account.v1.CloseAccountResponse\x1a\x16\x92\xb5\x18\x12\n" +
+	"\aAccount\x12\aAccount2\xe1\x02\n" +
 	"\x13AccountQueryService\x12D\n" +
 	"\n" +
 	"GetAccount\x12\x1d.account.v1.GetAccountRequest\x1a\x17.account.v1.AccountView\x12Q\n" +
 	"\fListAccounts\x12\x1f.account.v1.ListAccountsRequest\x1a .account.v1.ListAccountsResponse\x12R\n" +
 	"\x11GetAccountBalance\x12$.account.v1.GetAccountBalanceRequest\x1a\x17.account.v1.BalanceView\x12]\n" +
-	"\x11GetAccountHistory\x12$.account.v1.GetAccountHistoryRequest\x1a\".account.v1.AccountHistoryResponseBCZAgithub.com/plaenen/eventstore/examples/pb/account/v1;accountv1b\x06proto3"
+	"\x11GetAccountHistory\x12$.account.v1.GetAccountHistoryRequest\x1a\".account.v1.AccountHistoryResponseB\xa4\x01\n" +
+	"\x0ecom.account.v1B\fAccountProtoP\x01Z;github.com/plaenen/eventstore/examples/account/v1;accountv1\xa2\x02\x03AXX\xaa\x02\n" +
+	"Account.V1\xca\x02\n" +
+	"Account\\V1\xe2\x02\x16Account\\V1\\GPBMetadata\xea\x02\vAccount::V1b\x06proto3"
 
 var (
 	file_account_v1_account_proto_rawDescOnce sync.Once
@@ -1574,7 +1687,7 @@ func file_account_v1_account_proto_rawDescGZIP() []byte {
 }
 
 var file_account_v1_account_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_account_v1_account_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
+var file_account_v1_account_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_account_v1_account_proto_goTypes = []any{
 	(AccountStatus)(0),               // 0: account.v1.AccountStatus
 	(TransactionType)(0),             // 1: account.v1.TransactionType
@@ -1600,6 +1713,7 @@ var file_account_v1_account_proto_goTypes = []any{
 	(*MoneyDepositedEvent)(nil),      // 21: account.v1.MoneyDepositedEvent
 	(*MoneyWithdrawnEvent)(nil),      // 22: account.v1.MoneyWithdrawnEvent
 	(*AccountClosedEvent)(nil),       // 23: account.v1.AccountClosedEvent
+	(*AccountOpenedEventV1)(nil),     // 24: account.v1.AccountOpenedEventV1
 }
 var file_account_v1_account_proto_depIdxs = []int32{
 	0,  // 0: account.v1.AccountView.status:type_name -> account.v1.AccountStatus
@@ -1641,7 +1755,7 @@ func file_account_v1_account_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_account_v1_account_proto_rawDesc), len(file_account_v1_account_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   22,
+			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

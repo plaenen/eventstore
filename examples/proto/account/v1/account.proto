@@ -6,9 +6,22 @@ option go_package = "github.com/plaenen/eventstore/examples/pb/account/v1;accoun
 
 import "eventsourcing/options.proto";
 
+// ============================================================================
+// SIMPLIFIED OPTIONS - New Format
+// ============================================================================
+// Service declares aggregate name + root message (single source of truth)
+// Commands have NO options (inherit from service)
+// Events have minimal options (just aggregate_name)
+// Aggregate root has minimal options (just id_field)
+// ============================================================================
+
 // AccountCommandService handles write operations (commands)
 service AccountCommandService {
-  option (eventsourcing.aggregate_name) = "Account";
+  option (eventsourcing.service) = {
+    aggregate_name: "Account"
+    aggregate_root_message: "Account"
+  };
+
   // OpenAccount creates a new bank account
   rpc OpenAccount(OpenAccountCommand) returns (OpenAccountResponse);
 
@@ -37,18 +50,13 @@ service AccountQueryService {
   rpc GetAccountHistory(GetAccountHistoryRequest) returns (AccountHistoryResponse);
 }
 
-// Commands (Write Side)
+// ============================================================================
+// Commands (Write Side) - NO OPTIONS! Everything inherited from service
+// ============================================================================
 
 message OpenAccountCommand {
-  option (eventsourcing.aggregate_options) = {
-    aggregate: "Account"
-    produces_events: "AccountOpenedEvent"
-    unique_constraints: {
-      index_name: "account_id"
-      field: "account_id"
-      operation: CONSTRAINT_OPERATION_CLAIM
-    }
-  };
+  // No options needed - aggregate inherited from service
+  // Unique constraints handled in command handler code
 
   string account_id = 1;
   string owner_name = 2;
@@ -61,10 +69,7 @@ message OpenAccountResponse {
 }
 
 message DepositCommand {
-  option (eventsourcing.aggregate_options) = {
-    aggregate: "Account"
-    produces_events: "MoneyDepositedEvent"
-  };
+  // No options needed
 
   string account_id = 1;
   string amount = 2;
@@ -76,10 +81,7 @@ message DepositResponse {
 }
 
 message WithdrawCommand {
-  option (eventsourcing.aggregate_options) = {
-    aggregate: "Account"
-    produces_events: "MoneyWithdrawnEvent"
-  };
+  // No options needed
 
   string account_id = 1;
   string amount = 2;
@@ -91,15 +93,7 @@ message WithdrawResponse {
 }
 
 message CloseAccountCommand {
-  option (eventsourcing.aggregate_options) = {
-    aggregate: "Account"
-    produces_events: "AccountClosedEvent"
-    unique_constraints: {
-      index_name: "account_id"
-      field: "account_id"
-      operation: CONSTRAINT_OPERATION_RELEASE
-    }
-  };
+  // No options needed - constraint release handled in handler
 
   string account_id = 1;
 }
@@ -177,46 +171,56 @@ enum TransactionType {
   TRANSACTION_TYPE_CLOSED = 4;
 }
 
-// Aggregate State (Domain Model)
+// ============================================================================
+// Aggregate State (Domain Model) - Minimal options (just id_field)
+// ============================================================================
 
 message Account {
   option (eventsourcing.aggregate_root) = {
     id_field: "account_id"
-    type_name: "Account"
+    // type_name defaults to message name "Account"
   };
 
   string account_id = 1;
   string owner_name = 2;
   string balance = 3;
   AccountStatus status = 4;
+
+  // NEW FIELDS demonstrating proto field evolution for upcasting
+  string currency = 5;  // Added later - defaults to "" for old snapshots
+  int64 created_at = 6; // Added later - defaults to 0 for old snapshots
 }
 
+// ============================================================================
 // Events (Internal - used for event sourcing)
+// ============================================================================
+// Minimal options (just aggregate_name)
+// Field mapping handled in ApplyEvent implementation
+// Demonstrates proto field evolution for upcasting use cases
+// ============================================================================
 
 message AccountOpenedEvent {
-  option (eventsourcing.event_options) = {
-    aggregate: "Account"
-    applies_to_state: ["account_id", "owner_name", "balance"]
-    field_mapping: {
-      key: "initial_balance"
-      value: "balance"
-    }
+  option (eventsourcing.event) = {
+    aggregate_name: "Account"
   };
 
   string account_id = 1;
   string owner_name = 2;
-  string initial_balance = 3;
+
+  // FIELD EVOLUTION EXAMPLE: Field renamed over time
+  string initial_balance = 3 [deprecated = true];  // V1: Old field name
+  string opening_amount = 7;                       // V2: New field name
+
+  // NEW FIELDS: Added in V2
+  string currency = 5;     // Defaults to "" for V1 events
+  int64 created_at = 6;    // Defaults to 0 for V1 events
+
   int64 timestamp = 4;
 }
 
 message MoneyDepositedEvent {
-  option (eventsourcing.event_options) = {
-    aggregate: "Account"
-    applies_to_state: ["balance"]
-    field_mapping: {
-      key: "new_balance"
-      value: "balance"
-    }
+  option (eventsourcing.event) = {
+    aggregate_name: "Account"
   };
 
   string account_id = 1;
@@ -226,13 +230,8 @@ message MoneyDepositedEvent {
 }
 
 message MoneyWithdrawnEvent {
-  option (eventsourcing.event_options) = {
-    aggregate: "Account"
-    applies_to_state: ["balance"]
-    field_mapping: {
-      key: "new_balance"
-      value: "balance"
-    }
+  option (eventsourcing.event) = {
+    aggregate_name: "Account"
   };
 
   string account_id = 1;
@@ -242,21 +241,30 @@ message MoneyWithdrawnEvent {
 }
 
 message AccountClosedEvent {
-  option (eventsourcing.event_options) = {
-    aggregate: "Account"
-    applies_to_state: ["status"]
-    field_mapping: {
-      key: "final_balance"
-      value: "balance"
-    }
-    unique_constraints: {
-      index_name: "account_id"
-      field: "account_id"
-      operation: CONSTRAINT_OPERATION_RELEASE
-    }
+  option (eventsourcing.event) = {
+    aggregate_name: "Account"
   };
 
   string account_id = 1;
   string final_balance = 2;
   int64 timestamp = 3;
+}
+
+// ============================================================================
+// OLD EVENT VERSIONS - For upcasting demonstration
+// ============================================================================
+// These represent old event versions from before schema evolution
+// The aggregate's UpcastEvent method will convert these to current versions
+// ============================================================================
+
+message AccountOpenedEventV1 {
+  option (eventsourcing.event) = {
+    aggregate_name: "Account"
+  };
+
+  string account_id = 1;
+  string owner_name = 2;
+  string initial_balance = 3;  // Old field name
+  int64 timestamp = 4;
+  // Missing: currency, created_at, opening_amount
 }

@@ -29,3 +29,8 @@ func generateRandomEventID() string {
 func GenerateID() string {
 	return generateRandomEventID()
 }
+
+// TimeFromUnix creates a time.Time from a Unix timestamp.
+func TimeFromUnix(sec int64) time.Time {
+	return time.Unix(sec, 0)
+}
