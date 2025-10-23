@@ -104,31 +104,47 @@ No special environment variables are required for development. All configuration
 eventsourcing/
 ├── cmd/
 │   └── protoc-gen-eventsourcing/  # Code generator plugin
+├── docs/                          # Documentation
+│   ├── README.md                  # Documentation index
+│   └── archive/                   # Historical documents
 ├── examples/
-│   └── bankaccount/               # Complete example application
-│       ├── domain/                # Business logic (hand-written)
-│       └── README.md              # Example documentation
-├── gen/                           # Generated code (DO NOT EDIT)
+│   ├── cmd/                       # Runnable examples
+│   ├── bankaccount/               # Example domain logic
+│   ├── pb/                        # Generated proto code
+│   ├── README.md                  # Examples guide
+│   └── PROJECTIONS.md             # Projection patterns
 ├── pkg/
-│   ├── eventsourcing/             # Core framework
-│   ├── middleware/                # Built-in middleware
-│   ├── nats/                      # NATS JetStream implementation
-│   └── sqlite/                    # SQLite event/snapshot store
+│   ├── domain/                    # Pure domain types
+│   ├── store/                     # Event storage
+│   │   └── sqlite/               # SQLite implementation
+│   ├── cqrs/                      # Command/Query transport
+│   │   └── nats/                 # NATS implementation
+│   ├── messaging/                 # Event pub/sub
+│   │   └── nats/                 # NATS JetStream
+│   ├── infrastructure/            # Pure infrastructure
+│   │   └── nats/                 # NATS utilities
+│   ├── runtime/                   # Service lifecycle
+│   ├── observability/             # OpenTelemetry
+│   ├── multitenancy/              # Multi-tenant support
+│   └── eventsourcing/             # Core interfaces
 ├── proto/
 │   ├── account/v1/                # Example domain protos
+│   ├── subscription/v1/           # Example domain protos
 │   └── eventsourcing/             # Framework proto options
 ├── Taskfile.yml                   # Build automation
 ├── buf.work.yaml                  # Buf workspace config
-└── sqlc.yaml                      # SQLC configuration
+└── README.md                      # Main documentation
 ```
 
 ### Key Directories
 
+- **`pkg/domain/`** - Pure domain types (Event, Command, Aggregate). Zero dependencies.
+- **`pkg/store/`** - Event storage interfaces and implementations. Changes affect persistence.
 - **`pkg/eventsourcing/`** - Core interfaces and base implementations. Changes here affect the entire framework.
-- **`pkg/middleware/`** - Reusable middleware. Add new middleware here.
 - **`cmd/protoc-gen-eventsourcing/`** - Code generator. Modify when adding new proto options or generation features.
-- **`examples/bankaccount/`** - Reference implementation. Update when adding framework features.
+- **`examples/`** - Reference implementations and runnable demos. Update when adding framework features.
 - **`proto/eventsourcing/`** - Proto options definitions. Changes require regeneration.
+- **`docs/`** - Documentation. Update when adding features or changing APIs.
 
 ## Development Workflow
 
@@ -701,23 +717,22 @@ func (s *EventStore) SaveEvents(events []*Event) error {
 retentionVersion := currentVersion - (3 * strategy.Interval)
 ```
 
-### README Updates
+### Documentation Updates
 
-Update README.md when:
-- Adding new features
-- Changing API interfaces
-- Adding middleware
-- Changing build process
-- Adding dependencies
+Update documentation when:
+- Adding new features → Update relevant package README and main README
+- Changing API interfaces → Update package README and API reference
+- Adding examples → Update `examples/README.md`
+- Changing build process → Update `CONTRIBUTING.md`
+- Adding dependencies → Update `README.md` prerequisites
+- Architecture changes → Update `docs/README.md` index
 
-### AGENTS.md Updates
-
-Update AGENTS.md when:
-- Adding build steps
-- Changing task commands
-- Adding dependencies
-- Changing project structure
-- Adding coding conventions
+**Documentation locations:**
+- **Main README** - High-level overview and quick start
+- **Package READMEs** - Detailed package documentation
+- **docs/README.md** - Documentation index
+- **examples/** - Working examples with documentation
+- **CONTRIBUTING.md** - Development guide
 
 ## Community
 

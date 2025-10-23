@@ -11,10 +11,10 @@ import (
 	"github.com/plaenen/eventstore/examples/bankaccount/domain"
 	"github.com/plaenen/eventstore/examples/bankaccount/handlers"
 	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
-	"github.com/plaenen/eventstore/pkg/eventsourcing"
-	natspkg "github.com/plaenen/eventstore/pkg/nats"
+	"github.com/plaenen/eventstore/pkg/cqrs"
+	cqrsnats "github.com/plaenen/eventstore/pkg/cqrs/nats"
 	"github.com/plaenen/eventstore/pkg/observability"
-	"github.com/plaenen/eventstore/pkg/sqlite"
+	"github.com/plaenen/eventstore/pkg/store/sqlite"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	_ "modernc.org/sqlite" // SQLite driver
 )
@@ -137,8 +137,8 @@ func main() {
 
 	// 5. Create NATS Server with Observability
 	fmt.Println("5️⃣  Starting NATS server with observability...")
-	natsServer, err := natspkg.NewServer(&natspkg.ServerConfig{
-		ServerConfig: &eventsourcing.ServerConfig{
+	natsServer, err := cqrsnats.NewServer(&cqrsnats.ServerConfig{
+		ServerConfig: &cqrs.ServerConfig{
 			QueueGroup:     "bankaccount-handlers",
 			MaxConcurrent:  10,
 			HandlerTimeout: 5 * time.Second,
@@ -174,8 +174,8 @@ func main() {
 
 	// 7. Create Client with Observability
 	fmt.Println("7️⃣  Creating client...")
-	transport, err := natspkg.NewTransport(&natspkg.TransportConfig{
-		TransportConfig: &eventsourcing.TransportConfig{
+	transport, err := cqrsnats.NewTransport(&cqrsnats.TransportConfig{
+		TransportConfig: &cqrs.TransportConfig{
 			Timeout:              5 * time.Second,
 			MaxReconnectAttempts: 3,
 			ReconnectWait:        1 * time.Second,

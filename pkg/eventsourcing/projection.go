@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"time"
+
+	"github.com/plaenen/eventstore/pkg/domain"
+	"github.com/plaenen/eventstore/pkg/messaging"
+	"github.com/plaenen/eventstore/pkg/store"
 )
 
 // Projection defines the interface for building read models from events.
@@ -14,46 +17,32 @@ type Projection interface {
 	Name() string
 
 	// Handle processes an event and updates the read model.
-	Handle(ctx context.Context, event *EventEnvelope) error
+	Handle(ctx context.Context, event *domain.EventEnvelope) error
 
 	// Reset resets the projection state (useful for rebuilding).
 	Reset(ctx context.Context) error
 }
 
-// ProjectionCheckpoint tracks the progress of a projection.
-type ProjectionCheckpoint struct {
-	ProjectionName string
-	Position       int64
-	LastEventID    string
-	UpdatedAt      time.Time
-}
+// Deprecated: Use store.ProjectionCheckpoint instead
+type ProjectionCheckpoint = store.ProjectionCheckpoint
 
-// CheckpointStore persists projection checkpoints.
-type CheckpointStore interface {
-	// Save saves a checkpoint.
-	Save(checkpoint *ProjectionCheckpoint) error
-
-	// Load loads a checkpoint for a projection.
-	Load(projectionName string) (*ProjectionCheckpoint, error)
-
-	// Delete deletes a checkpoint (for rebuilding).
-	Delete(projectionName string) error
-}
+// Deprecated: Use store.CheckpointStore instead
+type CheckpointStore = store.CheckpointStore
 
 // ProjectionManager coordinates running projections.
 // Uses hybrid approach: EventBus for real-time, EventStore for rebuilds.
 type ProjectionManager struct {
 	projections     map[string]Projection
-	checkpointStore CheckpointStore
-	eventStore      EventStore // For rebuilds
-	eventBus        EventBus   // For real-time
+	checkpointStore store.CheckpointStore
+	eventStore      store.EventStore // For rebuilds
+	eventBus        messaging.EventBus   // For real-time
 	mu              sync.RWMutex
 	running         map[string]context.CancelFunc
 	wg              sync.WaitGroup
 }
 
 // NewProjectionManager creates a new projection manager.
-func NewProjectionManager(checkpointStore CheckpointStore, eventStore EventStore, eventBus EventBus) *ProjectionManager {
+func NewProjectionManager(checkpointStore store.CheckpointStore, eventStore store.EventStore, eventBus messaging.EventBus) *ProjectionManager {
 	return &ProjectionManager{
 		projections:     make(map[string]Projection),
 		checkpointStore: checkpointStore,
@@ -90,7 +79,7 @@ func (m *ProjectionManager) Start(ctx context.Context, projectionName string) er
 	checkpoint, err := m.checkpointStore.Load(projectionName)
 	if err != nil {
 		// No checkpoint, start from beginning
-		checkpoint = &ProjectionCheckpoint{
+		checkpoint = &store.ProjectionCheckpoint{
 			ProjectionName: projectionName,
 			Position:       0,
 		}
@@ -101,7 +90,7 @@ func (m *ProjectionManager) Start(ctx context.Context, projectionName string) er
 	m.running[projectionName] = cancel
 
 	// Subscribe to event bus (real-time events)
-	subscription, err := m.eventBus.Subscribe(EventFilter{}, func(event *EventEnvelope) error {
+	subscription, err := m.eventBus.Subscribe(messaging.EventFilter{}, func(event *domain.EventEnvelope) error {
 		// Process event
 		if err := projection.Handle(projCtx, event); err != nil {
 			return fmt.Errorf("projection %s failed to handle event: %w", projectionName, err)
@@ -109,8 +98,8 @@ func (m *ProjectionManager) Start(ctx context.Context, projectionName string) er
 
 		// Update checkpoint
 		checkpoint.Position++
-		checkpoint.LastEventID = event.ID
-		checkpoint.UpdatedAt = Now()
+		checkpoint.LastEventID = event.Event.ID
+		checkpoint.UpdatedAt = domain.Now()
 
 		if err := m.checkpointStore.Save(checkpoint); err != nil {
 			return fmt.Errorf("failed to save checkpoint: %w", err)
@@ -197,7 +186,7 @@ func (m *ProjectionManager) Rebuild(ctx context.Context, projectionName string) 
 		}
 
 		for _, event := range events {
-			envelope := &EventEnvelope{Event: *event}
+			envelope := &domain.EventEnvelope{Event: *event}
 			if err := projection.Handle(ctx, envelope); err != nil {
 				return fmt.Errorf("failed to handle event during rebuild: %w", err)
 			}
@@ -205,11 +194,11 @@ func (m *ProjectionManager) Rebuild(ctx context.Context, projectionName string) 
 		}
 
 		// Save checkpoint periodically
-		if err := m.checkpointStore.Save(&ProjectionCheckpoint{
+		if err := m.checkpointStore.Save(&store.ProjectionCheckpoint{
 			ProjectionName: projectionName,
 			Position:       position,
 			LastEventID:    events[len(events)-1].ID,
-			UpdatedAt:      Now(),
+			UpdatedAt:      domain.Now(),
 		}); err != nil {
 			return fmt.Errorf("failed to save checkpoint: %w", err)
 		}

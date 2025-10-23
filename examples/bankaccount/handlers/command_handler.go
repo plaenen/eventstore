@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/plaenen/eventstore/examples/bankaccount/domain"
+	exampledomain "github.com/plaenen/eventstore/examples/bankaccount/domain"
 	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
+	"github.com/plaenen/eventstore/pkg/domain"
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"github.com/shopspring/decimal"
 )
@@ -53,7 +54,7 @@ func (h *AccountCommandHandler) OpenAccount(ctx context.Context, cmd *accountv1.
 	}
 
 	// Create new aggregate (appliers are injected by domain factory)
-	agg := domain.NewAccount(cmd.AccountId)
+	agg := exampledomain.NewAccount(cmd.AccountId)
 
 	// Create and emit event using type-safe helper
 	event := &accountv1.AccountOpenedEvent{
@@ -65,10 +66,10 @@ func (h *AccountCommandHandler) OpenAccount(ctx context.Context, cmd *accountv1.
 
 	// Use generated type-safe Apply method with unique constraint
 	if err := agg.ApplyAccountOpenedEvent(event,
-		accountv1.WithUniqueConstraints(eventsourcing.UniqueConstraint{
+		accountv1.WithUniqueConstraints(domain.UniqueConstraint{
 			IndexName: "account_id",
 			Value:     cmd.AccountId,
-			Operation: eventsourcing.ConstraintClaim,
+			Operation: domain.ConstraintClaim,
 		}),
 	); err != nil {
 		return nil, &eventsourcing.AppError{
@@ -276,10 +277,10 @@ func (h *AccountCommandHandler) CloseAccount(ctx context.Context, cmd *accountv1
 
 	// Use generated type-safe Apply method with constraint release
 	if err := agg.ApplyAccountClosedEvent(event,
-		accountv1.WithUniqueConstraints(eventsourcing.UniqueConstraint{
+		accountv1.WithUniqueConstraints(domain.UniqueConstraint{
 			IndexName: "account_id",
 			Value:     cmd.AccountId,
-			Operation: eventsourcing.ConstraintRelease,
+			Operation: domain.ConstraintRelease,
 		}),
 	); err != nil {
 		return nil, &eventsourcing.AppError{

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/plaenen/eventstore/pkg/eventsourcing"
-	"github.com/plaenen/eventstore/pkg/sqlite"
+	"github.com/plaenen/eventstore/pkg/store"
+	"github.com/plaenen/eventstore/pkg/store/sqlite"
 )
 
 // TenantStoreStrategy defines how tenants are isolated at storage level
@@ -23,8 +23,8 @@ const (
 // MultiTenantEventStore wraps an event store with multi-tenancy support
 type MultiTenantEventStore struct {
 	strategy       TenantStoreStrategy
-	sharedStore    eventsourcing.EventStore // Used for SharedDatabase strategy
-	tenantStores   map[string]eventsourcing.EventStore
+	sharedStore    store.EventStore // Used for SharedDatabase strategy
+	tenantStores   map[string]store.EventStore
 	tenantStoresMu sync.RWMutex
 	config         MultiTenantConfig
 }
@@ -42,9 +42,9 @@ type MultiTenantConfig struct {
 
 // NewMultiTenantEventStore creates a new multi-tenant event store
 func NewMultiTenantEventStore(config MultiTenantConfig) (*MultiTenantEventStore, error) {
-	store := &MultiTenantEventStore{
+	mtStore := &MultiTenantEventStore{
 		strategy:     config.Strategy,
-		tenantStores: make(map[string]eventsourcing.EventStore),
+		tenantStores: make(map[string]store.EventStore),
 		config:       config,
 	}
 
@@ -57,14 +57,14 @@ func NewMultiTenantEventStore(config MultiTenantConfig) (*MultiTenantEventStore,
 		if err != nil {
 			return nil, fmt.Errorf("failed to create shared event store: %w", err)
 		}
-		store.sharedStore = sharedStore
+		mtStore.sharedStore = sharedStore
 	}
 
-	return store, nil
+	return mtStore, nil
 }
 
 // GetStore returns the event store for a specific tenant
-func (m *MultiTenantEventStore) GetStore(ctx context.Context) (eventsourcing.EventStore, error) {
+func (m *MultiTenantEventStore) GetStore(ctx context.Context) (store.EventStore, error) {
 	if m.strategy == SharedDatabase {
 		return m.sharedStore, nil
 	}
@@ -79,14 +79,14 @@ func (m *MultiTenantEventStore) GetStore(ctx context.Context) (eventsourcing.Eve
 }
 
 // getOrCreateTenantStore gets or creates a per-tenant database
-func (m *MultiTenantEventStore) getOrCreateTenantStore(tenantID string) (eventsourcing.EventStore, error) {
+func (m *MultiTenantEventStore) getOrCreateTenantStore(tenantID string) (store.EventStore, error) {
 	// Try read lock first
 	m.tenantStoresMu.RLock()
-	store, exists := m.tenantStores[tenantID]
+	eventStore, exists := m.tenantStores[tenantID]
 	m.tenantStoresMu.RUnlock()
 
 	if exists {
-		return store, nil
+		return eventStore, nil
 	}
 
 	// Need to create store - acquire write lock
@@ -94,9 +94,9 @@ func (m *MultiTenantEventStore) getOrCreateTenantStore(tenantID string) (eventso
 	defer m.tenantStoresMu.Unlock()
 
 	// Double-check after acquiring write lock
-	store, exists = m.tenantStores[tenantID]
+	eventStore, exists = m.tenantStores[tenantID]
 	if exists {
-		return store, nil
+		return eventStore, nil
 	}
 
 	// Create new tenant database
@@ -135,6 +135,6 @@ func (m *MultiTenantEventStore) Close() error {
 
 // GetTenantEventStore returns the appropriate event store for the tenant in the context
 // This is a helper function to get the correct event store based on tenant context
-func (m *MultiTenantEventStore) GetTenantEventStore(ctx context.Context) (eventsourcing.EventStore, error) {
+func (m *MultiTenantEventStore) GetTenantEventStore(ctx context.Context) (store.EventStore, error) {
 	return m.GetStore(ctx)
 }

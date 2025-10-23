@@ -7,8 +7,8 @@ import (
 	"log"
 
 	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
-	"github.com/plaenen/eventstore/pkg/eventsourcing"
-	"github.com/plaenen/eventstore/pkg/sqlite"
+	"github.com/plaenen/eventstore/pkg/domain"
+	"github.com/plaenen/eventstore/pkg/store/sqlite"
 	"google.golang.org/protobuf/proto"
 	_ "modernc.org/sqlite"
 )
@@ -82,7 +82,7 @@ func main() {
 			return err
 		}).
 		// Register event handlers - transactions handled automatically!
-		On(accountv1.OnAccountOpened(func(ctx context.Context, event *accountv1.AccountOpenedEvent, envelope *eventsourcing.EventEnvelope) error {
+		On(accountv1.OnAccountOpened(func(ctx context.Context, event *accountv1.AccountOpenedEvent, envelope *domain.EventEnvelope) error {
 			fmt.Printf("   ✨ AccountOpened: %s (Owner: %s)\n", event.AccountId, event.OwnerName)
 
 			// Get transaction from context - automatically provided!
@@ -99,7 +99,7 @@ func main() {
 			return err
 			// Transaction commit and checkpoint update happen automatically!
 		})).
-		On(accountv1.OnMoneyDeposited(func(ctx context.Context, event *accountv1.MoneyDepositedEvent, envelope *eventsourcing.EventEnvelope) error {
+		On(accountv1.OnMoneyDeposited(func(ctx context.Context, event *accountv1.MoneyDepositedEvent, envelope *domain.EventEnvelope) error {
 			fmt.Printf("   💵 MoneyDeposited: Amount %s\n", event.Amount)
 
 			tx, _ := sqlite.TxFromContext(ctx)
@@ -115,7 +115,7 @@ func main() {
 
 			return err
 		})).
-		On(accountv1.OnMoneyWithdrawn(func(ctx context.Context, event *accountv1.MoneyWithdrawnEvent, envelope *eventsourcing.EventEnvelope) error {
+		On(accountv1.OnMoneyWithdrawn(func(ctx context.Context, event *accountv1.MoneyWithdrawnEvent, envelope *domain.EventEnvelope) error {
 			fmt.Printf("   💸 MoneyWithdrawn: Amount %s\n", event.Amount)
 
 			tx, _ := sqlite.TxFromContext(ctx)
@@ -130,7 +130,7 @@ func main() {
 
 			return err
 		})).
-		On(accountv1.OnAccountClosed(func(ctx context.Context, event *accountv1.AccountClosedEvent, envelope *eventsourcing.EventEnvelope) error {
+		On(accountv1.OnAccountClosed(func(ctx context.Context, event *accountv1.AccountClosedEvent, envelope *domain.EventEnvelope) error {
 			fmt.Printf("   🔒 AccountClosed\n")
 
 			tx, _ := sqlite.TxFromContext(ctx)
@@ -162,9 +162,9 @@ func main() {
 	// 3. Simulate events
 	fmt.Println("3️⃣  Processing events...")
 
-	testEvents := []*eventsourcing.EventEnvelope{
+	testEvents := []*domain.EventEnvelope{
 		{
-			Event: eventsourcing.Event{
+			Event: domain.Event{
 				ID:          "evt-1",
 				AggregateID: "acc-bob-001",
 				EventType:   accountv1.AccountOpenedEventType,
@@ -178,7 +178,7 @@ func main() {
 			},
 		},
 		{
-			Event: eventsourcing.Event{
+			Event: domain.Event{
 				ID:          "evt-2",
 				AggregateID: "acc-bob-001",
 				EventType:   accountv1.MoneyDepositedEventType,
@@ -192,7 +192,7 @@ func main() {
 			},
 		},
 		{
-			Event: eventsourcing.Event{
+			Event: domain.Event{
 				ID:          "evt-3",
 				AggregateID: "acc-bob-001",
 				EventType:   accountv1.MoneyWithdrawnEventType,
@@ -206,7 +206,7 @@ func main() {
 			},
 		},
 		{
-			Event: eventsourcing.Event{
+			Event: domain.Event{
 				ID:          "evt-4",
 				AggregateID: "acc-bob-001",
 				EventType:   accountv1.MoneyDepositedEventType,
@@ -220,7 +220,7 @@ func main() {
 			},
 		},
 		{
-			Event: eventsourcing.Event{
+			Event: domain.Event{
 				ID:          "evt-5",
 				AggregateID: "acc-bob-001",
 				EventType:   accountv1.AccountClosedEventType,

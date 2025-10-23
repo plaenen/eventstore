@@ -6,8 +6,9 @@ import (
 	"log"
 
 	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
+	"github.com/plaenen/eventstore/pkg/domain"
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
-	"github.com/plaenen/eventstore/pkg/sqlite"
+	"github.com/plaenen/eventstore/pkg/store/sqlite"
 	"google.golang.org/protobuf/proto"
 	_ "modernc.org/sqlite"
 )
@@ -74,7 +75,7 @@ func main() {
 
 	projection := eventsourcing.NewProjectionBuilder("customer-activity").
 		// Account domain events
-		On(accountv1.OnAccountOpened(func(ctx context.Context, event *accountv1.AccountOpenedEvent, envelope *eventsourcing.EventEnvelope) error {
+		On(accountv1.OnAccountOpened(func(ctx context.Context, event *accountv1.AccountOpenedEvent, envelope *domain.EventEnvelope) error {
 			fmt.Printf("   🏦 Account domain: AccountOpened (ID: %s, Owner: %s)\n",
 				event.AccountId, event.OwnerName)
 
@@ -115,7 +116,7 @@ func main() {
 
 			return tx.Commit()
 		})).
-		On(accountv1.OnMoneyDeposited(func(ctx context.Context, event *accountv1.MoneyDepositedEvent, envelope *eventsourcing.EventEnvelope) error {
+		On(accountv1.OnMoneyDeposited(func(ctx context.Context, event *accountv1.MoneyDepositedEvent, envelope *domain.EventEnvelope) error {
 			fmt.Printf("   💵 Account domain: MoneyDeposited (Amount: %s)\n", event.Amount)
 
 			tx, err := db.Begin()
@@ -148,7 +149,7 @@ func main() {
 
 			return tx.Commit()
 		})).
-		On(accountv1.OnMoneyWithdrawn(func(ctx context.Context, event *accountv1.MoneyWithdrawnEvent, envelope *eventsourcing.EventEnvelope) error {
+		On(accountv1.OnMoneyWithdrawn(func(ctx context.Context, event *accountv1.MoneyWithdrawnEvent, envelope *domain.EventEnvelope) error {
 			fmt.Printf("   💸 Account domain: MoneyWithdrawn (Amount: %s)\n", event.Amount)
 
 			tx, err := db.Begin()
@@ -181,7 +182,7 @@ func main() {
 
 			return tx.Commit()
 		})).
-		On(accountv1.OnAccountClosed(func(ctx context.Context, event *accountv1.AccountClosedEvent, envelope *eventsourcing.EventEnvelope) error {
+		On(accountv1.OnAccountClosed(func(ctx context.Context, event *accountv1.AccountClosedEvent, envelope *domain.EventEnvelope) error {
 			fmt.Printf("   🔒 Account domain: AccountClosed\n")
 
 			tx, err := db.Begin()
@@ -232,9 +233,9 @@ func main() {
 	fmt.Println("   💡 In a real app, you'd also have events from Order, User, etc.")
 	fmt.Println()
 
-	testEvents := []*eventsourcing.EventEnvelope{
+	testEvents := []*domain.EventEnvelope{
 		{
-			Event: eventsourcing.Event{
+			Event: domain.Event{
 				ID:          "evt-1",
 				AggregateID: "acc-alice-001",
 				EventType:   accountv1.AccountOpenedEventType,
@@ -248,7 +249,7 @@ func main() {
 			},
 		},
 		{
-			Event: eventsourcing.Event{
+			Event: domain.Event{
 				ID:          "evt-2",
 				AggregateID: "acc-alice-001",
 				EventType:   accountv1.MoneyDepositedEventType,
@@ -262,7 +263,7 @@ func main() {
 			},
 		},
 		{
-			Event: eventsourcing.Event{
+			Event: domain.Event{
 				ID:          "evt-3",
 				AggregateID: "acc-alice-001",
 				EventType:   accountv1.MoneyWithdrawnEventType,
@@ -276,7 +277,7 @@ func main() {
 			},
 		},
 		{
-			Event: eventsourcing.Event{
+			Event: domain.Event{
 				ID:          "evt-4",
 				AggregateID: "acc-alice-001",
 				EventType:   accountv1.MoneyDepositedEventType,
@@ -290,7 +291,7 @@ func main() {
 			},
 		},
 		{
-			Event: eventsourcing.Event{
+			Event: domain.Event{
 				ID:          "evt-5",
 				AggregateID: "acc-alice-001",
 				EventType:   accountv1.AccountClosedEventType,

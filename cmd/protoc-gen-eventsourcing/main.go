@@ -45,7 +45,7 @@ import (
 	eventsourcing "github.com/plaenen/eventstore/pkg/eventsourcing"
 )
 
-var version = "0.0.5"
+var version = "0.0.6"
 
 func main() {
 	var flags flag.FlagSet
@@ -125,7 +125,9 @@ func generateHeader(g *protogen.GeneratedFile, file *protogen.File) {
 	g.P(`	"context"`)
 	g.P(`	"fmt"`)
 	g.P()
+	g.P(`	"github.com/plaenen/eventstore/pkg/domain"`)
 	g.P(`	"github.com/plaenen/eventstore/pkg/eventsourcing"`)
+	g.P(`	"github.com/plaenen/eventstore/pkg/store"`)
 	g.P(`	"google.golang.org/protobuf/proto"`)
 	g.P(")")
 	g.P()
@@ -140,7 +142,7 @@ func generateAggregates(g *protogen.GeneratedFile, file *protogen.File) {
 		g.P("// ", aggregateType, " is the aggregate root for ", agg.TypeName, " domain")
 		g.P("// It embeds the proto-defined ", agg.MessageName, " for state management")
 		g.P("type ", aggregateType, " struct {")
-		g.P("	eventsourcing.AggregateRoot")
+		g.P("	domain.AggregateRoot")
 		g.P("	*", agg.MessageName)
 		g.P("	applier ", agg.TypeName, "EventApplier  // Injected dependency for event application")
 		g.P("}")
@@ -152,7 +154,7 @@ func generateAggregates(g *protogen.GeneratedFile, file *protogen.File) {
 		g.P("// Implement ", agg.TypeName, "EventApplier in your domain layer")
 		g.P("func New", agg.TypeName, "(id string, applier ", agg.TypeName, "EventApplier) *", aggregateType, " {")
 		g.P("	return &", aggregateType, "{")
-		g.P("		AggregateRoot: eventsourcing.NewAggregateRoot(id, \"", agg.TypeName, "\"),")
+		g.P("		AggregateRoot: domain.NewAggregateRoot(id, \"", agg.TypeName, "\"),")
 		g.P("		", agg.MessageName, ": &", agg.MessageName, "{},")
 		g.P("		applier:       applier,")
 		g.P("	}")
@@ -174,7 +176,7 @@ func generateAggregates(g *protogen.GeneratedFile, file *protogen.File) {
 		g.P("	}")
 		g.P()
 		g.P("	// UPCAST HOOK: If aggregate implements SnapshotUpcaster, upgrade old snapshots")
-		g.P("	if upcaster, ok := interface{}(a).(eventsourcing.SnapshotUpcaster); ok {")
+		g.P("	if upcaster, ok := interface{}(a).(domain.SnapshotUpcaster); ok {")
 		g.P("		a.", agg.MessageName, " = upcaster.UpcastSnapshot(a.", agg.MessageName, ").(*", agg.MessageName, ")")
 		g.P("	}")
 		g.P()
@@ -220,7 +222,7 @@ func generateEventAppliers(g *protogen.GeneratedFile, file *protogen.File, gen *
 		g.P("// This method delegates to the injected applier implementation")
 		g.P("func (a *", aggregateType, ") ApplyEvent(event proto.Message) error {")
 		g.P("	// UPCAST HOOK: If aggregate implements EventUpcaster, upgrade old events")
-		g.P("	if upcaster, ok := interface{}(a).(eventsourcing.EventUpcaster); ok {")
+		g.P("	if upcaster, ok := interface{}(a).(domain.EventUpcaster); ok {")
 		g.P("		event = upcaster.UpcastEvent(event)")
 		g.P("	}")
 		g.P()
@@ -325,13 +327,13 @@ func generateEventAppliers(g *protogen.GeneratedFile, file *protogen.File, gen *
 
 		g.P("// ApplyEventOptions holds configuration for event application")
 		g.P("type ApplyEventOptions struct {")
-		g.P("	Metadata    eventsourcing.EventMetadata")
-		g.P("	Constraints []eventsourcing.UniqueConstraint")
+		g.P("	Metadata    domain.EventMetadata")
+		g.P("	Constraints []domain.UniqueConstraint")
 		g.P("}")
 		g.P()
 
 		g.P("// WithMetadata sets the event metadata")
-		g.P("func WithMetadata(metadata eventsourcing.EventMetadata) ApplyEventOption {")
+		g.P("func WithMetadata(metadata domain.EventMetadata) ApplyEventOption {")
 		g.P("	return func(o *ApplyEventOptions) {")
 		g.P("		o.Metadata = metadata")
 		g.P("	}")
@@ -339,7 +341,7 @@ func generateEventAppliers(g *protogen.GeneratedFile, file *protogen.File, gen *
 		g.P()
 
 		g.P("// WithUniqueConstraints adds unique constraints to the event")
-		g.P("func WithUniqueConstraints(constraints ...eventsourcing.UniqueConstraint) ApplyEventOption {")
+		g.P("func WithUniqueConstraints(constraints ...domain.UniqueConstraint) ApplyEventOption {")
 		g.P("	return func(o *ApplyEventOptions) {")
 		g.P("		o.Constraints = constraints")
 		g.P("	}")
@@ -391,19 +393,19 @@ func generateRepository(g *protogen.GeneratedFile, file *protogen.File, gen *pro
 
 		g.P("// ", repoName, " provides persistence for ", agg.TypeName)
 		g.P("type ", repoName, " struct {")
-		g.P("	*eventsourcing.BaseRepository[*", aggregateType, "]")
+		g.P("	*store.BaseRepository[*", aggregateType, "]")
 		g.P("}")
 		g.P()
 
 		g.P("// New", repoName, " creates a new repository")
 		g.P("// factory: function to create new aggregate instances (should inject appliers)")
-		g.P("func New", repoName, "(eventStore eventsourcing.EventStore, factory func(string) *", aggregateType, ") *", repoName, " {")
+		g.P("func New", repoName, "(eventStore store.EventStore, factory func(string) *", aggregateType, ") *", repoName, " {")
 		g.P("	return &", repoName, "{")
-		g.P("		BaseRepository: eventsourcing.NewRepository[*", aggregateType, "](")
+		g.P("		BaseRepository: store.NewRepository[*", aggregateType, "](")
 		g.P("			eventStore,")
 		g.P(`			"`, agg.TypeName, `",`)
 		g.P("			factory,")
-		g.P("			func(agg *", aggregateType, ", event *eventsourcing.Event) error {")
+		g.P("			func(agg *", aggregateType, ", event *domain.Event) error {")
 		g.P("				// Deserialize and apply event")
 		g.P("				msg, err := deserializeEvent", agg.TypeName, "(event)")
 		g.P("				if err != nil {")
@@ -419,7 +421,7 @@ func generateRepository(g *protogen.GeneratedFile, file *protogen.File, gen *pro
 		// Deserializer helper
 		events := findEventsForAggregate(gen, agg.TypeName)
 
-		g.P("func deserializeEvent", agg.TypeName, "(event *eventsourcing.Event) (proto.Message, error) {")
+		g.P("func deserializeEvent", agg.TypeName, "(event *domain.Event) (proto.Message, error) {")
 		g.P("	switch event.EventType {")
 
 		for _, evt := range events {
@@ -1261,7 +1263,7 @@ func generateProjectionSDK(g *protogen.GeneratedFile, file *protogen.File, gen *
 		g.P("// Typed event handlers for ", agg.TypeName)
 		for _, evt := range events {
 			handlerType := evt.MessageName + "Handler"
-			g.P("type ", handlerType, " func(ctx context.Context, event *", evt.MessageName, ", envelope *eventsourcing.EventEnvelope) error")
+			g.P("type ", handlerType, " func(ctx context.Context, event *", evt.MessageName, ", envelope *domain.EventEnvelope) error")
 		}
 		g.P()
 
@@ -1269,7 +1271,7 @@ func generateProjectionSDK(g *protogen.GeneratedFile, file *protogen.File, gen *
 		g.P("// ", builderType, " provides a fluent API for building type-safe projections")
 		g.P("type ", builderType, " struct {")
 		g.P("	name string")
-		g.P("	handlers map[string]func(context.Context, *eventsourcing.EventEnvelope) error")
+		g.P("	handlers map[string]func(context.Context, *domain.EventEnvelope) error")
 		g.P("	resetFunc func(context.Context) error")
 		g.P("}")
 		g.P()
@@ -1279,7 +1281,7 @@ func generateProjectionSDK(g *protogen.GeneratedFile, file *protogen.File, gen *
 		g.P("func New", builderType, "(name string) *", builderType, " {")
 		g.P("	return &", builderType, "{")
 		g.P("		name: name,")
-		g.P("		handlers: make(map[string]func(context.Context, *eventsourcing.EventEnvelope) error),")
+		g.P("		handlers: make(map[string]func(context.Context, *domain.EventEnvelope) error),")
 		g.P("	}")
 		g.P("}")
 		g.P()
@@ -1292,7 +1294,7 @@ func generateProjectionSDK(g *protogen.GeneratedFile, file *protogen.File, gen *
 
 			g.P("// ", methodName, " registers a typed handler for ", evt.MessageName)
 			g.P("func (b *", builderType, ") ", methodName, "(handler ", handlerType, ") *", builderType, " {")
-			g.P("	b.handlers[", constName, "] = func(ctx context.Context, envelope *eventsourcing.EventEnvelope) error {")
+			g.P("	b.handlers[", constName, "] = func(ctx context.Context, envelope *domain.EventEnvelope) error {")
 			g.P("		// Deserialize event")
 			g.P("		event := &", evt.MessageName, "{}")
 			g.P("		if err := proto.Unmarshal(envelope.Data, event); err != nil {")
@@ -1325,10 +1327,10 @@ func generateProjectionSDK(g *protogen.GeneratedFile, file *protogen.File, gen *
 
 			g.P("// ", methodName, " creates an event handler registration for ", evt.MessageName)
 			g.P("// Use with eventsourcing.NewProjectionBuilder().On(", methodName, "(handler))")
-			g.P("func ", methodName, "(handler ", handlerType, ") eventsourcing.EventHandlerRegistration {")
-			g.P("	return eventsourcing.EventHandlerRegistration{")
+			g.P("func ", methodName, "(handler ", handlerType, ") store.EventHandlerRegistration {")
+			g.P("	return store.EventHandlerRegistration{")
 			g.P("		EventType: ", constName, ",")
-			g.P("		Handler: func(ctx context.Context, envelope *eventsourcing.EventEnvelope) error {")
+			g.P("		Handler: func(ctx context.Context, envelope *domain.EventEnvelope) error {")
 			g.P("			// Deserialize event")
 			g.P("			event := &", evt.MessageName, "{}")
 			g.P("			if err := proto.Unmarshal(envelope.Data, event); err != nil {")
@@ -1359,7 +1361,7 @@ func generateProjectionSDK(g *protogen.GeneratedFile, file *protogen.File, gen *
 		g.P("// ", projectionType, " implements eventsourcing.Projection with type-safe handlers")
 		g.P("type ", projectionType, " struct {")
 		g.P("	name string")
-		g.P("	handlers map[string]func(context.Context, *eventsourcing.EventEnvelope) error")
+		g.P("	handlers map[string]func(context.Context, *domain.EventEnvelope) error")
 		g.P("	resetFunc func(context.Context) error")
 		g.P("}")
 		g.P()
@@ -1371,7 +1373,7 @@ func generateProjectionSDK(g *protogen.GeneratedFile, file *protogen.File, gen *
 		g.P()
 
 		g.P("// Handle dispatches events to registered typed handlers")
-		g.P("func (p *", projectionType, ") Handle(ctx context.Context, envelope *eventsourcing.EventEnvelope) error {")
+		g.P("func (p *", projectionType, ") Handle(ctx context.Context, envelope *domain.EventEnvelope) error {")
 		g.P("	handler, exists := p.handlers[envelope.EventType]")
 		g.P("	if !exists {")
 		g.P("		// No handler registered for this event type - skip it")

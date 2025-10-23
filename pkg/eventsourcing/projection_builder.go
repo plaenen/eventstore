@@ -2,20 +2,20 @@ package eventsourcing
 
 import (
 	"context"
+
+	"github.com/plaenen/eventstore/pkg/domain"
+	"github.com/plaenen/eventstore/pkg/store"
 )
 
-// EventHandlerRegistration represents a typed event handler registration.
-// This is the key to enabling cross-domain projections.
-type EventHandlerRegistration struct {
-	EventType string
-	Handler   func(context.Context, *EventEnvelope) error
-}
+// EventHandlerRegistration is a type alias for store.EventHandlerRegistration
+// This allows backward compatibility while using the store package's definition
+type EventHandlerRegistration = store.EventHandlerRegistration
 
 // GenericProjectionBuilder provides a fluent API for building projections
 // that can handle events from multiple aggregates/domains.
 type GenericProjectionBuilder struct {
 	name      string
-	handlers  map[string]func(context.Context, *EventEnvelope) error
+	handlers  map[string]func(context.Context, *domain.EventEnvelope) error
 	resetFunc func(context.Context) error
 }
 
@@ -31,7 +31,7 @@ type GenericProjectionBuilder struct {
 func NewProjectionBuilder(name string) *GenericProjectionBuilder {
 	return &GenericProjectionBuilder{
 		name:     name,
-		handlers: make(map[string]func(context.Context, *EventEnvelope) error),
+		handlers: make(map[string]func(context.Context, *domain.EventEnvelope) error),
 	}
 }
 
@@ -67,7 +67,7 @@ func (b *GenericProjectionBuilder) Build() Projection {
 // GenericProjection implements Projection with support for multiple domains.
 type GenericProjection struct {
 	name      string
-	handlers  map[string]func(context.Context, *EventEnvelope) error
+	handlers  map[string]func(context.Context, *domain.EventEnvelope) error
 	resetFunc func(context.Context) error
 }
 
@@ -77,8 +77,8 @@ func (p *GenericProjection) Name() string {
 }
 
 // Handle dispatches events to registered typed handlers.
-func (p *GenericProjection) Handle(ctx context.Context, envelope *EventEnvelope) error {
-	handler, exists := p.handlers[envelope.EventType]
+func (p *GenericProjection) Handle(ctx context.Context, envelope *domain.EventEnvelope) error {
+	handler, exists := p.handlers[envelope.Event.EventType]
 	if !exists {
 		// No handler registered for this event type - skip it
 		return nil
