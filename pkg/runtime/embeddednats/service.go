@@ -5,7 +5,6 @@ package embeddednats
 import (
 	"context"
 	"fmt"
-	"log/slog"
 
 	"github.com/plaenen/eventstore/pkg/infrastructure/nats"
 	"github.com/plaenen/eventstore/pkg/observability"
@@ -23,16 +22,17 @@ import (
 // - Health checks
 // - OpenTelemetry integration (optional)
 type Service struct {
-	server *nats.EmbeddedServer
-	logger *slog.Logger
-	tracer trace.Tracer
+	server      *nats.EmbeddedServer
+	logger      runner.Logger
+	tracer      trace.Tracer
+	natsOptions []nats.Option
 }
 
 // Option configures the NATS service.
 type Option func(*Service)
 
 // WithLogger sets the logger for the service.
-func WithLogger(logger *slog.Logger) Option {
+func WithLogger(logger runner.Logger) Option {
 	return func(s *Service) {
 		s.logger = logger
 	}
@@ -45,10 +45,28 @@ func WithTracer(tracer trace.Tracer) Option {
 	}
 }
 
+// WithNATSOptions sets the NATS server configuration options.
+// These options are passed to nats.StartEmbeddedServer().
+//
+// Example:
+//
+//	service := embeddednats.New(
+//	    embeddednats.WithNATSOptions(
+//	        nats.WithPort(4222),
+//	        nats.WithStoreDir("/var/nats/data"),
+//	        nats.WithDebug(true),
+//	    ),
+//	)
+func WithNATSOptions(opts ...nats.Option) Option {
+	return func(s *Service) {
+		s.natsOptions = opts
+	}
+}
+
 // New creates a new embedded NATS service for use with runner.
 func New(opts ...Option) *Service {
 	s := &Service{
-		logger: slog.Default(),
+		logger: runner.NewNoopLogger(),
 		tracer: noop.NewTracerProvider().Tracer("embeddednats"),
 	}
 
@@ -71,7 +89,8 @@ func (s *Service) Start(ctx context.Context) error {
 
 	s.logger.Info("starting embedded NATS server")
 
-	srv, err := nats.StartEmbeddedServer()
+	// Start server with configured options
+	srv, err := nats.StartEmbeddedServer(s.natsOptions...)
 	if err != nil {
 		observability.SetSpanError(ctx, err)
 		s.logger.Error("failed to start embedded NATS", "error", err)
