@@ -1,12 +1,15 @@
 package sqlite_test
 
 import (
+	"errors"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/plaenen/eventstore/pkg/domain"
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
-	"github.com/plaenen/eventstore/pkg/sqlite"
+	storelib "github.com/plaenen/eventstore/pkg/store"
+	"github.com/plaenen/eventstore/pkg/store/sqlite"
 )
 
 func TestEventStore(t *testing.T) {
@@ -23,7 +26,7 @@ func TestEventStore(t *testing.T) {
 	// Test basic event appending
 	t.Run("AppendAndLoadEvents", func(t *testing.T) {
 		aggregateID := "test-aggregate-1"
-		events := []*eventsourcing.Event{
+		events := []*domain.Event{
 			{
 				ID:            "event-1",
 				AggregateID:   aggregateID,
@@ -32,7 +35,7 @@ func TestEventStore(t *testing.T) {
 				Version:       1,
 				Timestamp:     time.Now(),
 				Data:          []byte("test data"),
-				Metadata: eventsourcing.EventMetadata{
+				Metadata: domain.EventMetadata{
 					PrincipalID: "test-user",
 				},
 			},
@@ -62,7 +65,7 @@ func TestEventStore(t *testing.T) {
 		aggregateID := "test-aggregate-2"
 
 		// First event
-		err := store.AppendEvents(aggregateID, 0, []*eventsourcing.Event{
+		err := store.AppendEvents(aggregateID, 0, []*domain.Event{
 			{
 				ID:            "event-2",
 				AggregateID:   aggregateID,
@@ -71,7 +74,7 @@ func TestEventStore(t *testing.T) {
 				Version:       1,
 				Timestamp:     time.Now(),
 				Data:          []byte("test"),
-				Metadata:      eventsourcing.EventMetadata{},
+				Metadata:      domain.EventMetadata{},
 			},
 		})
 		if err != nil {
@@ -79,7 +82,7 @@ func TestEventStore(t *testing.T) {
 		}
 
 		// Try to append with wrong expected version
-		err = store.AppendEvents(aggregateID, 0, []*eventsourcing.Event{
+		err = store.AppendEvents(aggregateID, 0, []*domain.Event{
 			{
 				ID:            "event-3",
 				AggregateID:   aggregateID,
@@ -88,11 +91,11 @@ func TestEventStore(t *testing.T) {
 				Version:       2,
 				Timestamp:     time.Now(),
 				Data:          []byte("test"),
-				Metadata:      eventsourcing.EventMetadata{},
+				Metadata:      domain.EventMetadata{},
 			},
 		})
 
-		if err != eventsourcing.ErrConcurrencyConflict {
+		if !errors.Is(err, domain.ErrConcurrencyConflict) {
 			t.Errorf("expected concurrency conflict, got %v", err)
 		}
 	})
@@ -103,7 +106,7 @@ func TestEventStore(t *testing.T) {
 		aggregateID2 := "test-aggregate-4"
 
 		// Claim unique email
-		err := store.AppendEvents(aggregateID1, 0, []*eventsourcing.Event{
+		err := store.AppendEvents(aggregateID1, 0, []*domain.Event{
 			{
 				ID:            "event-4",
 				AggregateID:   aggregateID1,
@@ -112,12 +115,12 @@ func TestEventStore(t *testing.T) {
 				Version:       1,
 				Timestamp:     time.Now(),
 				Data:          []byte("test"),
-				Metadata:      eventsourcing.EventMetadata{},
-				UniqueConstraints: []eventsourcing.UniqueConstraint{
+				Metadata:      domain.EventMetadata{},
+				UniqueConstraints: []domain.UniqueConstraint{
 					{
 						IndexName: "user_email",
 						Value:     "test@example.com",
-						Operation: eventsourcing.ConstraintClaim,
+						Operation: domain.ConstraintClaim,
 					},
 				},
 			},
@@ -127,7 +130,7 @@ func TestEventStore(t *testing.T) {
 		}
 
 		// Try to claim same email with different aggregate
-		err = store.AppendEvents(aggregateID2, 0, []*eventsourcing.Event{
+		err = store.AppendEvents(aggregateID2, 0, []*domain.Event{
 			{
 				ID:            "event-5",
 				AggregateID:   aggregateID2,
@@ -136,12 +139,12 @@ func TestEventStore(t *testing.T) {
 				Version:       1,
 				Timestamp:     time.Now(),
 				Data:          []byte("test"),
-				Metadata:      eventsourcing.EventMetadata{},
-				UniqueConstraints: []eventsourcing.UniqueConstraint{
+				Metadata:      domain.EventMetadata{},
+				UniqueConstraints: []domain.UniqueConstraint{
 					{
 						IndexName: "user_email",
 						Value:     "test@example.com",
-						Operation: eventsourcing.ConstraintClaim,
+						Operation: domain.ConstraintClaim,
 					},
 				},
 			},
@@ -169,7 +172,7 @@ func TestEventStore(t *testing.T) {
 		aggregateID := "test-aggregate-5"
 		commandID := "test-command-1"
 
-		events := []*eventsourcing.Event{
+		events := []*domain.Event{
 			{
 				ID:            eventsourcing.GenerateDeterministicEventID(commandID, aggregateID, 0),
 				AggregateID:   aggregateID,
@@ -178,7 +181,7 @@ func TestEventStore(t *testing.T) {
 				Version:       1,
 				Timestamp:     time.Now(),
 				Data:          []byte("test"),
-				Metadata: eventsourcing.EventMetadata{
+				Metadata: domain.EventMetadata{
 					CausationID: commandID,
 				},
 			},
@@ -244,7 +247,7 @@ func TestEventStore(t *testing.T) {
 		}
 
 		// Save checkpoint in same transaction
-		checkpoint := &eventsourcing.ProjectionCheckpoint{
+		checkpoint := &storelib.ProjectionCheckpoint{
 			ProjectionName: "test-projection",
 			Position:       42,
 			LastEventID:    "event-42",

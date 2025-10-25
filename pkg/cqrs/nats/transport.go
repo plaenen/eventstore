@@ -9,6 +9,7 @@ import (
 	"github.com/plaenen/eventstore/pkg/cqrs"
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"github.com/plaenen/eventstore/pkg/observability"
+	"github.com/plaenen/eventstore/pkg/security/credentials"
 	"go.opentelemetry.io/otel/propagation"
 	"google.golang.org/protobuf/proto"
 )
@@ -30,9 +31,23 @@ type TransportConfig struct {
 	// Name is the client name for connection identification
 	Name string
 
-	// Credentials for authentication (optional)
+	// CredentialProvider provides secure credential management
+	// Use this instead of Token/User/Pass for production deployments
+	CredentialProvider credentials.Provider
+
+	// Deprecated: Use CredentialProvider instead
+	// Token is a bearer token for authentication (INSECURE - plaintext)
+	// This field will be removed in v1.0.0
 	Token string
+
+	// Deprecated: Use CredentialProvider instead
+	// User is the username for authentication (INSECURE - plaintext)
+	// This field will be removed in v1.0.0
 	User  string
+
+	// Deprecated: Use CredentialProvider instead
+	// Pass is the password for authentication (INSECURE - plaintext)
+	// This field will be removed in v1.0.0
 	Pass  string
 
 	// Telemetry for observability (optional)
@@ -64,11 +79,63 @@ func NewTransport(config *TransportConfig) (*Transport, error) {
 		}),
 	}
 
-	// Add authentication if provided
-	if config.Token != "" {
-		opts = append(opts, nats.Token(config.Token))
-	} else if config.User != "" && config.Pass != "" {
-		opts = append(opts, nats.UserInfo(config.User, config.Pass))
+	// Add authentication - prefer CredentialProvider over deprecated fields
+	if config.CredentialProvider != nil {
+		// Use secure credential provider
+		ctx := context.Background()
+		creds, err := config.CredentialProvider.GetCredentials(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get credentials: %w", err)
+		}
+
+		// Apply credentials based on type
+		switch creds.Type {
+		case credentials.CredentialTypeToken:
+			if creds.Token == "" {
+				return nil, fmt.Errorf("token credential is empty")
+			}
+			opts = append(opts, nats.Token(creds.Token))
+
+		case credentials.CredentialTypeUserPassword:
+			if creds.User == "" || creds.Password == "" {
+				return nil, fmt.Errorf("user/password credentials are incomplete")
+			}
+			opts = append(opts, nats.UserInfo(creds.User, creds.Password))
+
+		case credentials.CredentialTypeNKey:
+			if creds.Seed == "" {
+				return nil, fmt.Errorf("nkey seed is empty")
+			}
+			// Parse NKey seed
+			kp, err := nats.NkeyOptionFromSeed(creds.Seed)
+			if err != nil {
+				return nil, fmt.Errorf("invalid nkey seed: %w", err)
+			}
+			opts = append(opts, kp)
+
+		case credentials.CredentialTypeJWT:
+			// JWT authentication would typically use UserJWT option
+			// This requires a JWT and a signature callback
+			return nil, fmt.Errorf("JWT authentication not yet implemented")
+
+		case credentials.CredentialTypeMTLS:
+			// mTLS would be configured via TLS config, not here
+			return nil, fmt.Errorf("mTLS should be configured via TLS config, not credential provider")
+
+		default:
+			return nil, fmt.Errorf("unsupported credential type: %s", creds.Type)
+		}
+
+	} else {
+		// Fall back to deprecated fields for backward compatibility
+		// Warn user about insecure usage
+		if config.Token != "" {
+			fmt.Printf("WARNING: Using deprecated Token field. Please migrate to CredentialProvider for secure credential management.\n")
+			opts = append(opts, nats.Token(config.Token))
+		} else if config.User != "" && config.Pass != "" {
+			fmt.Printf("WARNING: Using deprecated User/Pass fields. Please migrate to CredentialProvider for secure credential management.\n")
+			opts = append(opts, nats.UserInfo(config.User, config.Pass))
+		}
 	}
 
 	// Connect to NATS

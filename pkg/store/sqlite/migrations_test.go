@@ -3,7 +3,7 @@ package sqlite_test
 import (
 	"testing"
 
-	"github.com/plaenen/eventstore/pkg/sqlite"
+	"github.com/plaenen/eventstore/pkg/store/sqlite"
 )
 
 // Note: Migrations are tested indirectly via TestEventStore which uses AutoMigrate=true.

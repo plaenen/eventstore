@@ -5,30 +5,30 @@ import (
 	"log"
 	"time"
 
-	"github.com/plaenen/eventstore/pkg/eventsourcing"
-	"github.com/plaenen/eventstore/pkg/sqlite"
+	"github.com/plaenen/eventstore/pkg/store"
+	"github.com/plaenen/eventstore/pkg/store/sqlite"
 )
 
 // ExampleCheckpointStore_SaveInTx demonstrates how to use transactional
 // checkpoint updates to avoid dual-write issues when updating projections.
 func ExampleCheckpointStore_SaveInTx() {
 	// Create event store
-	store, err := sqlite.NewEventStore(
+	eventStore, err := sqlite.NewEventStore(
 		sqlite.WithDSN(":memory:"),
 	)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer store.Close()
+	defer eventStore.Close()
 
 	// Create checkpoint store
-	checkpointStore, err := sqlite.NewCheckpointStore(store.DB())
+	checkpointStore, err := sqlite.NewCheckpointStore(eventStore.DB())
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// Create a projection table (e.g., user summary)
-	_, err = store.DB().Exec(`
+	_, err = eventStore.DB().Exec(`
 		CREATE TABLE user_summary (
 			user_id TEXT PRIMARY KEY,
 			total_orders INTEGER,
@@ -63,7 +63,7 @@ func ExampleCheckpointStore_SaveInTx() {
 
 	// Save checkpoint in the SAME transaction
 	// This ensures atomicity - either both succeed or both fail
-	checkpoint := &eventsourcing.ProjectionCheckpoint{
+	checkpoint := &store.ProjectionCheckpoint{
 		ProjectionName: "user-summary",
 		Position:       100,
 		LastEventID:    "event-100",
@@ -89,15 +89,15 @@ func ExampleCheckpointStore_SaveInTx() {
 // using transactional checkpoint updates for consistency.
 func Example_projectionLoop() {
 	// Setup (omitted for brevity - see ExampleCheckpointStore_SaveInTx)
-	store, _ := sqlite.NewEventStore(
+	eventStore, _ := sqlite.NewEventStore(
 		sqlite.WithDSN(":memory:"),
 	)
-	defer store.Close()
+	defer eventStore.Close()
 
-	checkpointStore, _ := sqlite.NewCheckpointStore(store.DB())
+	checkpointStore, _ := sqlite.NewCheckpointStore(eventStore.DB())
 
 	// Create projection table
-	store.DB().Exec(`CREATE TABLE accounts (account_id TEXT PRIMARY KEY, balance INTEGER)`)
+	eventStore.DB().Exec(`CREATE TABLE accounts (account_id TEXT PRIMARY KEY, balance INTEGER)`)
 
 	projectionName := "account-balance"
 
@@ -105,14 +105,14 @@ func Example_projectionLoop() {
 	checkpoint, err := checkpointStore.Load(projectionName)
 	if err != nil {
 		// First run - start from beginning
-		checkpoint = &eventsourcing.ProjectionCheckpoint{
+		checkpoint = &store.ProjectionCheckpoint{
 			ProjectionName: projectionName,
 			Position:       0,
 		}
 	}
 
 	// Load events since last checkpoint
-	events, _ := store.LoadAllEvents(checkpoint.Position, 100)
+	events, _ := eventStore.LoadAllEvents(checkpoint.Position, 100)
 
 	// Process events in a transaction
 	for _, event := range events {

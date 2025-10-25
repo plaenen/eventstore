@@ -5,6 +5,21 @@ An alpha version Event Sourcing and CQRS framework for Go with Protocol Buffers 
 [![Go Version](https://img.shields.io/badge/go-1.25%2B-blue)](https://golang.org/dl/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
+## ⚠️ Security Warning
+
+**This project is in alpha and NOT production-ready.** A comprehensive security review has identified critical issues that must be addressed:
+
+- ❌ **Plaintext credentials** - No encryption for authentication
+- ❌ **No TLS encryption** - All connections unencrypted by default
+- ❌ **Limited input validation** - Potential security gaps
+- ⚠️ **Low test coverage** - 18% (target: 80%+)
+
+**📚 See the [Security Review Summary](docs/REVIEW_SUMMARY.md) for details and [Security Roadmap](docs/SECURITY_ROADMAP.md) for the path to production.**
+
+**DO NOT use in production until critical security issues are resolved (estimated 4 months).**
+
+---
+
 ## Overview
 
 This framework provides everything you need to build event-sourced systems in Go:

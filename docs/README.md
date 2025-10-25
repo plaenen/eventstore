@@ -59,6 +59,13 @@ Start here if you're new to the framework:
 - **[Observability](../pkg/observability/)** - OpenTelemetry integration
 - **[Testing](../CONTRIBUTING.md#testing)** - Writing tests
 
+### Security & Production
+
+- **[Security Review Summary](REVIEW_SUMMARY.md)** - ⚠️ Current security posture and recommendations
+- **[Security Roadmap](SECURITY_ROADMAP.md)** - Comprehensive security and architecture roadmap
+- **[Immediate Actions](security/IMMEDIATE_ACTIONS.md)** - Critical security fixes (P0 - Do Now)
+- **[Multi-tenancy Security](../pkg/multitenancy/)** - Tenant isolation and security
+
 ## Package Documentation
 
 Each package has its own README with detailed documentation:

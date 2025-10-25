@@ -4,9 +4,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/plaenen/eventstore/pkg/eventsourcing"
-	natspkg "github.com/plaenen/eventstore/pkg/eventbus/nats"
-	natsserver "github.com/plaenen/eventstore/pkg/nats"
+	"github.com/plaenen/eventstore/pkg/domain"
+	natsserver "github.com/plaenen/eventstore/pkg/infrastructure/nats"
+	"github.com/plaenen/eventstore/pkg/messaging"
+	natspkg "github.com/plaenen/eventstore/pkg/messaging/nats"
 )
 
 func TestEmbeddedNATSEventBus(t *testing.T) {
@@ -27,12 +28,12 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 	defer bus.Close()
 
 	t.Run("PublishAndSubscribe", func(t *testing.T) {
-		received := make(chan *eventsourcing.Event, 1)
+		received := make(chan *domain.Event, 1)
 
 		// Subscribe to events
-		sub, err := bus.Subscribe(eventsourcing.EventFilter{
+		sub, err := bus.Subscribe(messaging.EventFilter{
 			AggregateTypes: []string{"TestAggregate"},
-		}, func(envelope *eventsourcing.EventEnvelope) error {
+		}, func(envelope *domain.EventEnvelope) error {
 			received <- &envelope.Event
 			return nil
 		})
@@ -45,7 +46,7 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 
 		// Publish event
-		event := &eventsourcing.Event{
+		event := &domain.Event{
 			ID:            "test-event-1",
 			AggregateID:   "agg-1",
 			AggregateType: "TestAggregate",
@@ -53,12 +54,12 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 			Version:       1,
 			Timestamp:     time.Now(),
 			Data:          []byte("test data"),
-			Metadata: eventsourcing.EventMetadata{
+			Metadata: domain.EventMetadata{
 				PrincipalID: "test-user",
 			},
 		}
 
-		err = bus.Publish([]*eventsourcing.Event{event})
+		err = bus.Publish([]*domain.Event{event})
 		if err != nil {
 			t.Fatalf("failed to publish event: %v", err)
 		}
@@ -78,12 +79,12 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 	})
 
 	t.Run("EventIdempotency", func(t *testing.T) {
-		received := make(chan *eventsourcing.Event, 10)
+		received := make(chan *domain.Event, 10)
 
 		// Subscribe to events
-		sub, err := bus.Subscribe(eventsourcing.EventFilter{
+		sub, err := bus.Subscribe(messaging.EventFilter{
 			AggregateTypes: []string{"IdempotentAggregate"},
-		}, func(envelope *eventsourcing.EventEnvelope) error {
+		}, func(envelope *domain.EventEnvelope) error {
 			received <- &envelope.Event
 			return nil
 		})
@@ -95,7 +96,7 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 
 		// Publish same event twice (same ID = deduplication)
-		event := &eventsourcing.Event{
+		event := &domain.Event{
 			ID:            "idempotent-event-1",
 			AggregateID:   "agg-2",
 			AggregateType: "IdempotentAggregate",
@@ -103,16 +104,16 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 			Version:       1,
 			Timestamp:     time.Now(),
 			Data:          []byte("test"),
-			Metadata:      eventsourcing.EventMetadata{},
+			Metadata:      domain.EventMetadata{},
 		}
 
 		// Publish twice
-		err = bus.Publish([]*eventsourcing.Event{event})
+		err = bus.Publish([]*domain.Event{event})
 		if err != nil {
 			t.Fatalf("first publish failed: %v", err)
 		}
 
-		err = bus.Publish([]*eventsourcing.Event{event})
+		err = bus.Publish([]*domain.Event{event})
 		if err != nil {
 			t.Fatalf("second publish failed: %v", err)
 		}
@@ -135,13 +136,13 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 	})
 
 	t.Run("MultipleSubscribers", func(t *testing.T) {
-		received1 := make(chan *eventsourcing.Event, 1)
-		received2 := make(chan *eventsourcing.Event, 1)
+		received1 := make(chan *domain.Event, 1)
+		received2 := make(chan *domain.Event, 1)
 
 		// First subscriber
-		sub1, err := bus.Subscribe(eventsourcing.EventFilter{
+		sub1, err := bus.Subscribe(messaging.EventFilter{
 			AggregateTypes: []string{"MultiSubAggregate"},
-		}, func(envelope *eventsourcing.EventEnvelope) error {
+		}, func(envelope *domain.EventEnvelope) error {
 			received1 <- &envelope.Event
 			return nil
 		})
@@ -151,9 +152,9 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 		defer sub1.Unsubscribe()
 
 		// Second subscriber
-		sub2, err := bus.Subscribe(eventsourcing.EventFilter{
+		sub2, err := bus.Subscribe(messaging.EventFilter{
 			AggregateTypes: []string{"MultiSubAggregate"},
-		}, func(envelope *eventsourcing.EventEnvelope) error {
+		}, func(envelope *domain.EventEnvelope) error {
 			received2 <- &envelope.Event
 			return nil
 		})
@@ -165,7 +166,7 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 
 		// Publish event
-		event := &eventsourcing.Event{
+		event := &domain.Event{
 			ID:            "multi-sub-event-1",
 			AggregateID:   "agg-3",
 			AggregateType: "MultiSubAggregate",
@@ -173,10 +174,10 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 			Version:       1,
 			Timestamp:     time.Now(),
 			Data:          []byte("test"),
-			Metadata:      eventsourcing.EventMetadata{},
+			Metadata:      domain.EventMetadata{},
 		}
 
-		err = bus.Publish([]*eventsourcing.Event{event})
+		err = bus.Publish([]*domain.Event{event})
 		if err != nil {
 			t.Fatalf("failed to publish: %v", err)
 		}

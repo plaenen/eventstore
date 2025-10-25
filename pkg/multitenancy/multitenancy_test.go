@@ -2,11 +2,38 @@ package multitenancy
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
+	"github.com/plaenen/eventstore/pkg/domain"
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
 )
+
+// testApplier is a simple applier for testing that actually updates the aggregate state
+type testApplier struct{}
+
+func (a *testApplier) ApplyAccountOpenedEvent(agg *accountv1.AccountAggregate, e *accountv1.AccountOpenedEvent) error {
+	agg.AccountId = e.AccountId
+	agg.OwnerName = e.OwnerName
+	agg.Balance = e.InitialBalance
+	return nil
+}
+
+func (a *testApplier) ApplyMoneyDepositedEvent(agg *accountv1.AccountAggregate, e *accountv1.MoneyDepositedEvent) error {
+	// For testing, we don't need to implement this
+	return nil
+}
+
+func (a *testApplier) ApplyMoneyWithdrawnEvent(agg *accountv1.AccountAggregate, e *accountv1.MoneyWithdrawnEvent) error {
+	// For testing, we don't need to implement this
+	return nil
+}
+
+func (a *testApplier) ApplyAccountClosedEvent(agg *accountv1.AccountAggregate, e *accountv1.AccountClosedEvent) error {
+	// For testing, we don't need to implement this
+	return nil
+}
 
 func TestSharedDatabaseTenantIsolation(t *testing.T) {
 	// Create shared database multi-tenant store
@@ -31,24 +58,27 @@ func TestSharedDatabaseTenantIsolation(t *testing.T) {
 		t.Fatalf("Failed to get store for tenant A: %v", err)
 	}
 
-	repoA := accountv1.NewAccountRepository(storeA)
-	accountA := accountv1.NewAccount(aggregateIDA)
+	applier := &testApplier{}
+	repoA := accountv1.NewAccountRepository(storeA, func(id string) *accountv1.AccountAggregate {
+		return accountv1.NewAccount(id, applier)
+	})
+	accountA := accountv1.NewAccount(aggregateIDA, applier)
 
 	commandIDA := eventsourcing.GenerateID()
 	accountA.SetCommandID(commandIDA)
 
-	err = accountA.OpenAccount(tenantACtx, &accountv1.OpenAccountCommand{
+	err = accountA.ApplyAccountOpenedEvent(&accountv1.AccountOpenedEvent{
 		AccountId:      aggregateIDA,
 		OwnerName:      "Alice",
 		InitialBalance: "1000.00",
-	}, eventsourcing.EventMetadata{
+	}, accountv1.WithMetadata(domain.EventMetadata{
 		CausationID:   commandIDA,
 		CorrelationID: eventsourcing.GenerateID(),
 		PrincipalID:   "user-alice",
 		TenantID:      "tenant-a",
-	})
+	}))
 	if err != nil {
-		t.Fatalf("Failed to open account for tenant A: %v", err)
+		t.Fatalf("Failed to apply event for tenant A: %v", err)
 	}
 
 	_, err = repoA.SaveWithCommand(accountA, commandIDA)
@@ -67,24 +97,26 @@ func TestSharedDatabaseTenantIsolation(t *testing.T) {
 		t.Fatalf("Failed to get store for tenant B: %v", err)
 	}
 
-	repoB := accountv1.NewAccountRepository(storeB)
-	accountB := accountv1.NewAccount(aggregateIDB)
+	repoB := accountv1.NewAccountRepository(storeB, func(id string) *accountv1.AccountAggregate {
+		return accountv1.NewAccount(id, applier)
+	})
+	accountB := accountv1.NewAccount(aggregateIDB, applier)
 
 	commandIDB := eventsourcing.GenerateID()
 	accountB.SetCommandID(commandIDB)
 
-	err = accountB.OpenAccount(tenantBCtx, &accountv1.OpenAccountCommand{
+	err = accountB.ApplyAccountOpenedEvent(&accountv1.AccountOpenedEvent{
 		AccountId:      aggregateIDB,
 		OwnerName:      "Bob",
 		InitialBalance: "2000.00",
-	}, eventsourcing.EventMetadata{
+	}, accountv1.WithMetadata(domain.EventMetadata{
 		CausationID:   commandIDB,
 		CorrelationID: eventsourcing.GenerateID(),
 		PrincipalID:   "user-bob",
 		TenantID:      "tenant-b",
-	})
+	}))
 	if err != nil {
-		t.Fatalf("Failed to open account for tenant B: %v", err)
+		t.Fatalf("Failed to apply event for tenant B: %v", err)
 	}
 
 	_, err = repoB.SaveWithCommand(accountB, commandIDB)
@@ -266,6 +298,14 @@ func TestTenantContext(t *testing.T) {
 }
 
 func TestDatabasePerTenant(t *testing.T) {
+	// Clean up any existing test database files
+	os.Remove("/tmp/test_tenant_tenant-x.db")
+	os.Remove("/tmp/test_tenant_tenant-x.db-shm")
+	os.Remove("/tmp/test_tenant_tenant-x.db-wal")
+	os.Remove("/tmp/test_tenant_tenant-y.db")
+	os.Remove("/tmp/test_tenant_tenant-y.db-shm")
+	os.Remove("/tmp/test_tenant_tenant-y.db-wal")
+
 	// Create database-per-tenant store
 	multiStore, err := NewMultiTenantEventStore(MultiTenantConfig{
 		Strategy:             DatabasePerTenant,
@@ -275,7 +315,16 @@ func TestDatabasePerTenant(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create multi-tenant store: %v", err)
 	}
-	defer multiStore.Close()
+	defer func() {
+		multiStore.Close()
+		// Clean up database files after test
+		os.Remove("/tmp/test_tenant_tenant-x.db")
+		os.Remove("/tmp/test_tenant_tenant-x.db-shm")
+		os.Remove("/tmp/test_tenant_tenant-x.db-wal")
+		os.Remove("/tmp/test_tenant_tenant-y.db")
+		os.Remove("/tmp/test_tenant_tenant-y.db-shm")
+		os.Remove("/tmp/test_tenant_tenant-y.db-wal")
+	}()
 
 	// Tenant X context
 	tenantXCtx := WithTenantID(context.Background(), "tenant-x")
@@ -286,24 +335,27 @@ func TestDatabasePerTenant(t *testing.T) {
 		t.Fatalf("Failed to get store for tenant X: %v", err)
 	}
 
-	repoX := accountv1.NewAccountRepository(storeX)
-	accountX := accountv1.NewAccount("acc-001") // No tenant prefix needed!
+	applier := &testApplier{}
+	repoX := accountv1.NewAccountRepository(storeX, func(id string) *accountv1.AccountAggregate {
+		return accountv1.NewAccount(id, applier)
+	})
+	accountX := accountv1.NewAccount("acc-001", applier) // No tenant prefix needed!
 
 	commandIDX := eventsourcing.GenerateID()
 	accountX.SetCommandID(commandIDX)
 
-	err = accountX.OpenAccount(tenantXCtx, &accountv1.OpenAccountCommand{
+	err = accountX.ApplyAccountOpenedEvent(&accountv1.AccountOpenedEvent{
 		AccountId:      "acc-001",
 		OwnerName:      "Xavier",
 		InitialBalance: "5000.00",
-	}, eventsourcing.EventMetadata{
+	}, accountv1.WithMetadata(domain.EventMetadata{
 		CausationID:   commandIDX,
 		CorrelationID: eventsourcing.GenerateID(),
 		PrincipalID:   "user-xavier",
 		TenantID:      "tenant-x",
-	})
+	}))
 	if err != nil {
-		t.Fatalf("Failed to open account for tenant X: %v", err)
+		t.Fatalf("Failed to apply event for tenant X: %v", err)
 	}
 
 	_, err = repoX.SaveWithCommand(accountX, commandIDX)
@@ -319,24 +371,26 @@ func TestDatabasePerTenant(t *testing.T) {
 		t.Fatalf("Failed to get store for tenant Y: %v", err)
 	}
 
-	repoY := accountv1.NewAccountRepository(storeY)
-	accountY := accountv1.NewAccount("acc-001") // Same ID!
+	repoY := accountv1.NewAccountRepository(storeY, func(id string) *accountv1.AccountAggregate {
+		return accountv1.NewAccount(id, applier)
+	})
+	accountY := accountv1.NewAccount("acc-001", applier) // Same ID!
 
 	commandIDY := eventsourcing.GenerateID()
 	accountY.SetCommandID(commandIDY)
 
-	err = accountY.OpenAccount(tenantYCtx, &accountv1.OpenAccountCommand{
+	err = accountY.ApplyAccountOpenedEvent(&accountv1.AccountOpenedEvent{
 		AccountId:      "acc-001",
 		OwnerName:      "Yolanda",
 		InitialBalance: "6000.00",
-	}, eventsourcing.EventMetadata{
+	}, accountv1.WithMetadata(domain.EventMetadata{
 		CausationID:   commandIDY,
 		CorrelationID: eventsourcing.GenerateID(),
 		PrincipalID:   "user-yolanda",
 		TenantID:      "tenant-y",
-	})
+	}))
 	if err != nil {
-		t.Fatalf("Failed to open account for tenant Y: %v", err)
+		t.Fatalf("Failed to apply event for tenant Y: %v", err)
 	}
 
 	_, err = repoY.SaveWithCommand(accountY, commandIDY)

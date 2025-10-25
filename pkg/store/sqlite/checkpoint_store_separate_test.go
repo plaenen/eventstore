@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
-	"github.com/plaenen/eventstore/pkg/sqlite"
+	"github.com/plaenen/eventstore/pkg/store/sqlite"
 	_ "modernc.org/sqlite"
 )
 
