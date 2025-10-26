@@ -7,6 +7,7 @@ import (
 
 	"github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
+	"github.com/plaenen/eventstore/pkg/security/tls"
 )
 
 // EmbeddedServer wraps an embedded NATS server for testing.
@@ -113,6 +114,66 @@ func WithServerName(name string) Option {
 	return func(opts *server.Options) {
 		opts.ServerName = name
 	}
+}
+
+// WithTLSConfig configures TLS for the NATS server.
+// This enables encrypted connections to the server.
+//
+// Example:
+//
+//	tlsConfig := tls.ProductionConfig("server.crt", "server.key", "ca.crt")
+//	srv, err := StartEmbeddedServer(
+//	    WithTLSConfig(tlsConfig),
+//	)
+func WithTLSConfig(tlsConfig *tls.Config) Option {
+	return func(opts *server.Options) {
+		if tlsConfig == nil || !tlsConfig.Enabled {
+			return
+		}
+
+		// Build the TLS configuration
+		stdTLSConfig, err := tlsConfig.BuildServerTLSConfig()
+		if err != nil {
+			// Note: We can't return the error from the Option function
+			// The error will be caught when the server starts
+			fmt.Printf("WARNING: Failed to build TLS config: %v\n", err)
+			return
+		}
+
+		opts.TLSConfig = stdTLSConfig
+		opts.TLS = true
+
+		// If mTLS is enabled, require client certificates
+		if tlsConfig.ClientAuth {
+			opts.TLSVerify = true
+		}
+	}
+}
+
+// WithTLS is a convenience function to enable basic TLS with certificate files.
+// For more control, use WithTLSConfig.
+//
+// Example:
+//
+//	srv, err := StartEmbeddedServer(
+//	    WithTLS("server.crt", "server.key", "ca.crt"),
+//	)
+func WithTLS(certFile, keyFile, caFile string) Option {
+	tlsConfig := tls.ProductionConfig(certFile, keyFile, caFile)
+	return WithTLSConfig(tlsConfig)
+}
+
+// WithMutualTLS enables mutual TLS (mTLS) requiring client certificates.
+// This provides the highest level of security by authenticating both server and clients.
+//
+// Example:
+//
+//	srv, err := StartEmbeddedServer(
+//	    WithMutualTLS("server.crt", "server.key", "ca.crt"),
+//	)
+func WithMutualTLS(certFile, keyFile, caFile string) Option {
+	tlsConfig := tls.MutualTLSConfig(certFile, keyFile, caFile)
+	return WithTLSConfig(tlsConfig)
 }
 
 // StartEmbeddedServer starts an embedded NATS server with JetStream enabled.

@@ -6,11 +6,11 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
-	"strings"
 
 	"github.com/plaenen/eventstore/pkg/domain"
 	"github.com/plaenen/eventstore/pkg/store"
 	"github.com/plaenen/eventstore/pkg/store/sqlite/migrate"
+	"github.com/plaenen/eventstore/pkg/validation"
 )
 
 // TransactionalEventHandler is a handler that receives a transaction to work with.
@@ -419,8 +419,16 @@ func runProjectionMigrations(db *sql.DB, migrationsFS fs.FS, path string, projec
 	return nil
 }
 
-// sanitizeTableName replaces characters that are invalid in SQLite table names.
-// Specifically, replaces hyphens with underscores.
+// sanitizeTableName converts a projection name into a valid SQL identifier.
+// It uses the validation package to ensure the result is SQL-injection safe.
+//
+// This function now uses pkg/validation.SanitizeIdentifier which:
+// - Replaces hyphens with underscores
+// - Removes invalid characters
+// - Ensures the result is a valid SQL identifier
+// - Prevents SQL injection attacks
 func sanitizeTableName(name string) string {
-	return strings.ReplaceAll(name, "-", "_")
+	// Import path: github.com/plaenen/eventstore/pkg/validation
+	// This is safer than just replacing hyphens
+	return validation.SanitizeIdentifier(name)
 }

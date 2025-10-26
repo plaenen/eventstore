@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/plaenen/eventstore/pkg/validation"
 )
 
 // Migration represents a single database migration.
@@ -29,7 +31,17 @@ type Migrator struct {
 
 // New creates a new migrator instance.
 // tableName is the name of the table used to track migrations (e.g., "schema_migrations").
+//
+// SECURITY: The tableName is validated to prevent SQL injection attacks.
+// It must be a valid SQL identifier (alphanumeric and underscores only).
+// If invalid, the migrator will panic during initialization.
 func New(db *sql.DB, tableName string) *Migrator {
+	// Validate table name to prevent SQL injection
+	// This is critical because tableName is used in fmt.Sprintf for SQL queries
+	if err := validateTableName(tableName); err != nil {
+		panic(fmt.Sprintf("invalid migration table name %q: %v", tableName, err))
+	}
+
 	return &Migrator{
 		db:         db,
 		migrations: []Migration{},
@@ -256,4 +268,17 @@ func (m *Migrator) Version() (int, error) {
 // currentTimestamp returns the current Unix timestamp.
 func currentTimestamp() int64 {
 	return time.Now().Unix()
+}
+
+// validateTableName validates that a table name is a safe SQL identifier.
+// This prevents SQL injection attacks when table names are used in dynamic SQL.
+//
+// The validation uses pkg/validation.ValidateTableName which ensures:
+// - Only alphanumeric characters and underscores
+// - Must start with a letter or underscore
+// - Maximum length of 128 characters
+// - Not a reserved SQL keyword
+// - No SQL injection patterns
+func validateTableName(tableName string) error {
+	return validation.ValidateTableName(tableName)
 }

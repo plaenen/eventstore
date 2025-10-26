@@ -3,17 +3,20 @@ package runner
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sync"
 	"time"
 )
 
 // Runner manages the lifecycle of multiple services.
-// It handles concurrent startup, graceful shutdown, and error aggregation.
+// It handles concurrent startup, graceful shutdown, error aggregation, and configuration updates.
 type Runner struct {
 	services        []Service
 	logger          Logger
 	shutdownTimeout time.Duration
 	startupTimeout  time.Duration
+	configProvider  interface{} // Generic config provider
+	configWatchStop func()      // Function to stop config watching
 }
 
 // Option configures a Runner.
@@ -39,6 +42,15 @@ func WithShutdownTimeout(timeout time.Duration) Option {
 func WithStartupTimeout(timeout time.Duration) Option {
 	return func(r *Runner) {
 		r.startupTimeout = timeout
+	}
+}
+
+// WithConfigProvider sets a configuration provider that watches for config changes.
+// When configuration changes, all ConfigurableService instances will be notified.
+// The provider must have a Watch(ctx, handler) method.
+func WithConfigProvider(provider interface{}) Option {
+	return func(r *Runner) {
+		r.configProvider = provider
 	}
 }
 
@@ -104,8 +116,22 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	r.logger.Info("all services started successfully")
 
+	// Start config watching if provider is set
+	if r.configProvider != nil {
+		if err := r.startConfigWatch(ctx, started); err != nil {
+			r.logger.Error("failed to start config watching",
+				"error", err)
+			// Continue anyway - config updates are optional
+		}
+	}
+
 	// Wait for shutdown signal or context cancellation
 	<-ctx.Done()
+
+	// Stop config watching
+	if r.configWatchStop != nil {
+		r.configWatchStop()
+	}
 
 	// Graceful shutdown
 	r.logger.Info("shutting down services gracefully",
@@ -185,5 +211,96 @@ func (r *Runner) HealthCheck(ctx context.Context) error {
 			}
 		}
 	}
+	return nil
+}
+
+// startConfigWatch starts watching configuration changes using reflection
+// to call the Watch method on the provider
+func (r *Runner) startConfigWatch(ctx context.Context, services []Service) error {
+	// Use reflection to call Watch method
+	// This allows us to support any config.Provider[T] without type parameters
+	providerValue := reflect.ValueOf(r.configProvider)
+	watchMethod := providerValue.MethodByName("Watch")
+
+	if !watchMethod.IsValid() {
+		return fmt.Errorf("config provider does not have Watch method")
+	}
+
+	// Create a handler function that will be called on config updates
+	handlerFunc := func(configValue reflect.Value) {
+		r.logger.Info("configuration updated, notifying services")
+
+		// Extract the actual config value
+		config := configValue.Interface()
+
+		// Notify all ConfigurableService instances
+		for _, service := range services {
+			if cs, ok := service.(ConfigurableService); ok {
+				r.logger.Info("updating service configuration",
+					"service", service.Name())
+
+				// Validate first if service implements ConfigValidator
+				if cv, ok := service.(ConfigValidator); ok {
+					if err := cv.ValidateConfig(config); err != nil {
+						r.logger.Error("config validation failed",
+							"service", service.Name(),
+							"error", err)
+						continue
+					}
+				}
+
+				// Apply configuration
+				updateCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				if err := cs.UpdateConfig(updateCtx, config); err != nil {
+					r.logger.Error("failed to update service configuration",
+						"service", service.Name(),
+						"error", err)
+				} else {
+					r.logger.Info("service configuration updated",
+						"service", service.Name())
+				}
+				cancel()
+			}
+		}
+	}
+
+	// Create the handler function value that matches Watch's expected signature
+	handlerType := watchMethod.Type().In(1)
+	handler := reflect.MakeFunc(handlerType, func(args []reflect.Value) []reflect.Value {
+		if len(args) > 0 {
+			handlerFunc(args[0])
+		}
+		return nil
+	})
+
+	// Call Watch(ctx, handler)
+	results := watchMethod.Call([]reflect.Value{
+		reflect.ValueOf(ctx),
+		handler,
+	})
+
+	// Check for error return
+	if len(results) != 2 {
+		return fmt.Errorf("Watch method has unexpected signature")
+	}
+
+	// Get stop function
+	stopFunc := results[0]
+	if stopFunc.IsNil() {
+		return fmt.Errorf("Watch returned nil stop function")
+	}
+
+	// Store stop function
+	r.configWatchStop = func() {
+		stopFunc.Call(nil)
+	}
+
+	// Check for error
+	errValue := results[1]
+	if !errValue.IsNil() {
+		return errValue.Interface().(error)
+	}
+
+	r.logger.Info("configuration watching started")
 	return nil
 }

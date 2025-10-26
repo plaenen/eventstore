@@ -10,6 +10,7 @@ import (
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"github.com/plaenen/eventstore/pkg/observability"
 	"github.com/plaenen/eventstore/pkg/security/credentials"
+	"github.com/plaenen/eventstore/pkg/security/tls"
 	"go.opentelemetry.io/otel/propagation"
 	"google.golang.org/protobuf/proto"
 )
@@ -34,6 +35,11 @@ type TransportConfig struct {
 	// CredentialProvider provides secure credential management
 	// Use this instead of Token/User/Pass for production deployments
 	CredentialProvider credentials.Provider
+
+	// TLSConfig provides TLS/mTLS configuration for secure connections
+	// When enabled, connections will use TLS encryption
+	// Set ClientAuth to true for mutual TLS (mTLS)
+	TLSConfig *tls.Config
 
 	// Deprecated: Use CredentialProvider instead
 	// Token is a bearer token for authentication (INSECURE - plaintext)
@@ -136,6 +142,15 @@ func NewTransport(config *TransportConfig) (*Transport, error) {
 			fmt.Printf("WARNING: Using deprecated User/Pass fields. Please migrate to CredentialProvider for secure credential management.\n")
 			opts = append(opts, nats.UserInfo(config.User, config.Pass))
 		}
+	}
+
+	// Add TLS configuration if provided
+	if config.TLSConfig != nil && config.TLSConfig.Enabled {
+		tlsConfig, err := config.TLSConfig.BuildClientTLSConfig()
+		if err != nil {
+			return nil, fmt.Errorf("failed to build TLS config: %w", err)
+		}
+		opts = append(opts, nats.Secure(tlsConfig))
 	}
 
 	// Connect to NATS
