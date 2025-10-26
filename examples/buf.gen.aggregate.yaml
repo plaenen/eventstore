@@ -1,0 +1,37 @@
+# buf.gen.aggregate.yaml
+# Buf configuration for generating ONLY aggregates
+# This generates: aggregates, event appliers, repository, and projection SDK
+# Does NOT generate: client, server, or handler files
+#
+# Usage:
+#   cd examples
+#   buf generate --template buf.gen.aggregate.yaml
+#
+# What gets generated:
+#   - pb/**/account_aggregate.es.pb.go (aggregates, appliers, repo, projections)
+#   - NO client files (*_client.es.pb.go, *_sdk.es.pb.go)
+#   - NO server files (*_server.es.pb.go, *_handler.es.pb.go)
+
+version: v2
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/plaenen/eventstore/examples/pb
+  disable:
+    - file_option: go_package
+      path: eventsourcing/options.proto
+
+plugins:
+  # Generate protobuf messages
+  - remote: buf.build/protocolbuffers/go
+    out: pb
+    opt:
+      - paths=source_relative
+
+  # Generate Event Sourcing boilerplate - AGGREGATE MODE ONLY
+  - local: ["go", "run", "github.com/plaenen/eventstore/cmd/protoc-gen-eventsourcing"]
+    out: pb
+    opt:
+      - paths=source_relative
+      - generate=aggregate  # ✅ Only generate aggregates + projections

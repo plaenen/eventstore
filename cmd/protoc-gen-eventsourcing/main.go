@@ -10,6 +10,25 @@
 //   - *_handler.es.pb.go - Handler interfaces for server implementations
 //   - *_server.es.pb.go - Server-side routing and request handling
 //
+// Generation modes (use --eventsourcing_opt=generate=MODE):
+//   - all (default) - Generate all files
+//   - aggregate - Only generate *_aggregate.es.pb.go
+//                 Includes: aggregates, event appliers, repository, and projection SDK
+//   - client - Only generate *_client.es.pb.go and *_sdk.es.pb.go
+//              Includes: type-safe SDK clients for commands and queries
+//   - server - Only generate *_server.es.pb.go and *_handler.es.pb.go
+//              Includes: handler interfaces and server-side routing
+//
+// Example usage:
+//   # Generate all files (default)
+//   protoc --go_out=. --eventsourcing_out=. proto/**/*.proto
+//
+//   # Generate only aggregates
+//   protoc --go_out=. --eventsourcing_out=. --eventsourcing_opt=generate=aggregate proto/**/*.proto
+//
+//   # Generate only client files
+//   protoc --go_out=. --eventsourcing_out=. --eventsourcing_opt=generate=client proto/**/*.proto
+//
 // Configuration via Proto Options:
 //
 // The plugin uses custom proto options (defined in eventsourcing/options.proto):
@@ -36,6 +55,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"strings"
 
 	"google.golang.org/protobuf/compiler/protogen"
@@ -47,8 +67,22 @@ import (
 
 var version = "0.0.11"
 
+// Generation mode controls what files to generate
+type GenerationMode string
+
+const (
+	GenerateModeAll       GenerationMode = "all"       // Generate all files (default)
+	GenerateModeAggregate GenerationMode = "aggregate" // Only generate *_aggregate.es.pb.go
+	GenerateModeClient    GenerationMode = "client"    // Only generate *_client.es.pb.go and *_sdk.es.pb.go
+	GenerateModeServer    GenerationMode = "server"    // Only generate *_server.es.pb.go and *_handler.es.pb.go
+)
+
+var generateMode GenerationMode = GenerateModeAll
+
 func main() {
 	var flags flag.FlagSet
+	flags.Var((*genModeFlag)(&generateMode), "generate",
+		"Controls what files to generate: all (default), aggregate, client, or server")
 
 	protogen.Options{
 		ParamFunc: flags.Set,
@@ -65,6 +99,27 @@ func main() {
 
 		return nil
 	})
+}
+
+// genModeFlag implements flag.Value for GenerationMode
+type genModeFlag GenerationMode
+
+func (g *genModeFlag) String() string {
+	return string(*g)
+}
+
+func (g *genModeFlag) Set(s string) error {
+	switch s {
+	case "all", "aggregate", "client", "server":
+		*g = genModeFlag(s)
+		return nil
+	default:
+		return fmt.Errorf("invalid generate mode: %s (must be: all, aggregate, client, or server)", s)
+	}
+}
+
+func (g *genModeFlag) Get() interface{} {
+	return GenerationMode(*g)
 }
 
 func generateFile(gen *protogen.Plugin, file *protogen.File) {
@@ -88,7 +143,9 @@ func generateFile(gen *protogen.Plugin, file *protogen.File) {
 	}
 
 	// Generate aggregate file only if there are aggregates or events
-	if len(aggregates) > 0 || hasEvents {
+	// and if mode allows it
+	if (generateMode == GenerateModeAll || generateMode == GenerateModeAggregate) &&
+		(len(aggregates) > 0 || hasEvents) {
 		aggregateFilename := file.GeneratedFilenamePrefix + "_aggregate.es.pb.go"
 		g := gen.NewGeneratedFile(aggregateFilename, file.GoImportPath)
 
@@ -103,12 +160,16 @@ func generateFile(gen *protogen.Plugin, file *protogen.File) {
 	// Generate service-related files if there are commands or queries
 	if len(services) > 0 {
 		// Only generate client/SDK files if there are matching aggregates
-		if hasServiceContent(aggregates, services) {
+		// and if mode allows it
+		if (generateMode == GenerateModeAll || generateMode == GenerateModeClient) &&
+			hasServiceContent(aggregates, services) {
 			generateSDKClient(gen, file, aggregates, services)
 			generateUnifiedSDK(gen, file, aggregates, services)
 		}
 		// Always generate server and handler files if services have methods
-		if hasServiceMethods(services) {
+		// and if mode allows it
+		if (generateMode == GenerateModeAll || generateMode == GenerateModeServer) &&
+			hasServiceMethods(services) {
 			generateServerService(gen, file, aggregates, services)
 			generateHandlerInterfaces(gen, file, aggregates, services)
 		}
