@@ -167,7 +167,7 @@ func (vr *ValidationResult) SetMetadata(key string, value interface{}) {
 	vr.Metadata[key] = value
 }
 
-func (vr *ValidationResult) ToValidationError() error {
+func (vr *ValidationResult) Error() error {
 	// If the validation result is valid, return nil
 	if vr.IsValid {
 		return nil
