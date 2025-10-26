@@ -2,8 +2,6 @@ package validators
 
 import (
 	"fmt"
-
-	"github.com/plaenen/eventstore/pkg/eventsourcing"
 )
 
 // ValidationCode represents the type of validation result
@@ -169,24 +167,25 @@ func (vr *ValidationResult) SetMetadata(key string, value interface{}) {
 	vr.Metadata[key] = value
 }
 
-func (vr *ValidationResult) ToAppError() *eventsourcing.AppError {
+func (vr *ValidationResult) ToValidationError() error {
 	// If the validation result is valid, return nil
 	if vr.IsValid {
 		return nil
 	}
 
-	// Create a new app error
-	appError := &eventsourcing.AppError{
-		Code:     string(vr.ValidationCode),
-		Message:  vr.Message,
-		Solution: vr.SuggestedAction,
+	// Create a new validation error
+	err := &ValidationError{
+		Code:            string(vr.ValidationCode),
+		Message:         vr.Message,
+		SuggestedAction: vr.SuggestedAction,
+		Details:         make(map[string]string),
 	}
 	for key, value := range vr.Metadata {
-		appError.Details[key] = fmt.Sprintf("%v", value)
+		err.Details[key] = fmt.Sprintf("%v", value)
 	}
-	appError.Details["field_name"] = vr.FieldName
-	appError.Details["value"] = vr.Value
-	return appError
+	err.Details["field_name"] = vr.FieldName
+	err.Details["value"] = vr.Value
+	return err
 }
 
 // ValidationBuilder helps build collections of validation results
