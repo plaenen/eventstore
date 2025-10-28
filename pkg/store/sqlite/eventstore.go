@@ -5,11 +5,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/plaenen/eventstore/pkg/domain"
 	"github.com/plaenen/eventstore/pkg/store/sqlite/sqlcgen"
+	"github.com/plaenen/eventstore/pkg/validation"
 	_ "modernc.org/sqlite" // Pure Go SQLite driver
 )
 
@@ -186,6 +188,11 @@ func (s *EventStore) AppendEvents(aggregateID string, expectedVersion int64, eve
 		return nil
 	}
 
+	// Validate inputs before any database operations (SCOPE: Infrastructure/Input Validation)
+	if err := validateAppendEventsInput(aggregateID, events); err != nil {
+		return fmt.Errorf("input validation failed: %w", err)
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -261,6 +268,11 @@ func (s *EventStore) AppendEventsIdempotent(
 			CommandID: commandID,
 			Events:    nil,
 		}, nil
+	}
+
+	// Validate inputs before any database operations (SCOPE: Infrastructure/Input Validation)
+	if err := validateAppendEventsInput(aggregateID, events); err != nil {
+		return nil, fmt.Errorf("input validation failed: %w", err)
 	}
 
 	s.mu.Lock()
@@ -416,6 +428,76 @@ func (s *EventStore) updatePositions(tx *sql.Tx) error {
 	ctx := context.Background()
 	queries := sqlcgen.New(tx)
 	return queries.UpdateEventPositions(ctx)
+}
+
+// validateAppendEventsInput validates event data before database operations.
+// This provides defense-in-depth validation at the infrastructure layer.
+//
+// SCOPE: Infrastructure/Input Validation Layer
+// This ensures data integrity before any database operations are performed.
+//
+// Validates:
+//   - aggregate_id: must not be empty (aggregate scope)
+//   - For each event:
+//     - event_id: must not be empty (global scope)
+//     - aggregate_id: must match the parameter and not be empty (aggregate scope)
+//     - aggregate_type: must not be empty (domain scope)
+//     - event_type: must not be empty (domain scope)
+//   - For each unique constraint:
+//     - index_name: must not be empty (domain scope)
+//     - value: must not be empty (domain/aggregate scope)
+func validateAppendEventsInput(aggregateID string, events []*domain.Event) error {
+	// Validate aggregate ID (aggregate scope)
+	if err := validation.ValidateStringNotEmpty(aggregateID, "aggregate_id"); err != nil {
+		return err
+	}
+
+	// Validate each event
+	for i, event := range events {
+		if event == nil {
+			return fmt.Errorf("event at index %d is nil", i)
+		}
+
+		// Validate event ID (global scope)
+		if err := validation.ValidateStringNotEmpty(event.ID, "event_id"); err != nil {
+			return fmt.Errorf("event[%d]: %w", i, err)
+		}
+
+		// Validate aggregate ID matches (aggregate scope)
+		if err := validation.ValidateStringNotEmpty(event.AggregateID, "aggregate_id"); err != nil {
+			return fmt.Errorf("event[%d]: %w", i, err)
+		}
+		if event.AggregateID != aggregateID {
+			return fmt.Errorf("event[%d]: aggregate_id mismatch: event has %q, expected %q", i, event.AggregateID, aggregateID)
+		}
+
+		// Validate aggregate type (domain scope)
+		if strings.TrimSpace(event.AggregateType) == "" {
+			return fmt.Errorf("event[%d]: aggregate_type cannot be empty", i)
+		}
+
+		// Validate event type (domain scope)
+		if strings.TrimSpace(event.EventType) == "" {
+			return fmt.Errorf("event[%d]: event_type cannot be empty", i)
+		}
+
+		// Validate version (aggregate scope)
+		if err := validation.ValidateVersion(event.Version); err != nil {
+			return fmt.Errorf("event[%d]: %w", i, err)
+		}
+
+		// Validate unique constraints (domain scope)
+		for j, constraint := range event.UniqueConstraints {
+			if err := validation.ValidateStringNotEmpty(constraint.IndexName, "constraint.index_name"); err != nil {
+				return fmt.Errorf("event[%d].constraint[%d]: %w", i, j, err)
+			}
+			if err := validation.ValidateStringNotEmpty(constraint.Value, "constraint.value"); err != nil {
+				return fmt.Errorf("event[%d].constraint[%d]: %w", i, j, err)
+			}
+		}
+	}
+
+	return nil
 }
 
 // Continue in next file...
