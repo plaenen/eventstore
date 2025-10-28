@@ -13,21 +13,22 @@
 // Generation modes (use --eventsourcing_opt=generate=MODE):
 //   - all (default) - Generate all files
 //   - aggregate - Only generate *_aggregate.es.pb.go
-//                 Includes: aggregates, event appliers, repository, and projection SDK
+//     Includes: aggregates, event appliers, repository, and projection SDK
 //   - client - Only generate *_client.es.pb.go and *_sdk.es.pb.go
-//              Includes: type-safe SDK clients for commands and queries
+//     Includes: type-safe SDK clients for commands and queries
 //   - server - Only generate *_server.es.pb.go and *_handler.es.pb.go
-//              Includes: handler interfaces and server-side routing
+//     Includes: handler interfaces and server-side routing
 //
 // Example usage:
-//   # Generate all files (default)
-//   protoc --go_out=. --eventsourcing_out=. proto/**/*.proto
 //
-//   # Generate only aggregates
-//   protoc --go_out=. --eventsourcing_out=. --eventsourcing_opt=generate=aggregate proto/**/*.proto
+//	# Generate all files (default)
+//	protoc --go_out=. --eventsourcing_out=. proto/**/*.proto
 //
-//   # Generate only client files
-//   protoc --go_out=. --eventsourcing_out=. --eventsourcing_opt=generate=client proto/**/*.proto
+//	# Generate only aggregates
+//	protoc --go_out=. --eventsourcing_out=. --eventsourcing_opt=generate=aggregate proto/**/*.proto
+//
+//	# Generate only client files
+//	protoc --go_out=. --eventsourcing_out=. --eventsourcing_opt=generate=client proto/**/*.proto
 //
 // Configuration via Proto Options:
 //
@@ -65,7 +66,7 @@ import (
 	eventsourcing "github.com/plaenen/eventstore/pkg/eventsourcing"
 )
 
-var version = "0.0.11"
+var version = "0.0.15"
 
 // Generation mode controls what files to generate
 type GenerationMode string
