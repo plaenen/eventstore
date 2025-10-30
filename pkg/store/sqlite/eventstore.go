@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -12,7 +13,33 @@ import (
 	"github.com/plaenen/eventstore/pkg/domain"
 	"github.com/plaenen/eventstore/pkg/store/sqlite/sqlcgen"
 	"github.com/plaenen/eventstore/pkg/validation"
-	_ "modernc.org/sqlite" // Pure Go SQLite driver
+
+	// _ "modernc.org/sqlite" // Pure Go SQLite driver
+	//
+	// LibSQL driver (github.com/tursodatabase/go-libsql) provides enhanced capabilities:
+	//
+	// Schema Evolution:
+	//   - ✅ ALTER TABLE ADD COLUMN (standard SQLite)
+	//   - ✅ ALTER TABLE RENAME COLUMN (LibSQL extension)
+	//   - ✅ ALTER TABLE DROP COLUMN (LibSQL extension)
+	//   - ✅ ALTER TABLE RENAME TO (standard SQLite)
+	//
+	// Deployment Modes:
+	//   - ✅ Local files (traditional SQLite)
+	//   - ✅ Remote databases (Turso cloud)
+	//   - ✅ Embedded replicas (local-first with cloud sync)
+	//
+	// Performance & Features:
+	//   - ✅ Randomized ROWID for better performance
+	//   - ✅ Virtual write-ahead log interface
+	//   - ✅ Native vector search
+	//   - ✅ FTS5 full-text search
+	//   - ✅ R*Tree spatial indexing
+	//   - ✅ JSON functions
+	//   - ✅ Encryption at rest
+	//   - ✅ Crypto, Fuzzy, Math, Stats, Text, UUID extensions from SQLean
+	//   - ✅ WebAssembly User Defined Functions
+	_ "github.com/tursodatabase/go-libsql"
 )
 
 // EventStore is a SQLite-based implementation of domain.EventStore.
@@ -27,6 +54,10 @@ type EventStore struct {
 type eventStoreConfig struct {
 	// dsn is the data source name (file path or ":memory:" for in-memory)
 	dsn string
+
+	// connector is an optional driver.Connector for advanced LibSQL features
+	// When set, this takes precedence over dsn
+	connector driver.Connector
 
 	// maxOpenConns sets the maximum number of open connections
 	maxOpenConns int
@@ -106,23 +137,118 @@ func WithAutoMigrate(enabled bool) EventStoreOption {
 	}
 }
 
-// NewEventStore creates a new SQLite event store with the given options.
+// WithLibSQLConnector sets a custom driver.Connector for advanced LibSQL features.
+// This allows full control over embedded replicas, encryption, and other LibSQL features.
+//
+// Example with embedded replica:
+//
+//	import libsql "github.com/tursodatabase/go-libsql"
+//
+//	connector := libsql.NewEmbeddedReplicaConnector(
+//	    "local.db",
+//	    "libsql://mydb.turso.io",
+//	    libsql.WithAuthToken(os.Getenv("TURSO_AUTH_TOKEN")),
+//	    libsql.WithSyncInterval(time.Minute),
+//	)
+//	store, err := sqlite.NewEventStore(sqlite.WithLibSQLConnector(connector))
+func WithLibSQLConnector(connector driver.Connector) EventStoreOption {
+	return func(c *eventStoreConfig) {
+		c.connector = connector
+	}
+}
+
+// WithLibSQLRemote configures the event store to connect to a remote LibSQL/Turso database.
+// This is useful for cloud-hosted databases like Turso.
+//
+// Example:
+//
+//	store, err := sqlite.NewEventStore(
+//	    sqlite.WithLibSQLRemote(
+//	        "libsql://mydb.turso.io",
+//	        os.Getenv("TURSO_AUTH_TOKEN"),
+//	    ),
+//	)
+func WithLibSQLRemote(url, authToken string) EventStoreOption {
+	return func(c *eventStoreConfig) {
+		if authToken != "" {
+			c.dsn = fmt.Sprintf("%s?authToken=%s", url, authToken)
+		} else {
+			c.dsn = url
+		}
+	}
+}
+
+// WithLibSQLEmbeddedReplica configures the event store with local-first embedded replica.
+// This provides offline-first capabilities with automatic synchronization to a remote database.
+//
+// The embedded replica maintains a local copy of the database for fast reads/writes,
+// and periodically syncs with the remote server.
+//
+// Example:
+//
+//	store, err := sqlite.NewEventStore(
+//	    sqlite.WithLibSQLEmbeddedReplica(
+//	        "local-events.db",
+//	        "libsql://mydb.turso.io",
+//	        os.Getenv("TURSO_AUTH_TOKEN"),
+//	    ),
+//	)
+//
+// Note: For advanced features like custom sync intervals, use WithLibSQLConnector instead.
+func WithLibSQLEmbeddedReplica(localPath, remoteURL, authToken string) EventStoreOption {
+	return func(c *eventStoreConfig) {
+		// Build DSN with embedded replica parameters
+		// Format: file:local.db?_sync_url=libsql://remote&_auth_token=xxx
+		dsn := fmt.Sprintf("file:%s?_embedded_replica=1&_sync_url=%s", localPath, remoteURL)
+		if authToken != "" {
+			dsn = fmt.Sprintf("%s&_auth_token=%s", dsn, authToken)
+		}
+		c.dsn = dsn
+	}
+}
+
+// NewEventStore creates a new LibSQL-powered event store with the given options.
+//
+// Supports three deployment modes:
+//   1. Local file - Traditional SQLite file on disk
+//   2. Remote - Cloud-hosted LibSQL/Turso database
+//   3. Embedded Replica - Local-first with cloud sync
 //
 // Example usage:
 //
-//	// Use defaults (eventstore.db, WAL mode, auto-migrate)
+//	// Local file (default)
 //	store, err := sqlite.NewEventStore()
 //
 //	// In-memory database for testing
 //	store, err := sqlite.NewEventStore(
-//	    sqlite.WithDSN(":memory:"),
+//	    sqlite.WithMemoryDatabase(),
 //	)
 //
-//	// Custom configuration
+//	// Remote Turso database
 //	store, err := sqlite.NewEventStore(
-//	    sqlite.WithDSN("/path/to/db"),
-//	    sqlite.WithMaxOpenConns(50),
-//	    sqlite.WithWALMode(true),
+//	    sqlite.WithLibSQLRemote(
+//	        "libsql://mydb.turso.io",
+//	        os.Getenv("TURSO_AUTH_TOKEN"),
+//	    ),
+//	)
+//
+//	// Embedded replica (local-first with cloud sync)
+//	store, err := sqlite.NewEventStore(
+//	    sqlite.WithLibSQLEmbeddedReplica(
+//	        "local-events.db",
+//	        "libsql://mydb.turso.io",
+//	        os.Getenv("TURSO_AUTH_TOKEN"),
+//	    ),
+//	)
+//
+//	// Advanced: Custom connector
+//	connector := libsql.NewEmbeddedReplicaConnector(
+//	    "local.db", "libsql://mydb.turso.io",
+//	    libsql.WithAuthToken(token),
+//	    libsql.WithSyncInterval(time.Minute),
+//	)
+//	store, err := sqlite.NewEventStore(
+//	    sqlite.WithLibSQLConnector(connector),
 //	)
 func NewEventStore(opts ...EventStoreOption) (*EventStore, error) {
 	// Start with defaults and apply options
@@ -131,9 +257,17 @@ func NewEventStore(opts ...EventStoreOption) (*EventStore, error) {
 		opt(&config)
 	}
 
-	db, err := sql.Open("sqlite", config.dsn)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open database: %w", err)
+	var db *sql.DB
+	var err error
+
+	// Prefer connector over DSN if both are provided
+	if config.connector != nil {
+		db = sql.OpenDB(config.connector)
+	} else {
+		db, err = sql.Open("libsql", config.dsn)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open database: %w", err)
+		}
 	}
 
 	// For :memory: databases, we need to ensure we use a single connection
@@ -174,12 +308,24 @@ func NewEventStore(opts ...EventStoreOption) (*EventStore, error) {
 
 // setWALMode configures the database for WAL mode.
 func (s *EventStore) setWALMode() error {
-	_, err := s.db.Exec(`
-		PRAGMA journal_mode = WAL;
-		PRAGMA synchronous = NORMAL;
-		PRAGMA foreign_keys = ON;
-	`)
-	return err
+	// LibSQL requires executing PRAGMAs individually and may return results
+	// Use Query() instead of Exec() for PRAGMAs that return values
+	pragmas := []string{
+		"PRAGMA journal_mode = WAL",
+		"PRAGMA synchronous = NORMAL",
+		"PRAGMA foreign_keys = ON",
+	}
+
+	for _, pragma := range pragmas {
+		// Some PRAGMAs return rows, so use Query() then close
+		rows, err := s.db.Query(pragma)
+		if err != nil {
+			return fmt.Errorf("failed to execute %s: %w", pragma, err)
+		}
+		rows.Close()
+	}
+
+	return nil
 }
 
 // AppendEvents appends events to an aggregate's stream atomically.
@@ -439,13 +585,13 @@ func (s *EventStore) updatePositions(tx *sql.Tx) error {
 // Validates:
 //   - aggregate_id: must not be empty (aggregate scope)
 //   - For each event:
-//     - event_id: must not be empty (global scope)
-//     - aggregate_id: must match the parameter and not be empty (aggregate scope)
-//     - aggregate_type: must not be empty (domain scope)
-//     - event_type: must not be empty (domain scope)
+//   - event_id: must not be empty (global scope)
+//   - aggregate_id: must match the parameter and not be empty (aggregate scope)
+//   - aggregate_type: must not be empty (domain scope)
+//   - event_type: must not be empty (domain scope)
 //   - For each unique constraint:
-//     - index_name: must not be empty (domain scope)
-//     - value: must not be empty (domain/aggregate scope)
+//   - index_name: must not be empty (domain scope)
+//   - value: must not be empty (domain/aggregate scope)
 func validateAppendEventsInput(aggregateID string, events []*domain.Event) error {
 	// Validate aggregate ID (aggregate scope)
 	if err := validation.ValidateStringNotEmpty(aggregateID, "aggregate_id"); err != nil {

@@ -185,9 +185,17 @@ func (m *Migrator) applyMigration(migration Migration) error {
 	}
 	defer tx.Rollback()
 
-	// Execute migration SQL
-	if _, err := tx.Exec(migration.Up); err != nil {
-		return fmt.Errorf("failed to execute migration SQL: %w", err)
+	// Split SQL into individual statements and execute each one
+	// LibSQL doesn't support multi-statement execution in a single Exec()
+	statements := splitSQL(migration.Up)
+	for i, stmt := range statements {
+		stmt = strings.TrimSpace(stmt)
+		if stmt == "" {
+			continue
+		}
+		if _, err := tx.Exec(stmt); err != nil {
+			return fmt.Errorf("failed to execute statement %d: %w\nStatement: %s", i+1, err, stmt)
+		}
 	}
 
 	// Record migration
@@ -200,6 +208,36 @@ func (m *Migrator) applyMigration(migration Migration) error {
 	}
 
 	return tx.Commit()
+}
+
+// splitSQL splits a SQL string into individual statements by semicolons.
+// Removes SQL comments (-- style) before splitting.
+func splitSQL(sql string) []string {
+	// Remove single-line comments (--)
+	lines := strings.Split(sql, "\n")
+	var cleanedLines []string
+	for _, line := range lines {
+		// Find comment start
+		if idx := strings.Index(line, "--"); idx >= 0 {
+			line = line[:idx]
+		}
+		cleanedLines = append(cleanedLines, line)
+	}
+
+	cleaned := strings.Join(cleanedLines, "\n")
+
+	// Split by semicolon
+	parts := strings.Split(cleaned, ";")
+
+	var statements []string
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			statements = append(statements, trimmed)
+		}
+	}
+
+	return statements
 }
 
 // Down rolls back the last migration.

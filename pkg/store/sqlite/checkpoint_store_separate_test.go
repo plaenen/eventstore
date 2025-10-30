@@ -7,7 +7,7 @@ import (
 
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"github.com/plaenen/eventstore/pkg/store/sqlite"
-	_ "modernc.org/sqlite"
+	_ "github.com/tursodatabase/go-libsql"
 )
 
 func TestCheckpointStoreSeparateDatabase(t *testing.T) {
@@ -65,7 +65,7 @@ func TestCheckpointStoreSeparateDatabase(t *testing.T) {
 		defer eventStore.Close()
 
 		// Create a completely separate database for checkpoints
-		checkpointDB, err := sql.Open("sqlite", ":memory:")
+		checkpointDB, err := sql.Open("libsql", ":memory:")
 		if err != nil {
 			t.Fatalf("failed to open checkpoint database: %v", err)
 		}
@@ -135,7 +135,7 @@ func TestCheckpointStoreSeparateDatabase(t *testing.T) {
 
 	t.Run("SeparateDatabaseWithTransaction", func(t *testing.T) {
 		// Create projection database
-		projectionDB, err := sql.Open("sqlite", ":memory:")
+		projectionDB, err := sql.Open("libsql", ":memory:")
 		if err != nil {
 			t.Fatalf("failed to open projection database: %v", err)
 		}

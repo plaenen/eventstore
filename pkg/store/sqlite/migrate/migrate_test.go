@@ -5,14 +5,14 @@ import (
 	"embed"
 	"testing"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/tursodatabase/go-libsql"
 )
 
 //go:embed testdata/*.sql
 var testMigrationsFS embed.FS
 
 func TestMigrator(t *testing.T) {
-	db, err := sql.Open("sqlite", ":memory:")
+	db, err := sql.Open("libsql", ":memory:")
 	if err != nil {
 		t.Fatalf("failed to open database: %v", err)
 	}
@@ -39,7 +39,7 @@ func TestMigrator(t *testing.T) {
 }
 
 func TestMigratorWithFS(t *testing.T) {
-	db, err := sql.Open("sqlite", ":memory:")
+	db, err := sql.Open("libsql", ":memory:")
 	if err != nil {
 		t.Fatalf("failed to open database: %v", err)
 	}
