@@ -127,11 +127,10 @@ func main() {
 	fmt.Println("   ✅ Event store ready (WAL mode enabled)")
 	fmt.Println()
 
-	// 4. Create Repository and Handlers
-	fmt.Println("4️⃣  Creating repository and handlers...")
+	// 4. Create Repository and Handler
+	fmt.Println("4️⃣  Creating repository and handler...")
 	repo := accountv1.NewAccountRepository(eventStore, domain.NewAccount)
-	commandHandler := handlers.NewAccountCommandHandler(repo)
-	queryHandler := handlers.NewAccountQueryHandler(repo)
+	handler := handlers.NewAccountHandler(repo)
 	fmt.Println("   ✅ Ready")
 	fmt.Println()
 
@@ -158,12 +157,12 @@ func main() {
 
 	// 6. Start Services
 	fmt.Println("6️⃣  Starting services...")
-	commandService := accountv1.NewAccountCommandServiceServer(natsServer, commandHandler)
+	commandService := accountv1.NewAccountCommandServiceServer(natsServer, handler)
 	if err := commandService.Start(ctx); err != nil {
 		log.Fatalf("Failed to start command service: %v", err)
 	}
 
-	queryService := accountv1.NewAccountQueryServiceServer(natsServer, queryHandler)
+	queryService := accountv1.NewAccountQueryServiceServer(natsServer, handler)
 	if err := queryService.Start(ctx); err != nil {
 		log.Fatalf("Failed to start query service: %v", err)
 	}

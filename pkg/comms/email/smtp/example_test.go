@@ -8,7 +8,7 @@ import (
 	"log"
 	"time"
 
-	emailpkg "github.com/plaenen/eventstore/pkg/email"
+	emailpkg "github.com/plaenen/eventstore/pkg/comms/email"
 )
 
 // Example_basicEmail shows how to send a simple email

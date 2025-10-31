@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	emailpkg "github.com/plaenen/eventstore/pkg/email"
+	emailpkg "github.com/plaenen/eventstore/pkg/comms/email"
 )
 
 func TestSMTPSender_ValidateEmail(t *testing.T) {

@@ -33,8 +33,14 @@ type ServiceOptions struct {
 	// Example: "Account" (refers to message Account)
 	// This allows the generator to find the aggregate root message even across multiple files
 	AggregateRootMessage string `protobuf:"bytes,2,opt,name=aggregate_root_message,json=aggregateRootMessage,proto3" json:"aggregate_root_message,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	// OPTIONAL: Generate handler interface for aggregate methods with functional options
+	// When true, generates {AggregateName}Handler interface with MethodOption support
+	// Example: AccountHandler interface with methods receiving ...eventsourcing.MethodOption
+	// This enables passing authentication, tracing, and other cross-cutting concerns
+	// Default: false
+	AggregateHandler bool `protobuf:"varint,3,opt,name=aggregate_handler,json=aggregateHandler,proto3" json:"aggregate_handler,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ServiceOptions) Reset() {
@@ -79,6 +85,13 @@ func (x *ServiceOptions) GetAggregateRootMessage() string {
 		return x.AggregateRootMessage
 	}
 	return ""
+}
+
+func (x *ServiceOptions) GetAggregateHandler() bool {
+	if x != nil {
+		return x.AggregateHandler
+	}
+	return false
 }
 
 // AggregateRootOptions marks a proto message as an aggregate root
@@ -240,10 +253,11 @@ var File_eventsourcing_options_proto protoreflect.FileDescriptor
 
 const file_eventsourcing_options_proto_rawDesc = "" +
 	"\n" +
-	"\x1beventsourcing/options.proto\x12\reventsourcing\x1a google/protobuf/descriptor.proto\"m\n" +
+	"\x1beventsourcing/options.proto\x12\reventsourcing\x1a google/protobuf/descriptor.proto\"\x9a\x01\n" +
 	"\x0eServiceOptions\x12%\n" +
 	"\x0eaggregate_name\x18\x01 \x01(\tR\raggregateName\x124\n" +
-	"\x16aggregate_root_message\x18\x02 \x01(\tR\x14aggregateRootMessage\"N\n" +
+	"\x16aggregate_root_message\x18\x02 \x01(\tR\x14aggregateRootMessage\x12+\n" +
+	"\x11aggregate_handler\x18\x03 \x01(\bR\x10aggregateHandler\"N\n" +
 	"\x14AggregateRootOptions\x12\x19\n" +
 	"\bid_field\x18\x01 \x01(\tR\aidField\x12\x1b\n" +
 	"\ttype_name\x18\x02 \x01(\tR\btypeName\"5\n" +

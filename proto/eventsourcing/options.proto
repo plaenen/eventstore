@@ -33,6 +33,13 @@ message ServiceOptions {
   // Example: "Account" (refers to message Account)
   // This allows the generator to find the aggregate root message even across multiple files
   string aggregate_root_message = 2;
+
+  // OPTIONAL: Generate handler interface for aggregate methods with functional options
+  // When true, generates {AggregateName}Handler interface with MethodOption support
+  // Example: AccountHandler interface with methods receiving ...eventsourcing.MethodOption
+  // This enables passing authentication, tracing, and other cross-cutting concerns
+  // Default: false
+  bool aggregate_handler = 3;
 }
 
 // AggregateRootOptions marks a proto message as an aggregate root

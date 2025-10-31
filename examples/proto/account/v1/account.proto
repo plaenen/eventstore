@@ -20,6 +20,7 @@ service AccountCommandService {
   option (eventsourcing.service) = {
     aggregate_name: "Account"
     aggregate_root_message: "Account"
+    aggregate_handler: true
   };
 
   // OpenAccount creates a new bank account
@@ -37,6 +38,12 @@ service AccountCommandService {
 
 // AccountQueryService handles read operations (queries)
 service AccountQueryService {
+  option (eventsourcing.service) = {
+    aggregate_name: "Account"
+    aggregate_root_message: "Account"
+    aggregate_handler: true
+  };
+
   // GetAccount retrieves account details by ID
   rpc GetAccount(GetAccountRequest) returns (AccountView);
 

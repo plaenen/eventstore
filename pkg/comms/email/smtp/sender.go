@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	emailpkg "github.com/plaenen/eventstore/pkg/email"
+	emailpkg "github.com/plaenen/eventstore/pkg/comms/email"
 )
 
 // SMTPSender implements the EmailSender interface using SMTP
@@ -33,14 +33,14 @@ type Config struct {
 	Password string
 
 	// TLS settings
-	UseTLS       bool // Use TLS from the start (SMTPS on port 465)
-	UseSTARTTLS  bool // Use STARTTLS (on port 587 or 25)
-	TLSConfig    *tls.Config
-	SkipVerify   bool // Skip TLS certificate verification (not recommended for production)
+	UseTLS      bool // Use TLS from the start (SMTPS on port 465)
+	UseSTARTTLS bool // Use STARTTLS (on port 587 or 25)
+	TLSConfig   *tls.Config
+	SkipVerify  bool // Skip TLS certificate verification (not recommended for production)
 
 	// Connection settings
-	Timeout      time.Duration
-	KeepAlive    time.Duration
+	Timeout   time.Duration
+	KeepAlive time.Duration
 
 	// Sender identity
 	FromAddress string // Default "From" address if not specified in email
