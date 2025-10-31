@@ -646,4 +646,262 @@ func validateAppendEventsInput(aggregateID string, events []*domain.Event) error
 	return nil
 }
 
+// SeedEvents appends events with special semantics for migrations and bootstrapping.
+// See domain.SeedOptions for configuration details.
+func (s *EventStore) SeedEvents(
+	aggregateID string,
+	expectedVersion int64,
+	events []*domain.Event,
+	opts *domain.SeedOptions,
+) (*domain.SeedResult, error) {
+	if len(events) == 0 {
+		return &domain.SeedResult{}, nil
+	}
+
+	// Use defaults if opts not provided
+	if opts == nil {
+		opts = domain.DefaultSeedOptions()
+	}
+
+	result := &domain.SeedResult{
+		EventIDs: make([]string, 0, len(events)),
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Step 1: Prepare events (generate IDs, augment metadata)
+	preparedEvents := make([]*domain.Event, len(events))
+	for i, event := range events {
+		// Create a copy to avoid modifying original
+		preparedEvent := *event
+
+		// Generate deterministic ID if missing
+		if preparedEvent.ID == "" && opts.GenerateDeterministicIDs {
+			preparedEvent.ID = domain.GenerateDeterministicSeedID(&preparedEvent)
+		}
+
+		// Augment with seed metadata
+		domain.AugmentSeedMetadata(&preparedEvent, opts)
+
+		preparedEvents[i] = &preparedEvent
+		result.EventIDs = append(result.EventIDs, preparedEvent.ID)
+	}
+
+	// Step 2: Validate inputs (after ID generation)
+	if err := validateAppendEventsInput(aggregateID, preparedEvents); err != nil {
+		return nil, fmt.Errorf("input validation failed: %w", err)
+	}
+
+	// Step 2: Check which events already exist (for idempotency)
+	existingEvents := make(map[string]bool)
+	if opts.SkipExisting {
+		existing, err := s.checkExistingEventIDs(preparedEvents)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check existing events: %w", err)
+		}
+		existingEvents = existing
+	}
+
+	// Step 3: Filter out existing events
+	eventsToSave := make([]*domain.Event, 0, len(preparedEvents))
+	for _, event := range preparedEvents {
+		if existingEvents[event.ID] {
+			result.Skipped++
+		} else {
+			eventsToSave = append(eventsToSave, event)
+		}
+	}
+
+	// If all events already exist, return early
+	if len(eventsToSave) == 0 {
+		return result, nil
+	}
+
+	// Step 4: Begin transaction and save events
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	ctx := context.Background()
+	queries := sqlcgen.New(tx)
+
+	// Check version if required
+	if !opts.SkipVersionCheck {
+		currentVersionRaw, err := queries.GetAggregateVersion(ctx, aggregateID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check current version: %w", err)
+		}
+		currentVersion := currentVersionRaw.(int64)
+
+		if currentVersion != expectedVersion {
+			return nil, domain.ErrConcurrencyConflict
+		}
+	}
+
+	// Process each event
+	for _, event := range eventsToSave {
+		// Handle constraints
+		if err := s.validateSeedConstraints(tx, event, aggregateID, opts); err != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, domain.SeedError{
+				EventID:   event.ID,
+				EventType: event.EventType,
+				Version:   event.Version,
+				Reason:    "constraint validation failed",
+				Error:     err,
+			})
+			continue
+		}
+
+		// Insert event
+		metadataJSON, _ := json.Marshal(event.Metadata)
+		constraintsJSON, _ := json.Marshal(event.UniqueConstraints)
+
+		err = queries.InsertEvent(ctx, sqlcgen.InsertEventParams{
+			EventID:       event.ID,
+			AggregateID:   event.AggregateID,
+			AggregateType: event.AggregateType,
+			EventType:     event.EventType,
+			Version:       event.Version,
+			Timestamp:     event.Timestamp.Unix(),
+			Data:          event.Data,
+			Metadata:      string(metadataJSON),
+			Constraints:   sql.NullString{String: string(constraintsJSON), Valid: len(constraintsJSON) > 0},
+		})
+		if err != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, domain.SeedError{
+				EventID:   event.ID,
+				EventType: event.EventType,
+				Version:   event.Version,
+				Reason:    "database insert failed",
+				Error:     err,
+			})
+			continue
+		}
+
+		result.Saved++
+	}
+
+	// Update global positions
+	if err := s.updatePositions(tx); err != nil {
+		return nil, fmt.Errorf("failed to update positions: %w", err)
+	}
+
+	// Commit transaction
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return result, nil
+}
+
+// checkExistingEventIDs checks which event IDs already exist in the database.
+func (s *EventStore) checkExistingEventIDs(events []*domain.Event) (map[string]bool, error) {
+	if len(events) == 0 {
+		return make(map[string]bool), nil
+	}
+
+	// Build list of event IDs to check
+	eventIDs := make([]string, len(events))
+	for i, event := range events {
+		eventIDs[i] = event.ID
+	}
+
+	// Query database for existing IDs
+	// Build IN clause: SELECT event_id FROM events WHERE event_id IN (?,?,...)
+	placeholders := make([]string, len(eventIDs))
+	args := make([]any, len(eventIDs))
+	for i, id := range eventIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+
+	query := fmt.Sprintf("SELECT event_id FROM events WHERE event_id IN (%s)",
+		strings.Join(placeholders, ","))
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query existing events: %w", err)
+	}
+	defer rows.Close()
+
+	// Build map of existing IDs
+	existing := make(map[string]bool)
+	for rows.Next() {
+		var eventID string
+		if err := rows.Scan(&eventID); err != nil {
+			return nil, fmt.Errorf("failed to scan event ID: %w", err)
+		}
+		existing[eventID] = true
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %w", err)
+	}
+
+	return existing, nil
+}
+
+// validateSeedConstraints validates constraints with seed-specific logic.
+func (s *EventStore) validateSeedConstraints(tx *sql.Tx, event *domain.Event, aggregateID string, opts *domain.SeedOptions) error {
+	// Skip constraint checking if disabled
+	if !opts.CheckConstraintOwnership && len(event.UniqueConstraints) > 0 {
+		return nil
+	}
+
+	ctx := context.Background()
+	queries := sqlcgen.New(tx)
+
+	for _, constraint := range event.UniqueConstraints {
+		switch constraint.Operation {
+		case domain.ConstraintClaim:
+			// Check if value already claimed
+			ownerID, err := queries.GetConstraintOwner(ctx, sqlcgen.GetConstraintOwnerParams{
+				IndexName: constraint.IndexName,
+				Value:     constraint.Value,
+			})
+
+			if err == nil {
+				// Value is claimed
+				if ownerID != aggregateID {
+					// Claimed by different aggregate - this is an error
+					return domain.NewUniqueConstraintError(constraint.IndexName, constraint.Value, ownerID)
+				}
+				// Claimed by same aggregate - skip (idempotent)
+				continue
+			} else if err != sql.ErrNoRows {
+				return fmt.Errorf("failed to check uniqueness: %w", err)
+			}
+
+			// Value not claimed - claim it
+			err = queries.ClaimConstraint(ctx, sqlcgen.ClaimConstraintParams{
+				IndexName:   constraint.IndexName,
+				Value:       constraint.Value,
+				AggregateID: aggregateID,
+				CreatedAt:   time.Now().Unix(),
+			})
+			if err != nil {
+				return fmt.Errorf("failed to claim constraint: %w", err)
+			}
+
+		case domain.ConstraintRelease:
+			// Release the value
+			err := queries.ReleaseConstraint(ctx, sqlcgen.ReleaseConstraintParams{
+				IndexName:   constraint.IndexName,
+				Value:       constraint.Value,
+				AggregateID: aggregateID,
+			})
+			if err != nil {
+				return fmt.Errorf("failed to release constraint: %w", err)
+			}
+		}
+	}
+
+	return nil
+}
+
 // Continue in next file...

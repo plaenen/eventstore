@@ -53,6 +53,30 @@ type EventStore interface {
 	// This is used for recovery or migration scenarios.
 	RebuildConstraints() error
 
+	// SeedEvents appends events with special semantics for migrations and bootstrapping.
+	//
+	// Unlike AppendEvents, SeedEvents:
+	//   - Is idempotent (skips events that already exist)
+	//   - Generates deterministic IDs for events without IDs
+	//   - Optionally skips version checking
+	//   - Checks constraint ownership rather than failing on conflicts
+	//   - Adds metadata tracking for data lineage
+	//
+	// All events for a single aggregate are processed in one atomic transaction.
+	//
+	// Use cases:
+	//   - Database migrations (historical data import)
+	//   - Bootstrap data (admin users, system configs)
+	//   - Test data setup (deterministic test fixtures)
+	//
+	// Returns SeedResult with counts of saved/skipped/failed events.
+	SeedEvents(
+		aggregateID string,
+		expectedVersion int64,
+		events []*domain.Event,
+		opts *domain.SeedOptions,
+	) (*domain.SeedResult, error)
+
 	// Close closes the event store and releases resources.
 	Close() error
 }

@@ -148,6 +148,50 @@ func (r *BaseRepository[T]) Exists(id string) (bool, error) {
 	return version > 0, nil
 }
 
+// SeedAggregate seeds an aggregate's uncommitted events using special seeding semantics.
+// This is a convenience wrapper around EventStore.SeedEvents() that works with aggregates.
+//
+// Unlike Save(), SeedAggregate:
+//   - Is idempotent (skips events that already exist)
+//   - Generates deterministic IDs for events without IDs
+//   - Optionally skips version checking
+//   - Checks constraint ownership rather than failing on conflicts
+//   - Adds metadata tracking for data lineage
+//
+// Use cases:
+//   - Database migrations (seeding historical data)
+//   - Bootstrap data (seeding admin users, system configs)
+//   - Test data setup (seeding deterministic test fixtures)
+//
+// Example:
+//   admin := NewUser("admin-001")
+//   admin.Create("admin@example.com", "Admin User")
+//   admin.AssignRole("super_admin")
+//
+//   opts := domain.DefaultSeedOptions()
+//   opts.CustomTags = map[string]string{"source": "bootstrap"}
+//   result, err := repo.SeedAggregate(admin, 0, opts)
+//
+func (r *BaseRepository[T]) SeedAggregate(aggregate T, expectedVersion int64, opts *domain.SeedOptions) (*domain.SeedResult, error) {
+	uncommittedEvents := aggregate.UncommittedEvents()
+	if len(uncommittedEvents) == 0 {
+		return &domain.SeedResult{}, nil
+	}
+
+	// Seed events using the event store
+	result, err := r.eventStore.SeedEvents(aggregate.ID(), expectedVersion, uncommittedEvents, opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to seed events: %w", err)
+	}
+
+	// Clear uncommitted events if any were saved
+	if result.Saved > 0 {
+		aggregate.ClearUncommittedEvents()
+	}
+
+	return result, nil
+}
+
 // RetryOnConflict executes a function with retry logic for optimistic concurrency conflicts.
 // The function receives a freshly loaded aggregate on each attempt.
 // This is useful for command handlers that need to retry on version mismatch.
