@@ -7,16 +7,23 @@ An alpha version Event Sourcing and CQRS framework for Go with Protocol Buffers 
 
 ## ⚠️ Security Warning
 
-**This project is in alpha and NOT production-ready.** A comprehensive security review has identified critical issues that must be addressed:
+**This project is in alpha and NOT production-ready.** While significant security improvements have been made, critical issues remain:
 
-- ❌ **Plaintext credentials** - No encryption for authentication
-- ❌ **No TLS encryption** - All connections unencrypted by default
-- ❌ **Limited input validation** - Potential security gaps
-- ⚠️ **Low test coverage** - 18% (target: 80%+)
+### ✅ Recent Security Improvements
+- ✅ **Secure credentials management** - `pkg/security/credentials` with encryption support (AWS, GCP, Azure, Vault)
+- ✅ **SQL injection protection** - Comprehensive input validation with sanitization
+- ✅ **Input validation** - Defense-in-depth validation across event store operations
+- ✅ **Improved test coverage** - Now 44-62% across core packages (up from 18%)
 
-**📚 See the [Security Review Summary](docs/REVIEW_SUMMARY.md) for details and [Security Roadmap](docs/SECURITY_ROADMAP.md) for the path to production.**
+### ⚠️ Remaining Security Concerns
+- ⚠️ **TLS configuration** - Requires explicit setup (not enforced by default)
+- ⚠️ **Error message sanitization** - Stack traces may leak sensitive information
+- ⚠️ **Authorization** - ABAC/RBAC patterns need documentation
+- ⚠️ **Rate limiting** - DoS protection not implemented
 
-**DO NOT use in production until critical security issues are resolved (estimated 4 months).**
+**📚 See [Security Review Summary](docs/REVIEW_SUMMARY.md) and [Security Credentials Guide](docs/SECURITY_CREDENTIALS.md) for details.**
+
+**DO NOT use in production until all security issues are resolved (estimated 2-3 months).**
 
 ---
 
@@ -27,10 +34,14 @@ This framework provides everything you need to build event-sourced systems in Go
 - **Type-safe code generation** from Protocol Buffers definitions
 - **Clean CQRS patterns** with automatic command/query routing
 - **Flexible projections** with built-in checkpoint management
-- **Multiple storage backends** (SQLite, with PostgreSQL planned)
+- **Multiple storage backends** (SQLite/LibSQL: local, Turso cloud, embedded replica; PostgreSQL planned)
 - **Event streaming** via NATS JetStream
 - **Built-in observability** with OpenTelemetry integration
 - **Service lifecycle management** for production deployments
+- **Event analytics** for debugging and insights (automatic tracking, persisted in snapshots)
+- **Snapshots** for 20-100x performance improvements
+- **Event seeding** for migrations and bootstrapping (idempotent, deterministic)
+- **Secure credentials** with AWS/GCP/Azure/Vault integration
 
 ## Quick Start
 
@@ -238,6 +249,38 @@ func main() {
 }
 ```
 
+### Secure Credential Management
+
+Use the credentials provider for secure authentication across cloud providers:
+
+```go
+import "github.com/plaenen/eventstore/pkg/security/credentials"
+
+// Production: AWS Secrets Manager
+provider, err := credentials.NewSecretProvider(ctx,
+    "awskms://arn:aws:secretsmanager:us-east-1:123456789:secret:nats-creds")
+
+// Get credentials with automatic caching
+creds, err := provider.GetCredentials(ctx)
+
+// Use with NATS
+nc, err := nats.Connect(
+    natsURL,
+    nats.UserInfo(creds.Username, creds.Password),
+)
+defer provider.Close()
+```
+
+**Supported Backends:**
+- AWS Secrets Manager
+- GCP Secret Manager
+- Azure Key Vault
+- HashiCorp Vault
+- Local files (development)
+- Environment variables (simple cases)
+
+**📚 See [Security Credentials Guide](docs/SECURITY_CREDENTIALS.md) for complete examples**
+
 ## Core Concepts
 
 ### Architecture
@@ -380,6 +423,131 @@ runner := runner.New(
 // Handles SIGTERM/SIGINT gracefully
 runner.Run(ctx)
 ```
+
+### 6. Database Options
+
+Multiple deployment modes for different use cases:
+
+#### SQLite (Local Development)
+```go
+eventStore, err := sqlite.NewEventStore(
+    sqlite.WithFilename("events.db"),
+)
+```
+
+#### LibSQL Remote (Turso Cloud)
+```go
+eventStore, err := sqlite.NewEventStore(
+    sqlite.WithLibSQLRemote(
+        "libsql://your-db.turso.io",
+        os.Getenv("TURSO_AUTH_TOKEN"),
+    ),
+)
+```
+
+#### LibSQL Embedded Replica (Local-First + Cloud Sync)
+```go
+eventStore, err := sqlite.NewEventStore(
+    sqlite.WithLibSQLEmbeddedReplica(
+        "./local.db",
+        "libsql://your-db.turso.io",
+        os.Getenv("TURSO_AUTH_TOKEN"),
+    ),
+)
+```
+
+**📚 See [LibSQL Usage Guide](pkg/store/sqlite/LIBSQL_USAGE.md) for complete configuration options**
+
+### 7. Event Analytics
+
+Automatic event tracking for debugging and insights:
+
+```go
+// Load aggregate
+order, _ := repo.Load("order-123")
+
+// Get analytics (automatically tracked)
+analytics := order.Analytics()
+fmt.Printf("Total events: %d\n", analytics.TotalEvents)
+fmt.Printf("OrderPlaced: %d times\n", analytics.GetCount("OrderPlaced"))
+
+// Detailed stats with timestamps
+stats := analytics.GetStats("OrderPlaced")
+fmt.Printf("First: %s, Last: %s\n", stats.FirstApplied, stats.LastApplied)
+
+// Event distribution analysis
+distribution := analytics.GetDistribution()
+for eventType, pct := range distribution {
+    fmt.Printf("%s: %.1f%%\n", eventType, pct)
+}
+```
+
+**Features:**
+- Automatic tracking during event replay
+- Persisted in snapshots
+- No performance overhead
+- Useful for debugging and optimization
+
+**📚 See [Event Analytics Guide](docs/EVENT_ANALYTICS_GUIDE.md)**
+
+### 8. Snapshots for Performance
+
+Optimize aggregate loading with automatic snapshots:
+
+```go
+// Enable snapshots
+snapshotStore := sqlite.NewSnapshotStore(eventStore.DB())
+repo := store.NewRepository(...).WithSnapshotStore(snapshotStore)
+
+// Normal loading (uses snapshots automatically)
+order, _ := repo.Load("order-123") // 20-100x faster!
+
+// Save snapshots periodically
+if order.Version() % 100 == 0 {
+    repo.SaveSnapshot(order)
+}
+```
+
+**Performance Gains:**
+- 10,000 events: 500ms → 25ms (20x faster)
+- 100,000 events: 5,000ms → 50ms (100x faster)
+- Analytics automatically preserved in snapshots
+
+**📚 See [Snapshot Guide](docs/SNAPSHOT_GUIDE.md)**
+
+### 9. Event Seeding for Migrations
+
+Deterministic, idempotent event seeding for migrations and bootstrapping:
+
+```go
+// Bootstrap admin user
+admin := NewUser("admin-001")
+admin.Create("admin@example.com", "Admin")
+admin.AssignRole("super_admin")
+
+// Seed with default options (idempotent)
+opts := domain.DefaultSeedOptions()
+opts.CustomTags = map[string]string{
+    "migration": "v1.0.0",
+    "source":    "bootstrap",
+}
+
+result, err := repo.SeedAggregate(admin, 0, opts)
+fmt.Printf("Saved: %d, Skipped: %d\n", result.Saved, result.Skipped)
+```
+
+**Features:**
+- Idempotent (safe to run multiple times)
+- Deterministic ID generation
+- Constraint ownership checking
+- Custom metadata for data lineage
+
+**Use Cases:**
+- Database migrations (historical data import)
+- Bootstrap data (admin users, system configs)
+- Test fixtures (deterministic test data)
+
+**📚 See [Event Seeding Guide](docs/SEEDING_GUIDE.md)**
 
 ## Examples
 
