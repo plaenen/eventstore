@@ -1,6 +1,7 @@
 package store
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -25,6 +26,7 @@ type Repository[T domain.Aggregate] interface {
 // BaseRepository provides a basic implementation of Repository.
 type BaseRepository[T domain.Aggregate] struct {
 	eventStore    EventStore
+	snapshotStore SnapshotStore
 	aggregateType string
 	factory       func(id string) T
 	applier       func(aggregate T, event *domain.Event) error
@@ -41,15 +43,136 @@ func NewRepository[T domain.Aggregate](
 ) *BaseRepository[T] {
 	return &BaseRepository[T]{
 		eventStore:    eventStore,
+		snapshotStore: nil, // Optional, set via WithSnapshotStore
 		aggregateType: aggregateType,
 		factory:       factory,
 		applier:       applier,
 	}
 }
 
+// WithSnapshotStore configures the repository to use snapshots.
+// This enables the LoadWithSnapshot method for performance optimization.
+func (r *BaseRepository[T]) WithSnapshotStore(snapshotStore SnapshotStore) *BaseRepository[T] {
+	r.snapshotStore = snapshotStore
+	return r
+}
+
 // Load loads an aggregate by ID from the event store.
+// If a snapshot store is configured, it will automatically use LoadWithSnapshot instead.
 func (r *BaseRepository[T]) Load(id string) (T, error) {
+	// If snapshot store is configured, use it for better performance
+	if r.snapshotStore != nil {
+		return r.LoadWithSnapshot(id)
+	}
+
 	var zero T
+
+	// Load events from store
+	events, err := r.eventStore.LoadEvents(id, 0)
+	if err != nil {
+		return zero, fmt.Errorf("failed to load events: %w", err)
+	}
+
+	if len(events) == 0 {
+		return zero, domain.ErrAggregateNotFound
+	}
+
+	// Create new aggregate instance
+	aggregate := r.factory(id)
+
+	// Apply all events to rebuild state
+	for _, event := range events {
+		if err := r.applier(aggregate, event); err != nil {
+			return zero, fmt.Errorf("failed to apply event: %w", err)
+		}
+	}
+
+	// Update version from loaded events
+	if len(events) > 0 {
+		// Set the aggregate version from the loaded history
+		if agg, ok := interface{}(aggregate).(interface{ LoadFromHistory([]*domain.Event) error }); ok {
+			if err := agg.LoadFromHistory(events); err != nil {
+				return zero, fmt.Errorf("failed to load history: %w", err)
+			}
+		}
+	}
+
+	return aggregate, nil
+}
+
+// LoadWithSnapshot loads an aggregate using snapshots for optimization.
+// It loads the latest snapshot, restores the state and analytics, then replays
+// only the events that occurred after the snapshot.
+func (r *BaseRepository[T]) LoadWithSnapshot(id string) (T, error) {
+	var zero T
+
+	if r.snapshotStore == nil {
+		return zero, fmt.Errorf("snapshot store not configured")
+	}
+
+	// Try to load latest snapshot
+	snapshot, err := r.snapshotStore.GetLatestSnapshot(id)
+	var startVersion int64 = 0
+
+	if err == nil && snapshot != nil {
+		// Snapshot exists, restore from it
+		aggregate := r.factory(id)
+
+		// Check if aggregate supports snapshots
+		snapshotable, ok := interface{}(aggregate).(Snapshotable)
+		if !ok {
+			return zero, fmt.Errorf("aggregate does not implement Snapshotable interface")
+		}
+
+		// Unmarshal snapshot data
+		if err := snapshotable.UnmarshalSnapshot(snapshot.Data); err != nil {
+			return zero, fmt.Errorf("failed to unmarshal snapshot: %w", err)
+		}
+
+		// Restore analytics from snapshot metadata
+		if snapshot.Metadata != nil && snapshot.Metadata.Analytics != "" {
+			analyticsData, err := snapshot.Metadata.GetAnalytics()
+			if err == nil && analyticsData != nil {
+				// Parse analytics and restore to aggregate
+				var analytics domain.EventAnalytics
+				analyticsJSON, _ := json.Marshal(analyticsData)
+				if err := json.Unmarshal(analyticsJSON, &analytics); err == nil {
+					// Set analytics on aggregate root
+					if aggRoot, ok := interface{}(aggregate).(interface{ SetAnalytics(*domain.EventAnalytics) }); ok {
+						aggRoot.SetAnalytics(&analytics)
+					}
+				}
+			}
+		}
+
+		// Load events after snapshot
+		startVersion = snapshot.Version
+		events, err := r.eventStore.LoadEvents(id, startVersion)
+		if err != nil {
+			return zero, fmt.Errorf("failed to load events after snapshot: %w", err)
+		}
+
+		// Apply events after snapshot (this will update analytics automatically)
+		for _, event := range events {
+			if err := r.applier(aggregate, event); err != nil {
+				return zero, fmt.Errorf("failed to apply event: %w", err)
+			}
+		}
+
+		// Update version and analytics from loaded events
+		if len(events) > 0 {
+			if agg, ok := interface{}(aggregate).(interface{ LoadFromHistory([]*domain.Event) error }); ok {
+				if err := agg.LoadFromHistory(events); err != nil {
+					return zero, fmt.Errorf("failed to load history: %w", err)
+				}
+			}
+		}
+
+		return aggregate, nil
+	}
+
+	// No snapshot found or error loading snapshot, fall back to full event replay
+	// NOTE: Don't call r.Load() to avoid infinite loop, do direct event replay
 
 	// Load events from store
 	events, err := r.eventStore.LoadEvents(id, 0)
@@ -190,6 +313,73 @@ func (r *BaseRepository[T]) SeedAggregate(aggregate T, expectedVersion int64, op
 	}
 
 	return result, nil
+}
+
+// SaveSnapshot creates and persists a snapshot of the aggregate's current state.
+// The snapshot includes the aggregate state and analytics for debugging purposes.
+//
+// This should typically be called after saving events when the aggregate reaches
+// a snapshotting threshold (e.g., every 100 events).
+//
+// Example:
+//   user, _ := repo.Load("user-123")
+//   // ... make changes to user ...
+//   err := repo.Save(user)
+//
+//   // Create snapshot every 100 events
+//   if user.Version() % 100 == 0 {
+//       err := repo.SaveSnapshot(user)
+//   }
+//
+func (r *BaseRepository[T]) SaveSnapshot(aggregate T) error {
+	if r.snapshotStore == nil {
+		return fmt.Errorf("snapshot store not configured")
+	}
+
+	// Check if aggregate supports snapshots
+	snapshotable, ok := interface{}(aggregate).(Snapshotable)
+	if !ok {
+		return fmt.Errorf("aggregate does not implement Snapshotable interface")
+	}
+
+	// Marshal aggregate state
+	data, err := snapshotable.MarshalSnapshot()
+	if err != nil {
+		return fmt.Errorf("failed to marshal snapshot: %w", err)
+	}
+
+	// Create metadata
+	metadata := &SnapshotMetadata{
+		Size:          int64(len(data)),
+		EventCount:    aggregate.Version(),
+		SnapshotType:  "protobuf",
+		SchemaVersion: "1.0.0",
+	}
+
+	// Include analytics in metadata
+	if aggRoot, ok := interface{}(aggregate).(interface{ Analytics() *domain.EventAnalytics }); ok {
+		analytics := aggRoot.Analytics()
+		if err := metadata.SetAnalyticsFromAggregate(analytics); err != nil {
+			return fmt.Errorf("failed to set analytics: %w", err)
+		}
+	}
+
+	// Create snapshot
+	snapshot := &Snapshot{
+		AggregateID:   aggregate.ID(),
+		AggregateType: aggregate.Type(),
+		Version:       aggregate.Version(),
+		Data:          data,
+		CreatedAt:     time.Now(),
+		Metadata:      metadata,
+	}
+
+	// Save snapshot
+	if err := r.snapshotStore.SaveSnapshot(snapshot); err != nil {
+		return fmt.Errorf("failed to save snapshot: %w", err)
+	}
+
+	return nil
 }
 
 // RetryOnConflict executes a function with retry logic for optimistic concurrency conflicts.

@@ -55,6 +55,7 @@ type AggregateRoot struct {
 	version           int64
 	uncommittedEvents []*Event
 	commandID         string // Current command being processed (for deterministic event IDs)
+	analytics         *EventAnalytics // Tracks event application statistics
 }
 
 // NewAggregateRoot creates a new aggregate root with the given ID and type.
@@ -64,6 +65,7 @@ func NewAggregateRoot(id, aggregateType string) AggregateRoot {
 		aggregateType:     aggregateType,
 		version:           0,
 		uncommittedEvents: make([]*Event, 0),
+		analytics:         NewEventAnalytics(),
 	}
 }
 
@@ -152,11 +154,19 @@ func (a *AggregateRoot) ApplyChangeWithConstraints(
 
 // LoadFromHistory reconstructs aggregate state from historical events.
 func (a *AggregateRoot) LoadFromHistory(events []*Event) error {
+	// Ensure analytics is initialized
+	if a.analytics == nil {
+		a.analytics = NewEventAnalytics()
+	}
+
 	for _, evt := range events {
 		if evt.Version <= a.version {
 			continue
 		}
 		a.version = evt.Version
+
+		// Track event application in analytics
+		a.analytics.RecordEvent(evt.EventType, evt.Timestamp)
 	}
 	return nil
 }
@@ -187,4 +197,28 @@ func GenerateID() string {
 // TimeFromUnix creates a time.Time from a Unix timestamp.
 func TimeFromUnix(sec int64) time.Time {
 	return time.Unix(sec, 0)
+}
+
+// Analytics returns the event analytics for this aggregate.
+// This provides information about which events have been applied and how many times.
+func (a *AggregateRoot) Analytics() *EventAnalytics {
+	if a.analytics == nil {
+		a.analytics = NewEventAnalytics()
+	}
+	return a.analytics
+}
+
+// SetAnalytics sets the event analytics for this aggregate.
+// This is typically used when restoring from a snapshot.
+func (a *AggregateRoot) SetAnalytics(analytics *EventAnalytics) {
+	if analytics == nil {
+		a.analytics = NewEventAnalytics()
+	} else {
+		a.analytics = analytics
+	}
+}
+
+// ResetAnalytics clears all event analytics data.
+func (a *AggregateRoot) ResetAnalytics() {
+	a.analytics = NewEventAnalytics()
 }

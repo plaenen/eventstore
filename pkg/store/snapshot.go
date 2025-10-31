@@ -22,6 +22,7 @@ type SnapshotMetadata struct {
 	CreationTime  int64  `json:"creation_time"`  // Time taken to create snapshot (ms)
 	SnapshotType  string `json:"snapshot_type"`  // Type of serialization used
 	SchemaVersion string `json:"schema_version"` // Version of the aggregate schema
+	Analytics     string `json:"analytics"`      // JSON-encoded event analytics for debugging and insights
 }
 
 // MarshalMetadata serializes the snapshot metadata to JSON.
@@ -109,4 +110,35 @@ type Snapshotable interface {
 
 	// UnmarshalSnapshot deserializes the aggregate state from bytes.
 	UnmarshalSnapshot(data []byte) error
+}
+
+// SetAnalyticsFromAggregate extracts analytics from an aggregate and stores it in the metadata.
+// This should be called when creating a snapshot.
+func (m *SnapshotMetadata) SetAnalyticsFromAggregate(analytics interface{}) error {
+	if m == nil || analytics == nil {
+		return nil
+	}
+
+	data, err := json.Marshal(analytics)
+	if err != nil {
+		return err
+	}
+
+	m.Analytics = string(data)
+	return nil
+}
+
+// GetAnalytics deserializes the analytics data from the metadata.
+// This should be called when restoring from a snapshot.
+func (m *SnapshotMetadata) GetAnalytics() (map[string]interface{}, error) {
+	if m == nil || m.Analytics == "" {
+		return nil, nil
+	}
+
+	var analytics map[string]interface{}
+	if err := json.Unmarshal([]byte(m.Analytics), &analytics); err != nil {
+		return nil, err
+	}
+
+	return analytics, nil
 }
