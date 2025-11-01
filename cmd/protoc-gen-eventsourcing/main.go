@@ -156,6 +156,10 @@ func generateFile(gen *protogen.Plugin, file *protogen.File) {
 		generateEventAppliers(g, file, gen)
 		generateRepository(g, file, gen)
 		generateProjectionSDK(g, file, gen)
+
+		// Generate aggregate handler interfaces in the aggregate file
+		// when aggregate_handler: true is set on services
+		generateAggregateHandlersInFile(g, services)
 	}
 
 	// Generate service-related files if there are commands or queries
@@ -167,11 +171,15 @@ func generateFile(gen *protogen.Plugin, file *protogen.File) {
 			generateSDKClient(gen, file, aggregates, services)
 			generateUnifiedSDK(gen, file, aggregates, services)
 		}
-		// Always generate server and handler files if services have methods
-		// and if mode allows it
+		// Always generate server files if services have methods and if mode allows it
 		if (generateMode == GenerateModeAll || generateMode == GenerateModeServer) &&
 			hasServiceMethods(services) {
 			generateServerService(gen, file, aggregates, services)
+		}
+
+		// Generate handler file only in server mode
+		// (in all/aggregate mode, handlers are generated in the aggregate file)
+		if generateMode == GenerateModeServer && hasServiceMethods(services) {
 			generateHandlerInterfaces(gen, file, aggregates, services)
 		}
 	}
@@ -1143,6 +1151,38 @@ func generateHandlerInterfaces(gen *protogen.Plugin, file *protogen.File, aggreg
 
 		g.P("}")
 		g.P()
+	}
+}
+
+// generateAggregateHandlersInFile generates aggregate handler interfaces in the given file
+// This is used when generate=aggregate mode to include handler interfaces in the aggregate file
+func generateAggregateHandlersInFile(g *protogen.GeneratedFile, services []*ServiceInfo) {
+	// Group services by aggregate name when aggregate_handler is true
+	aggregateHandlers := make(map[string][]*ServiceInfo)
+
+	for _, svc := range services {
+		opts := getServiceOptions(svc.Service)
+		if opts != nil && opts.GetAggregateHandler() {
+			aggregateName := opts.GetAggregateName()
+			aggregateHandlers[aggregateName] = append(aggregateHandlers[aggregateName], svc)
+		}
+	}
+
+	// Only generate if there are aggregate handlers
+	if len(aggregateHandlers) == 0 {
+		return
+	}
+
+	// Generate header section for handlers
+	g.P()
+	g.P("// ============================================================================")
+	g.P("// Aggregate Handler Interfaces")
+	g.P("// ============================================================================")
+	g.P()
+
+	// Generate aggregate handlers (one interface per aggregate with all methods from all services)
+	for aggregateName, svcs := range aggregateHandlers {
+		generateAggregateHandler(g, aggregateName, svcs)
 	}
 }
 
