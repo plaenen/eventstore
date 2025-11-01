@@ -66,7 +66,7 @@ import (
 	eventsourcing "github.com/plaenen/eventstore/pkg/eventsourcing"
 )
 
-var version = "0.0.15"
+var version = "0.0.20"
 
 // Generation mode controls what files to generate
 type GenerationMode string
