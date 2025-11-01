@@ -7,6 +7,8 @@ managed:
   disable:
     - file_option: go_package
       path: eventsourcing/options.proto
+    - file_option: go_package
+      path: cqrs/options.proto
 plugins:
   # Generate protobuf messages
   - remote: buf.build/protocolbuffers/go
@@ -20,8 +22,14 @@ plugins:
     opt:
       - paths=source_relative
 
-  # Generate Event Sourcing boilerplate using go run
+  # Generate Event Sourcing domain model (aggregates, events, handlers)
   - local: ["go", "run", "github.com/plaenen/eventstore/cmd/protoc-gen-eventsourcing"]
+    out: pb
+    opt:
+      - paths=source_relative
+
+  # Generate CQRS infrastructure (client, server, SDK)
+  - local: ["go", "run", "github.com/plaenen/eventstore/cmd/protoc-gen-cqrs"]
     out: pb
     opt:
       - paths=source_relative

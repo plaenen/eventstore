@@ -22,7 +22,60 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// ServiceOptions declares which aggregate a command service operates on
+// ServiceType defines the type of service (command vs query)
+type ServiceType int32
+
+const (
+	// Default value - will infer from service name (deprecated)
+	ServiceType_SERVICE_TYPE_UNSPECIFIED ServiceType = 0
+	// Command service - handles write operations
+	ServiceType_SERVICE_TYPE_COMMAND ServiceType = 1
+	// Query service - handles read operations
+	ServiceType_SERVICE_TYPE_QUERY ServiceType = 2
+)
+
+// Enum value maps for ServiceType.
+var (
+	ServiceType_name = map[int32]string{
+		0: "SERVICE_TYPE_UNSPECIFIED",
+		1: "SERVICE_TYPE_COMMAND",
+		2: "SERVICE_TYPE_QUERY",
+	}
+	ServiceType_value = map[string]int32{
+		"SERVICE_TYPE_UNSPECIFIED": 0,
+		"SERVICE_TYPE_COMMAND":     1,
+		"SERVICE_TYPE_QUERY":       2,
+	}
+)
+
+func (x ServiceType) Enum() *ServiceType {
+	p := new(ServiceType)
+	*p = x
+	return p
+}
+
+func (x ServiceType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ServiceType) Descriptor() protoreflect.EnumDescriptor {
+	return file_eventsourcing_options_proto_enumTypes[0].Descriptor()
+}
+
+func (ServiceType) Type() protoreflect.EnumType {
+	return &file_eventsourcing_options_proto_enumTypes[0]
+}
+
+func (x ServiceType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ServiceType.Descriptor instead.
+func (ServiceType) EnumDescriptor() ([]byte, []int) {
+	return file_eventsourcing_options_proto_rawDescGZIP(), []int{0}
+}
+
+// ServiceOptions declares which aggregate a service operates on
 // This is the PRIMARY source of truth for aggregate association
 type ServiceOptions struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -39,8 +92,14 @@ type ServiceOptions struct {
 	// This enables passing authentication, tracing, and other cross-cutting concerns
 	// Default: false
 	AggregateHandler bool `protobuf:"varint,3,opt,name=aggregate_handler,json=aggregateHandler,proto3" json:"aggregate_handler,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// OPTIONAL: The type of service (command or query)
+	// If not specified (UNSPECIFIED), the generator will infer from service name suffix
+	// (CommandService = command, QueryService = query)
+	// Recommended to explicitly specify to avoid naming convention requirements
+	// Default: SERVICE_TYPE_UNSPECIFIED (infer from name)
+	ServiceType   ServiceType `protobuf:"varint,4,opt,name=service_type,json=serviceType,proto3,enum=eventsourcing.ServiceType" json:"service_type,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ServiceOptions) Reset() {
@@ -92,6 +151,13 @@ func (x *ServiceOptions) GetAggregateHandler() bool {
 		return x.AggregateHandler
 	}
 	return false
+}
+
+func (x *ServiceOptions) GetServiceType() ServiceType {
+	if x != nil {
+		return x.ServiceType
+	}
+	return ServiceType_SERVICE_TYPE_UNSPECIFIED
 }
 
 // AggregateRootOptions marks a proto message as an aggregate root
@@ -253,16 +319,21 @@ var File_eventsourcing_options_proto protoreflect.FileDescriptor
 
 const file_eventsourcing_options_proto_rawDesc = "" +
 	"\n" +
-	"\x1beventsourcing/options.proto\x12\reventsourcing\x1a google/protobuf/descriptor.proto\"\x9a\x01\n" +
+	"\x1beventsourcing/options.proto\x12\reventsourcing\x1a google/protobuf/descriptor.proto\"\xd9\x01\n" +
 	"\x0eServiceOptions\x12%\n" +
 	"\x0eaggregate_name\x18\x01 \x01(\tR\raggregateName\x124\n" +
 	"\x16aggregate_root_message\x18\x02 \x01(\tR\x14aggregateRootMessage\x12+\n" +
-	"\x11aggregate_handler\x18\x03 \x01(\bR\x10aggregateHandler\"N\n" +
+	"\x11aggregate_handler\x18\x03 \x01(\bR\x10aggregateHandler\x12=\n" +
+	"\fservice_type\x18\x04 \x01(\x0e2\x1a.eventsourcing.ServiceTypeR\vserviceType\"N\n" +
 	"\x14AggregateRootOptions\x12\x19\n" +
 	"\bid_field\x18\x01 \x01(\tR\aidField\x12\x1b\n" +
 	"\ttype_name\x18\x02 \x01(\tR\btypeName\"5\n" +
 	"\fEventOptions\x12%\n" +
-	"\x0eaggregate_name\x18\x01 \x01(\tR\raggregateName:Z\n" +
+	"\x0eaggregate_name\x18\x01 \x01(\tR\raggregateName*]\n" +
+	"\vServiceType\x12\x1c\n" +
+	"\x18SERVICE_TYPE_UNSPECIFIED\x10\x00\x12\x18\n" +
+	"\x14SERVICE_TYPE_COMMAND\x10\x01\x12\x16\n" +
+	"\x12SERVICE_TYPE_QUERY\x10\x02:Z\n" +
 	"\aservice\x12\x1f.google.protobuf.ServiceOptions\x18҆\x03 \x01(\v2\x1d.eventsourcing.ServiceOptionsR\aservice:m\n" +
 	"\x0eaggregate_root\x12\x1f.google.protobuf.MessageOptions\x18ӆ\x03 \x01(\v2#.eventsourcing.AggregateRootOptionsR\raggregateRoot:T\n" +
 	"\x05event\x12\x1f.google.protobuf.MessageOptions\x18Ԇ\x03 \x01(\v2\x1b.eventsourcing.EventOptionsR\x05eventB\xa6\x01\n" +
@@ -280,26 +351,29 @@ func file_eventsourcing_options_proto_rawDescGZIP() []byte {
 	return file_eventsourcing_options_proto_rawDescData
 }
 
+var file_eventsourcing_options_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_eventsourcing_options_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_eventsourcing_options_proto_goTypes = []any{
-	(*ServiceOptions)(nil),              // 0: eventsourcing.ServiceOptions
-	(*AggregateRootOptions)(nil),        // 1: eventsourcing.AggregateRootOptions
-	(*EventOptions)(nil),                // 2: eventsourcing.EventOptions
-	(*descriptorpb.ServiceOptions)(nil), // 3: google.protobuf.ServiceOptions
-	(*descriptorpb.MessageOptions)(nil), // 4: google.protobuf.MessageOptions
+	(ServiceType)(0),                    // 0: eventsourcing.ServiceType
+	(*ServiceOptions)(nil),              // 1: eventsourcing.ServiceOptions
+	(*AggregateRootOptions)(nil),        // 2: eventsourcing.AggregateRootOptions
+	(*EventOptions)(nil),                // 3: eventsourcing.EventOptions
+	(*descriptorpb.ServiceOptions)(nil), // 4: google.protobuf.ServiceOptions
+	(*descriptorpb.MessageOptions)(nil), // 5: google.protobuf.MessageOptions
 }
 var file_eventsourcing_options_proto_depIdxs = []int32{
-	3, // 0: eventsourcing.service:extendee -> google.protobuf.ServiceOptions
-	4, // 1: eventsourcing.aggregate_root:extendee -> google.protobuf.MessageOptions
-	4, // 2: eventsourcing.event:extendee -> google.protobuf.MessageOptions
-	0, // 3: eventsourcing.service:type_name -> eventsourcing.ServiceOptions
-	1, // 4: eventsourcing.aggregate_root:type_name -> eventsourcing.AggregateRootOptions
-	2, // 5: eventsourcing.event:type_name -> eventsourcing.EventOptions
-	6, // [6:6] is the sub-list for method output_type
-	6, // [6:6] is the sub-list for method input_type
-	3, // [3:6] is the sub-list for extension type_name
-	0, // [0:3] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	0, // 0: eventsourcing.ServiceOptions.service_type:type_name -> eventsourcing.ServiceType
+	4, // 1: eventsourcing.service:extendee -> google.protobuf.ServiceOptions
+	5, // 2: eventsourcing.aggregate_root:extendee -> google.protobuf.MessageOptions
+	5, // 3: eventsourcing.event:extendee -> google.protobuf.MessageOptions
+	1, // 4: eventsourcing.service:type_name -> eventsourcing.ServiceOptions
+	2, // 5: eventsourcing.aggregate_root:type_name -> eventsourcing.AggregateRootOptions
+	3, // 6: eventsourcing.event:type_name -> eventsourcing.EventOptions
+	7, // [7:7] is the sub-list for method output_type
+	7, // [7:7] is the sub-list for method input_type
+	4, // [4:7] is the sub-list for extension type_name
+	1, // [1:4] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_eventsourcing_options_proto_init() }
@@ -312,13 +386,14 @@ func file_eventsourcing_options_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_eventsourcing_options_proto_rawDesc), len(file_eventsourcing_options_proto_rawDesc)),
-			NumEnums:      0,
+			NumEnums:      1,
 			NumMessages:   3,
 			NumExtensions: 3,
 			NumServices:   0,
 		},
 		GoTypes:           file_eventsourcing_options_proto_goTypes,
 		DependencyIndexes: file_eventsourcing_options_proto_depIdxs,
+		EnumInfos:         file_eventsourcing_options_proto_enumTypes,
 		MessageInfos:      file_eventsourcing_options_proto_msgTypes,
 		ExtensionInfos:    file_eventsourcing_options_proto_extTypes,
 	}.Build()

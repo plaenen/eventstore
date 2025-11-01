@@ -7,6 +7,7 @@
 package accountv1
 
 import (
+	_ "github.com/plaenen/eventstore/pkg/cqrs"
 	_ "github.com/plaenen/eventstore/pkg/eventsourcing"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -1517,7 +1518,7 @@ var File_account_v1_account_proto protoreflect.FileDescriptor
 const file_account_v1_account_proto_rawDesc = "" +
 	"\n" +
 	"\x18account/v1/account.proto\x12\n" +
-	"account.v1\x1a\x1beventsourcing/options.proto\"{\n" +
+	"account.v1\x1a\x1beventsourcing/options.proto\x1a\x12cqrs/options.proto\"{\n" +
 	"\x12OpenAccountCommand\x12\x1d\n" +
 	"\n" +
 	"account_id\x18\x01 \x01(\tR\taccountId\x12\x1d\n" +
@@ -1657,20 +1658,20 @@ const file_account_v1_account_proto_rawDesc = "" +
 	"\x17TRANSACTION_TYPE_OPENED\x10\x01\x12\x1c\n" +
 	"\x18TRANSACTION_TYPE_DEPOSIT\x10\x02\x12\x1f\n" +
 	"\x1bTRANSACTION_TYPE_WITHDRAWAL\x10\x03\x12\x1b\n" +
-	"\x17TRANSACTION_TYPE_CLOSED\x10\x042\xdf\x02\n" +
+	"\x17TRANSACTION_TYPE_CLOSED\x10\x042\xe5\x02\n" +
 	"\x15AccountCommandService\x12N\n" +
 	"\vOpenAccount\x12\x1e.account.v1.OpenAccountCommand\x1a\x1f.account.v1.OpenAccountResponse\x12B\n" +
 	"\aDeposit\x12\x1a.account.v1.DepositCommand\x1a\x1b.account.v1.DepositResponse\x12E\n" +
 	"\bWithdraw\x12\x1b.account.v1.WithdrawCommand\x1a\x1c.account.v1.WithdrawResponse\x12Q\n" +
-	"\fCloseAccount\x12\x1f.account.v1.CloseAccountCommand\x1a .account.v1.CloseAccountResponse\x1a\x18\x92\xb5\x18\x14\n" +
-	"\aAccount\x12\aAccount\x18\x012\xfb\x02\n" +
+	"\fCloseAccount\x12\x1f.account.v1.CloseAccountCommand\x1a .account.v1.CloseAccountResponse\x1a\x1e\x92\xb5\x18\x14\n" +
+	"\aAccount\x12\aAccount\x18\x01\x8a\xa6\x1d\x02\b\x012\x81\x03\n" +
 	"\x13AccountQueryService\x12D\n" +
 	"\n" +
 	"GetAccount\x12\x1d.account.v1.GetAccountRequest\x1a\x17.account.v1.AccountView\x12Q\n" +
 	"\fListAccounts\x12\x1f.account.v1.ListAccountsRequest\x1a .account.v1.ListAccountsResponse\x12R\n" +
 	"\x11GetAccountBalance\x12$.account.v1.GetAccountBalanceRequest\x1a\x17.account.v1.BalanceView\x12]\n" +
-	"\x11GetAccountHistory\x12$.account.v1.GetAccountHistoryRequest\x1a\".account.v1.AccountHistoryResponse\x1a\x18\x92\xb5\x18\x14\n" +
-	"\aAccount\x12\aAccount\x18\x01B\xa7\x01\n" +
+	"\x11GetAccountHistory\x12$.account.v1.GetAccountHistoryRequest\x1a\".account.v1.AccountHistoryResponse\x1a\x1e\x92\xb5\x18\x14\n" +
+	"\aAccount\x12\aAccount\x18\x01\x8a\xa6\x1d\x02\b\x02B\xa7\x01\n" +
 	"\x0ecom.account.v1B\fAccountProtoP\x01Z>github.com/plaenen/eventstore/examples/pb/account/v1;accountv1\xa2\x02\x03AXX\xaa\x02\n" +
 	"Account.V1\xca\x02\n" +
 	"Account\\V1\xe2\x02\x16Account\\V1\\GPBMetadata\xea\x02\vAccount::V1b\x06proto3"

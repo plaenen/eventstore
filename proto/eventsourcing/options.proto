@@ -22,7 +22,7 @@ import "google/protobuf/descriptor.proto";
 // - See: https://protobuf.dev/programming-guides/proto3/#updating
 // =============================================================================
 
-// ServiceOptions declares which aggregate a command service operates on
+// ServiceOptions declares which aggregate a service operates on
 // This is the PRIMARY source of truth for aggregate association
 message ServiceOptions {
   // REQUIRED: The name of the aggregate this service operates on

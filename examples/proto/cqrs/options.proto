@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package cqrs;
+
+option go_package = "github.com/plaenen/eventstore/pkg/cqrs";
+
+import "google/protobuf/descriptor.proto";
+
+// =============================================================================
+// CQRS PROTO OPTIONS
+// =============================================================================
+// Design principles:
+// 1. Transport agnostic - works with NATS, HTTP, gRPC, etc.
+// 2. Command/Query separation - explicit service types
+// 3. Infrastructure concern - not domain modeling
+// =============================================================================
+
+// ServiceType defines the type of service (command vs query)
+enum ServiceType {
+  // Default value - must be explicitly set
+  SERVICE_TYPE_UNSPECIFIED = 0;
+
+  // Command service - handles write operations
+  SERVICE_TYPE_COMMAND = 1;
+
+  // Query service - handles read operations
+  SERVICE_TYPE_QUERY = 2;
+}
+
+// ServiceOptions configures CQRS behavior for a service
+message ServiceOptions {
+  // REQUIRED: The type of service (command or query)
+  // This determines how the service is exposed and routed
+  ServiceType service_type = 1;
+
+  // OPTIONAL: Timeout for operations in milliseconds
+  // Default: 5000 (5 seconds)
+  int32 timeout_ms = 2;
+
+  // OPTIONAL: Maximum number of retry attempts
+  // Default: 3
+  int32 max_retries = 3;
+
+  // OPTIONAL: Queue group for load balancing (NATS-specific)
+  // When multiple instances subscribe to the same queue group,
+  // only one instance receives each message
+  string queue_group = 4;
+}
+
+// Extend service options
+extend google.protobuf.ServiceOptions {
+  ServiceOptions service = 60001;
+}

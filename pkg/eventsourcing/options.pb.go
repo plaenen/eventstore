@@ -21,7 +21,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// ServiceOptions declares which aggregate a command service operates on
+// ServiceOptions declares which aggregate a service operates on
 // This is the PRIMARY source of truth for aggregate association
 type ServiceOptions struct {
 	state         protoimpl.MessageState

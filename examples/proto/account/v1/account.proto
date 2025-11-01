@@ -5,22 +5,33 @@ package account.v1;
 option go_package = "github.com/plaenen/eventstore/examples/pb/account/v1;accountv1";
 
 import "eventsourcing/options.proto";
+import "cqrs/options.proto";
 
 // ============================================================================
-// SIMPLIFIED OPTIONS - New Format
+// DUAL PLUGIN OPTIONS
 // ============================================================================
-// Service declares aggregate name + root message (single source of truth)
-// Commands have NO options (inherit from service)
-// Events have minimal options (just aggregate_name)
-// Aggregate root has minimal options (just id_field)
+// Event Sourcing Plugin (protoc-gen-eventsourcing):
+//   - Generates aggregate domain model
+//   - Generates aggregate handler interfaces (when aggregate_handler: true)
+//
+// CQRS Plugin (protoc-gen-cqrs):
+//   - Generates client/server infrastructure
+//   - Handles transport and routing
+//   - Requires service_type to distinguish commands from queries
 // ============================================================================
 
 // AccountCommandService handles write operations (commands)
 service AccountCommandService {
+  // Event sourcing options - for aggregate handler generation
   option (eventsourcing.service) = {
     aggregate_name: "Account"
     aggregate_root_message: "Account"
     aggregate_handler: true
+  };
+
+  // CQRS options - for transport infrastructure
+  option (cqrs.service) = {
+    service_type: SERVICE_TYPE_COMMAND
   };
 
   // OpenAccount creates a new bank account
@@ -38,10 +49,16 @@ service AccountCommandService {
 
 // AccountQueryService handles read operations (queries)
 service AccountQueryService {
+  // Event sourcing options - for aggregate handler generation
   option (eventsourcing.service) = {
     aggregate_name: "Account"
     aggregate_root_message: "Account"
     aggregate_handler: true
+  };
+
+  // CQRS options - for transport infrastructure
+  option (cqrs.service) = {
+    service_type: SERVICE_TYPE_QUERY
   };
 
   // GetAccount retrieves account details by ID
