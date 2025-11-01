@@ -29,7 +29,6 @@
 //	 - option (cqrs.service) = {
 //	     service_type: SERVICE_TYPE_COMMAND
 //	   }
-//
 package main
 
 import (
@@ -659,4 +658,3 @@ func extractDescription(methodName string) string {
 		return "executes " + strings.ToLower(methodName)
 	}
 }
-
