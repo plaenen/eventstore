@@ -87,11 +87,8 @@ func generateFile(gen *protogen.Plugin, file *protogen.File) {
 		}
 	}
 
-	// Find services for aggregate handler generation
-	services := findServices(file)
-
 	// Skip files that don't have anything to generate
-	if len(aggregates) == 0 && len(services) == 0 && !hasEvents {
+	if len(aggregates) == 0 && !hasEvents {
 		return
 	}
 
@@ -108,7 +105,12 @@ func generateFile(gen *protogen.Plugin, file *protogen.File) {
 		generateProjectionSDK(g, file, gen)
 
 		// Generate aggregate handler interfaces in the aggregate file
-		// when aggregate_handler: true is set on services
+		// Find services from ALL files that reference these aggregates
+		aggregateNames := make([]string, 0, len(aggregates))
+		for _, agg := range aggregates {
+			aggregateNames = append(aggregateNames, agg.TypeName)
+		}
+		services := findServicesForAggregates(gen, aggregateNames)
 		generateAggregateHandlersInFile(g, services)
 	}
 }
@@ -695,55 +697,66 @@ type ServiceInfo struct {
 	AggregateName string
 }
 
-// findServices finds all services with aggregate handler options in the proto file.
-// Used only for aggregate handler interface generation.
-func findServices(file *protogen.File) []*ServiceInfo {
+// findServicesForAggregates finds all services across ALL files that reference the specified aggregates.
+// This enables aggregate handlers to be generated even when services are defined in separate files.
+func findServicesForAggregates(gen *protogen.Plugin, aggregateNames []string) []*ServiceInfo {
 	var services []*ServiceInfo
 
-	for _, svc := range file.Services {
-		name := string(svc.Desc.Name())
+	// Create a map for quick lookup
+	aggregateMap := make(map[string]bool)
+	for _, name := range aggregateNames {
+		aggregateMap[name] = true
+	}
 
-		// Get service options
-		opts := getServiceOptions(svc)
-		if opts == nil {
-			// No eventsourcing service options - skip this service
-			continue
-		}
+	// Scan all files in the generation
+	for _, file := range gen.Files {
+		for _, svc := range file.Services {
+			name := string(svc.Desc.Name())
 
-		// Only include services that want aggregate handlers
-		if !opts.GetAggregateHandler() {
-			continue
-		}
-
-		// Get aggregate name from options
-		aggregateName := opts.GetAggregateName()
-		if aggregateName == "" {
-			// No aggregate name specified - skip
-			continue
-		}
-
-		info := &ServiceInfo{
-			Name:          name,
-			Service:       svc,
-			AggregateName: aggregateName,
-			Commands:      make([]*protogen.Method, 0),
-			Queries:       make([]*protogen.Method, 0),
-		}
-
-		// Categorize methods based on naming convention
-		// (This is just for organizing the handler interface, not for routing)
-		for _, method := range svc.Methods {
-			methodName := method.GoName
-			// Simple heuristic: methods starting with Get/List are queries
-			if strings.HasPrefix(methodName, "Get") || strings.HasPrefix(methodName, "List") {
-				info.Queries = append(info.Queries, method)
-			} else {
-				// Everything else is a command
-				info.Commands = append(info.Commands, method)
+			// Get service options
+			opts := getServiceOptions(svc)
+			if opts == nil {
+				continue
 			}
-		}
 
-		services = append(services, info)
+			// Only include services that want aggregate handlers
+			if !opts.GetAggregateHandler() {
+				continue
+			}
+
+			// Get aggregate name from options
+			aggregateName := opts.GetAggregateName()
+			if aggregateName == "" {
+				continue
+			}
+
+			// Only include if this service references one of our aggregates
+			if !aggregateMap[aggregateName] {
+				continue
+			}
+
+			info := &ServiceInfo{
+				Name:          name,
+				Service:       svc,
+				AggregateName: aggregateName,
+				Commands:      make([]*protogen.Method, 0),
+				Queries:       make([]*protogen.Method, 0),
+			}
+
+			// Categorize methods based on naming convention
+			for _, method := range svc.Methods {
+				methodName := method.GoName
+				// Simple heuristic: methods starting with Get/List are queries
+				if strings.HasPrefix(methodName, "Get") || strings.HasPrefix(methodName, "List") {
+					info.Queries = append(info.Queries, method)
+				} else {
+					// Everything else is a command
+					info.Commands = append(info.Commands, method)
+				}
+			}
+
+			services = append(services, info)
+		}
 	}
 
 	return services
