@@ -79,4 +79,19 @@ type EventStore interface {
 
 	// Close closes the event store and releases resources.
 	Close() error
+
+	// Outbox methods for transactional outbox pattern
+
+	// LoadUnpublishedEvents loads events from the outbox that haven't been published yet.
+	// Returns events ordered by created_at (oldest first) up to the specified limit.
+	// Use this in a background worker to poll for events that need publishing.
+	LoadUnpublishedEvents(limit int) ([]*domain.EventEnvelope, error)
+
+	// MarkEventsPublished marks events as successfully published in the outbox.
+	// This should be called after events are successfully published to the message bus.
+	MarkEventsPublished(eventIDs []string) error
+
+	// RecordPublishFailure records a failed publish attempt for an event.
+	// Increments the attempts counter and stores the error message for debugging.
+	RecordPublishFailure(eventID string, err error) error
 }

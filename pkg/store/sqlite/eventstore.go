@@ -387,6 +387,11 @@ func (s *EventStore) AppendEvents(aggregateID string, expectedVersion int64, eve
 		if err != nil {
 			return fmt.Errorf("failed to insert event: %w", err)
 		}
+
+		// Insert into outbox for publishing (transactional outbox pattern)
+		if err := s.insertOutbox(tx, event); err != nil {
+			return fmt.Errorf("failed to insert into outbox: %w", err)
+		}
 	}
 
 	// Update global position
@@ -899,6 +904,154 @@ func (s *EventStore) validateSeedConstraints(tx *sql.Tx, event *domain.Event, ag
 				return fmt.Errorf("failed to release constraint: %w", err)
 			}
 		}
+	}
+
+	return nil
+}
+
+// ============================================================================
+// Outbox Methods - Transactional Outbox Pattern
+// ============================================================================
+
+// insertOutbox inserts an event into the outbox table within an existing transaction.
+// This is called by AppendEvents to ensure events are atomically added to both
+// the events table and the outbox table.
+func (s *EventStore) insertOutbox(tx *sql.Tx, event *domain.Event) error {
+	_, err := tx.Exec(`
+		INSERT INTO event_outbox (
+			event_id, aggregate_id, aggregate_type, event_type, version, created_at
+		) VALUES (?, ?, ?, ?, ?, ?)
+	`, event.ID, event.AggregateID, event.AggregateType, event.EventType, event.Version, time.Now().Unix())
+
+	return err
+}
+
+// LoadUnpublishedEvents loads events from the outbox that haven't been published yet.
+// Returns events ordered by created_at (oldest first) up to the specified limit.
+// This is used by the OutboxForwarder to poll for events that need publishing.
+func (s *EventStore) LoadUnpublishedEvents(limit int) ([]*domain.EventEnvelope, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	rows, err := s.db.Query(`
+		SELECT
+			o.event_id,
+			e.aggregate_id,
+			e.aggregate_type,
+			e.event_type,
+			e.version,
+			e.timestamp,
+			e.data,
+			e.metadata
+		FROM event_outbox o
+		INNER JOIN events e ON o.event_id = e.event_id
+		WHERE o.published_at IS NULL
+		ORDER BY o.created_at ASC
+		LIMIT ?
+	`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query unpublished events: %w", err)
+	}
+	defer rows.Close()
+
+	var envelopes []*domain.EventEnvelope
+	for rows.Next() {
+		var (
+			eventID       string
+			aggregateID   string
+			aggregateType string
+			eventType     string
+			version       int64
+			timestamp     int64
+			data          []byte
+			metadataJSON  string
+		)
+
+		if err := rows.Scan(
+			&eventID, &aggregateID, &aggregateType, &eventType,
+			&version, &timestamp, &data, &metadataJSON,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan event: %w", err)
+		}
+
+		event := domain.Event{
+			ID:            eventID,
+			AggregateID:   aggregateID,
+			AggregateType: aggregateType,
+			EventType:     eventType,
+			Version:       version,
+			Timestamp:     time.Unix(timestamp, 0),
+			Data:          data,
+		}
+
+		// Unmarshal metadata directly into the Event struct
+		if err := json.Unmarshal([]byte(metadataJSON), &event.Metadata); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
+		}
+
+		envelope := &domain.EventEnvelope{
+			Event: event,
+		}
+
+		envelopes = append(envelopes, envelope)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %w", err)
+	}
+
+	return envelopes, nil
+}
+
+// MarkEventsPublished marks events as successfully published in the outbox.
+// This should be called after events are successfully published to the message bus.
+func (s *EventStore) MarkEventsPublished(eventIDs []string) error {
+	if len(eventIDs) == 0 {
+		return nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Build placeholders for IN clause
+	placeholders := make([]string, len(eventIDs))
+	args := make([]interface{}, len(eventIDs)+1)
+	args[0] = time.Now().Unix()
+
+	for i, id := range eventIDs {
+		placeholders[i] = "?"
+		args[i+1] = id
+	}
+
+	query := fmt.Sprintf(`
+		UPDATE event_outbox
+		SET published_at = ?, attempts = attempts + 1
+		WHERE event_id IN (%s)
+	`, strings.Join(placeholders, ","))
+
+	_, err := s.db.Exec(query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to mark events as published: %w", err)
+	}
+
+	return nil
+}
+
+// RecordPublishFailure records a failed publish attempt for an event.
+// Increments the attempts counter and stores the error message for debugging.
+func (s *EventStore) RecordPublishFailure(eventID string, err error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, execErr := s.db.Exec(`
+		UPDATE event_outbox
+		SET attempts = attempts + 1,
+		    last_error = ?
+		WHERE event_id = ?
+	`, err.Error(), eventID)
+
+	if execErr != nil {
+		return fmt.Errorf("failed to record publish failure: %w", execErr)
 	}
 
 	return nil
