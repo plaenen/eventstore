@@ -24,6 +24,7 @@ type Querier interface {
 	GetLatestSnapshot(ctx context.Context, aggregateID string) (Snapshot, error)
 	GetLatestSnapshotBeforeVersion(ctx context.Context, arg GetLatestSnapshotBeforeVersionParams) (Snapshot, error)
 	GetProcessedCommand(ctx context.Context, arg GetProcessedCommandParams) (GetProcessedCommandRow, error)
+	GetRebuildingProjections(ctx context.Context) ([]ProjectionCheckpoint, error)
 	GetSnapshotAtVersion(ctx context.Context, arg GetSnapshotAtVersionParams) (Snapshot, error)
 	GetSnapshotStats(ctx context.Context) (GetSnapshotStatsRow, error)
 	InsertEvent(ctx context.Context, arg InsertEventParams) error
@@ -36,6 +37,7 @@ type Querier interface {
 	ReleaseConstraint(ctx context.Context, arg ReleaseConstraintParams) error
 	SaveCheckpoint(ctx context.Context, arg SaveCheckpointParams) error
 	SaveSnapshot(ctx context.Context, arg SaveSnapshotParams) error
+	SetRebuildingFlag(ctx context.Context, arg SetRebuildingFlagParams) error
 	UpdateEventPositions(ctx context.Context) error
 }
 

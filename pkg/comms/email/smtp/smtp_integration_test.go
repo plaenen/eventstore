@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	emailpkg "github.com/plaenen/eventstore/pkg/email"
-	"github.com/plaenen/eventstore/pkg/email/smtp"
+	emailpkg "github.com/plaenen/eventstore/pkg/comms/email"
+	"github.com/plaenen/eventstore/pkg/comms/email/smtp"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )

@@ -7,6 +7,7 @@ package sqlcgen
 
 import (
 	"context"
+	"database/sql"
 )
 
 const deleteCheckpoint = `-- name: DeleteCheckpoint :exec
@@ -19,8 +20,56 @@ func (q *Queries) DeleteCheckpoint(ctx context.Context, projectionName string) e
 	return err
 }
 
+const getRebuildingProjections = `-- name: GetRebuildingProjections :many
+SELECT
+    projection_name,
+    position,
+    nats_sequence,
+    last_event_id,
+    updated_at,
+    is_rebuilding
+FROM projection_checkpoints
+WHERE is_rebuilding = 1
+`
+
+func (q *Queries) GetRebuildingProjections(ctx context.Context) ([]ProjectionCheckpoint, error) {
+	rows, err := q.query(ctx, q.getRebuildingProjectionsStmt, getRebuildingProjections)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ProjectionCheckpoint{}
+	for rows.Next() {
+		var i ProjectionCheckpoint
+		if err := rows.Scan(
+			&i.ProjectionName,
+			&i.Position,
+			&i.NatsSequence,
+			&i.LastEventID,
+			&i.UpdatedAt,
+			&i.IsRebuilding,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const loadCheckpoint = `-- name: LoadCheckpoint :one
-SELECT projection_name, position, last_event_id, updated_at
+SELECT
+    projection_name,
+    position,
+    nats_sequence,
+    last_event_id,
+    updated_at,
+    is_rebuilding
 FROM projection_checkpoints
 WHERE projection_name = ?
 `
@@ -31,30 +80,60 @@ func (q *Queries) LoadCheckpoint(ctx context.Context, projectionName string) (Pr
 	err := row.Scan(
 		&i.ProjectionName,
 		&i.Position,
+		&i.NatsSequence,
 		&i.LastEventID,
 		&i.UpdatedAt,
+		&i.IsRebuilding,
 	)
 	return i, err
 }
 
 const saveCheckpoint = `-- name: SaveCheckpoint :exec
-INSERT OR REPLACE INTO projection_checkpoints (projection_name, position, last_event_id, updated_at)
-VALUES (?, ?, ?, ?)
+INSERT OR REPLACE INTO projection_checkpoints (
+    projection_name,
+    position,
+    nats_sequence,
+    last_event_id,
+    updated_at,
+    is_rebuilding
+)
+VALUES (?, ?, ?, ?, ?, ?)
 `
 
 type SaveCheckpointParams struct {
-	ProjectionName string `json:"projection_name"`
-	Position       int64  `json:"position"`
-	LastEventID    string `json:"last_event_id"`
-	UpdatedAt      int64  `json:"updated_at"`
+	ProjectionName string        `json:"projection_name"`
+	Position       int64         `json:"position"`
+	NatsSequence   sql.NullInt64 `json:"nats_sequence"`
+	LastEventID    string        `json:"last_event_id"`
+	UpdatedAt      int64         `json:"updated_at"`
+	IsRebuilding   int64         `json:"is_rebuilding"`
 }
 
 func (q *Queries) SaveCheckpoint(ctx context.Context, arg SaveCheckpointParams) error {
 	_, err := q.exec(ctx, q.saveCheckpointStmt, saveCheckpoint,
 		arg.ProjectionName,
 		arg.Position,
+		arg.NatsSequence,
 		arg.LastEventID,
 		arg.UpdatedAt,
+		arg.IsRebuilding,
 	)
+	return err
+}
+
+const setRebuildingFlag = `-- name: SetRebuildingFlag :exec
+UPDATE projection_checkpoints
+SET is_rebuilding = ?, updated_at = ?
+WHERE projection_name = ?
+`
+
+type SetRebuildingFlagParams struct {
+	IsRebuilding   int64  `json:"is_rebuilding"`
+	UpdatedAt      int64  `json:"updated_at"`
+	ProjectionName string `json:"projection_name"`
+}
+
+func (q *Queries) SetRebuildingFlag(ctx context.Context, arg SetRebuildingFlagParams) error {
+	_, err := q.exec(ctx, q.setRebuildingFlagStmt, setRebuildingFlag, arg.IsRebuilding, arg.UpdatedAt, arg.ProjectionName)
 	return err
 }

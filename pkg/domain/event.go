@@ -82,10 +82,30 @@ const (
 	ConstraintRelease ConstraintOperation = "release"
 )
 
-// EventEnvelope wraps an event with its deserialized payload.
+// NATSMetadata contains NATS JetStream metadata attached to events.
+// This is populated when events are consumed from NATS subscriptions.
+type NATSMetadata struct {
+	// StreamSequence is the sequence number in the NATS stream
+	StreamSequence uint64
+
+	// ConsumerSequence is the sequence number for the consumer
+	ConsumerSequence uint64
+
+	// Timestamp is when NATS received the message
+	Timestamp time.Time
+
+	// NumDelivered is how many times this message has been delivered
+	NumDelivered uint64
+}
+
+// EventEnvelope wraps an event with its deserialized payload and optional NATS metadata.
 type EventEnvelope struct {
 	Event
 	Payload proto.Message
+
+	// NATSMetadata is populated when event comes from NATS subscription.
+	// It is nil when event comes from EventStore during rebuild.
+	NATSMetadata *NATSMetadata
 }
 
 // GenerateDeterministicEventID generates a deterministic event ID from command context.

@@ -95,11 +95,22 @@ func (s *CheckpointStore) DB() *sql.DB {
 // WARNING: For atomic projection updates, use SaveInTx instead to avoid dual-write issues.
 func (s *CheckpointStore) Save(checkpoint *store.ProjectionCheckpoint) error {
 	ctx := context.Background()
+
+	var natsSequence sql.NullInt64
+	if checkpoint.NATSSequence != nil {
+		natsSequence = sql.NullInt64{
+			Int64: *checkpoint.NATSSequence,
+			Valid: true,
+		}
+	}
+
 	err := s.queries.SaveCheckpoint(ctx, sqlcgen.SaveCheckpointParams{
 		ProjectionName: checkpoint.ProjectionName,
 		Position:       checkpoint.Position,
+		NatsSequence:   natsSequence,
 		LastEventID:    checkpoint.LastEventID,
 		UpdatedAt:      checkpoint.UpdatedAt.Unix(),
+		IsRebuilding:   boolToInt64(checkpoint.IsRebuilding),
 	})
 
 	if err != nil {
@@ -139,11 +150,21 @@ func (s *CheckpointStore) SaveInTx(tx *sql.Tx, checkpoint *store.ProjectionCheck
 	ctx := context.Background()
 	queries := sqlcgen.New(tx)
 
+	var natsSequence sql.NullInt64
+	if checkpoint.NATSSequence != nil {
+		natsSequence = sql.NullInt64{
+			Int64: *checkpoint.NATSSequence,
+			Valid: true,
+		}
+	}
+
 	err := queries.SaveCheckpoint(ctx, sqlcgen.SaveCheckpointParams{
 		ProjectionName: checkpoint.ProjectionName,
 		Position:       checkpoint.Position,
+		NatsSequence:   natsSequence,
 		LastEventID:    checkpoint.LastEventID,
 		UpdatedAt:      checkpoint.UpdatedAt.Unix(),
+		IsRebuilding:   boolToInt64(checkpoint.IsRebuilding),
 	})
 
 	if err != nil {
@@ -170,6 +191,13 @@ func (s *CheckpointStore) Load(projectionName string) (*store.ProjectionCheckpoi
 		Position:       row.Position,
 		LastEventID:    row.LastEventID,
 		UpdatedAt:      time.Unix(row.UpdatedAt, 0),
+		IsRebuilding:   int64ToBool(row.IsRebuilding),
+	}
+
+	// Handle nullable NATS sequence
+	if row.NatsSequence.Valid {
+		seq := row.NatsSequence.Int64
+		checkpoint.NATSSequence = &seq
 	}
 
 	return &checkpoint, nil
@@ -199,4 +227,19 @@ func (s *CheckpointStore) DeleteInTx(tx *sql.Tx, projectionName string) error {
 	}
 
 	return nil
+}
+
+// Helper functions for bool/int64 conversion
+
+// boolToInt64 converts a boolean to int64 (1 for true, 0 for false).
+func boolToInt64(b bool) int64 {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// int64ToBool converts an int64 to boolean (true if non-zero).
+func int64ToBool(i int64) bool {
+	return i != 0
 }

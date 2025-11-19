@@ -78,10 +78,17 @@ CREATE INDEX IF NOT EXISTS idx_snapshots_type
 CREATE TABLE IF NOT EXISTS projection_checkpoints (
     projection_name TEXT PRIMARY KEY,
     position INTEGER NOT NULL,
+    nats_sequence INTEGER,
     last_event_id TEXT NOT NULL,
-    updated_at INTEGER NOT NULL
+    updated_at INTEGER NOT NULL,
+    is_rebuilding INTEGER NOT NULL DEFAULT 0
 );
 
 -- Index for checkpoint updates
 CREATE INDEX IF NOT EXISTS idx_checkpoints_updated
     ON projection_checkpoints(updated_at);
+
+-- Index for finding rebuilding projections
+CREATE INDEX IF NOT EXISTS idx_checkpoints_rebuilding
+    ON projection_checkpoints(is_rebuilding)
+    WHERE is_rebuilding = 1;

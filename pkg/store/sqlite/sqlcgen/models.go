@@ -30,10 +30,12 @@ type ProcessedCommand struct {
 }
 
 type ProjectionCheckpoint struct {
-	ProjectionName string `json:"projection_name"`
-	Position       int64  `json:"position"`
-	LastEventID    string `json:"last_event_id"`
-	UpdatedAt      int64  `json:"updated_at"`
+	ProjectionName string        `json:"projection_name"`
+	Position       int64         `json:"position"`
+	NatsSequence   sql.NullInt64 `json:"nats_sequence"`
+	LastEventID    string        `json:"last_event_id"`
+	UpdatedAt      int64         `json:"updated_at"`
+	IsRebuilding   int64         `json:"is_rebuilding"`
 }
 
 type Snapshot struct {

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/plaenen/steward-control/pkg/compare"
+	"github.com/plaenen/eventstore/pkg/compare"
 )
 
 // Example types

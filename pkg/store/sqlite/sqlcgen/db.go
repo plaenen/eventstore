@@ -66,6 +66,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getProcessedCommandStmt, err = db.PrepareContext(ctx, getProcessedCommand); err != nil {
 		return nil, fmt.Errorf("error preparing query GetProcessedCommand: %w", err)
 	}
+	if q.getRebuildingProjectionsStmt, err = db.PrepareContext(ctx, getRebuildingProjections); err != nil {
+		return nil, fmt.Errorf("error preparing query GetRebuildingProjections: %w", err)
+	}
 	if q.getSnapshotAtVersionStmt, err = db.PrepareContext(ctx, getSnapshotAtVersion); err != nil {
 		return nil, fmt.Errorf("error preparing query GetSnapshotAtVersion: %w", err)
 	}
@@ -101,6 +104,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.saveSnapshotStmt, err = db.PrepareContext(ctx, saveSnapshot); err != nil {
 		return nil, fmt.Errorf("error preparing query SaveSnapshot: %w", err)
+	}
+	if q.setRebuildingFlagStmt, err = db.PrepareContext(ctx, setRebuildingFlag); err != nil {
+		return nil, fmt.Errorf("error preparing query SetRebuildingFlag: %w", err)
 	}
 	if q.updateEventPositionsStmt, err = db.PrepareContext(ctx, updateEventPositions); err != nil {
 		return nil, fmt.Errorf("error preparing query UpdateEventPositions: %w", err)
@@ -180,6 +186,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getProcessedCommandStmt: %w", cerr)
 		}
 	}
+	if q.getRebuildingProjectionsStmt != nil {
+		if cerr := q.getRebuildingProjectionsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getRebuildingProjectionsStmt: %w", cerr)
+		}
+	}
 	if q.getSnapshotAtVersionStmt != nil {
 		if cerr := q.getSnapshotAtVersionStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getSnapshotAtVersionStmt: %w", cerr)
@@ -240,6 +251,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing saveSnapshotStmt: %w", cerr)
 		}
 	}
+	if q.setRebuildingFlagStmt != nil {
+		if cerr := q.setRebuildingFlagStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing setRebuildingFlagStmt: %w", cerr)
+		}
+	}
 	if q.updateEventPositionsStmt != nil {
 		if cerr := q.updateEventPositionsStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing updateEventPositionsStmt: %w", cerr)
@@ -298,6 +314,7 @@ type Queries struct {
 	getLatestSnapshotStmt              *sql.Stmt
 	getLatestSnapshotBeforeVersionStmt *sql.Stmt
 	getProcessedCommandStmt            *sql.Stmt
+	getRebuildingProjectionsStmt       *sql.Stmt
 	getSnapshotAtVersionStmt           *sql.Stmt
 	getSnapshotStatsStmt               *sql.Stmt
 	insertEventStmt                    *sql.Stmt
@@ -310,6 +327,7 @@ type Queries struct {
 	releaseConstraintStmt              *sql.Stmt
 	saveCheckpointStmt                 *sql.Stmt
 	saveSnapshotStmt                   *sql.Stmt
+	setRebuildingFlagStmt              *sql.Stmt
 	updateEventPositionsStmt           *sql.Stmt
 }
 
@@ -331,6 +349,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		getLatestSnapshotStmt:              q.getLatestSnapshotStmt,
 		getLatestSnapshotBeforeVersionStmt: q.getLatestSnapshotBeforeVersionStmt,
 		getProcessedCommandStmt:            q.getProcessedCommandStmt,
+		getRebuildingProjectionsStmt:       q.getRebuildingProjectionsStmt,
 		getSnapshotAtVersionStmt:           q.getSnapshotAtVersionStmt,
 		getSnapshotStatsStmt:               q.getSnapshotStatsStmt,
 		insertEventStmt:                    q.insertEventStmt,
@@ -343,6 +362,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		releaseConstraintStmt:              q.releaseConstraintStmt,
 		saveCheckpointStmt:                 q.saveCheckpointStmt,
 		saveSnapshotStmt:                   q.saveSnapshotStmt,
+		setRebuildingFlagStmt:              q.setRebuildingFlagStmt,
 		updateEventPositionsStmt:           q.updateEventPositionsStmt,
 	}
 }

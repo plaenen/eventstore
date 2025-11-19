@@ -3,6 +3,7 @@ package nats
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -147,52 +148,121 @@ func (b *EventBus) Publish(events []*domain.Event) error {
 	return nil
 }
 
-// Subscribe subscribes to events matching the filter.
-func (b *EventBus) Subscribe(filter messaging.EventFilter, handler messaging.EventHandler) (messaging.Subscription, error) {
+// Subscribe subscribes to events matching the filter with optional configuration.
+func (b *EventBus) Subscribe(
+	filter messaging.EventFilter,
+	handler messaging.EventHandler,
+	opts ...messaging.SubscribeOption,
+) (messaging.Subscription, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
+	// Build configuration from options
+	config := &messaging.SubscribeConfig{
+		DeliverAll: true, // Default: deliver all messages
+	}
+	for _, opt := range opts {
+		opt(config)
+	}
+
+	// Generate consumer name if not provided
+	consumerName := config.ConsumerName
+	if consumerName == "" {
+		consumerName = fmt.Sprintf("consumer_%s", domain.GenerateID()[:8])
+	}
 
 	// Build NATS subject from filter
 	subject := b.buildSubject(filter)
 
-	// Create consumer name based on filter
-	consumerName := fmt.Sprintf("consumer_%s", domain.GenerateID()[:8])
+	// Create consumer configuration
+	consumerConfig := &nats.ConsumerConfig{
+		Durable:           consumerName,
+		AckPolicy:         nats.AckExplicitPolicy,
+		AckWait:           30 * time.Second,
+		MaxDeliver:        10,
+		InactiveThreshold: 24 * time.Hour, // Prevent auto-deletion
+		FilterSubject:     subject,
+	}
 
-	// Create durable consumer
-	sub, err := b.js.QueueSubscribe(
-		subject,
-		consumerName,
-		func(msg *nats.Msg) {
-			// Deserialize event
-			event, err := b.deserializeEvent(msg.Data)
+	// Configure delivery policy based on options
+	if config.DeliverAll {
+		consumerConfig.DeliverPolicy = nats.DeliverAllPolicy
+	} else if config.StartSequence > 0 {
+		consumerConfig.DeliverPolicy = nats.DeliverByStartSequencePolicy
+		consumerConfig.OptStartSeq = config.StartSequence
+
+		// Validate sequence is within stream bounds
+		if err := b.validateSequence(config.StartSequence); err != nil {
+			return nil, fmt.Errorf("invalid start sequence: %w", err)
+		}
+	} else {
+		// StartSequence == 0 means deliver new messages only
+		consumerConfig.DeliverPolicy = nats.DeliverNewPolicy
+	}
+
+	// Try to create consumer, update if it already exists
+	_, err := b.js.AddConsumer(b.streamName, consumerConfig)
+	if err != nil {
+		// Check if consumer already exists (check error message since there's no specific error type)
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "already exists") || strings.Contains(errMsg, "already in use") {
+			// Consumer exists, update it
+			_, err = b.js.UpdateConsumer(b.streamName, consumerConfig)
 			if err != nil {
-				// Log error and nack
-				msg.Nak()
-				return
+				return nil, fmt.Errorf("failed to update existing consumer %s: %w", consumerName, err)
 			}
+		} else {
+			return nil, fmt.Errorf("failed to create consumer %s: %w", consumerName, err)
+		}
+	}
 
-			// Create event envelope (payload will be deserialized by handler if needed)
-			envelope := &domain.EventEnvelope{
-				Event: *event,
-			}
+	// Subscribe using durable consumer name
+	sub, err := b.js.Subscribe(
+		subject,
+		func(msg *nats.Msg) {
+		// Deserialize event
+		event, err := b.deserializeEvent(msg.Data)
+		if err != nil {
+			// Log error and nack
+			msg.Nak()
+			return
+		}
 
-			// Call handler
-			if err := handler(envelope); err != nil {
-				// Handler failed, nack for retry
-				msg.Nak()
-				return
-			}
+		// Get NATS metadata
+		meta, err := msg.Metadata()
+		if err != nil {
+			// Metadata unavailable (shouldn't happen with JetStream)
+			msg.Nak()
+			return
+		}
 
-			// Handler succeeded, ack
-			msg.Ack()
+		// Create event envelope with NATS metadata
+		envelope := &domain.EventEnvelope{
+			Event: *event,
+			NATSMetadata: &domain.NATSMetadata{
+				StreamSequence:   meta.Sequence.Stream,
+				ConsumerSequence: meta.Sequence.Consumer,
+				Timestamp:        meta.Timestamp,
+				NumDelivered:     meta.NumDelivered,
+			},
+		}
+
+		// Call handler
+		if err := handler(envelope); err != nil {
+			// Handler failed, nack for retry
+			msg.Nak()
+			return
+		}
+
+		// Handler succeeded, ack
+		msg.Ack()
 		},
-		nats.Durable(consumerName),
+		nats.Bind(b.streamName, consumerName),
 		nats.ManualAck(),
-		nats.AckExplicit(),
 	)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to subscribe: %w", err)
+		return nil, fmt.Errorf("failed to subscribe to consumer: %w", err)
 	}
 
 	// Store subscription
@@ -203,6 +273,31 @@ func (b *EventBus) Subscribe(filter messaging.EventFilter, handler messaging.Eve
 		sub:          sub,
 		consumerName: consumerName,
 	}, nil
+}
+
+// validateSequence validates that a sequence number is within stream bounds.
+func (b *EventBus) validateSequence(sequence uint64) error {
+	streamInfo, err := b.js.StreamInfo(b.streamName)
+	if err != nil {
+		return fmt.Errorf("failed to get stream info: %w", err)
+	}
+
+	// Check if sequence is too old (stream purged)
+	if sequence < streamInfo.State.FirstSeq && streamInfo.State.FirstSeq > 1 {
+		return fmt.Errorf(
+			"sequence %d is before stream first sequence %d (stream may have been purged)",
+			sequence, streamInfo.State.FirstSeq,
+		)
+	}
+
+	// Check if sequence is ahead of stream (caught up - this is OK)
+	if sequence > streamInfo.State.LastSeq {
+		// Log for visibility but don't error
+		fmt.Printf("[NATS] Start sequence %d is ahead of stream last sequence %d (caught up)\n",
+			sequence, streamInfo.State.LastSeq)
+	}
+
+	return nil
 }
 
 // buildSubject builds a NATS subject from an event filter.
