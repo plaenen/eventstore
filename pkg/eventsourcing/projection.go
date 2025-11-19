@@ -119,19 +119,34 @@ func (m *ProjectionManager) Start(ctx context.Context, projectionName string) er
 	subscription, err := m.eventBus.Subscribe(
 		messaging.EventFilter{},
 		func(event *domain.EventEnvelope) error {
-			// Process event
+			// CRITICAL FIX: Check if we've already processed this event position
+			// This prevents double-counting when events are reprocessed from NATS after rebuild
+			if event.Event.Position <= checkpoint.Position {
+				// Already processed - skip handler but acknowledge to NATS
+				if event.NATSMetadata != nil {
+					seq := int64(event.NATSMetadata.StreamSequence)
+					checkpoint.NATSSequence = &seq
+					checkpoint.UpdatedAt = domain.Now()
+					if err := m.checkpointStore.Save(checkpoint); err != nil {
+						return fmt.Errorf("failed to save checkpoint: %w", err)
+					}
+				}
+				return nil // Skip processing
+			}
+
+			// Process new event
 			if err := projection.Handle(projCtx, event); err != nil {
 				return fmt.Errorf("projection %s failed to handle event: %w", projectionName, err)
 			}
 
-			// Update checkpoint
+			// Update checkpoint with new position
 			if event.NATSMetadata != nil {
 				// Event from NATS - track stream sequence
 				seq := int64(event.NATSMetadata.StreamSequence)
 				checkpoint.NATSSequence = &seq
 			}
 
-			checkpoint.Position++
+			checkpoint.Position = event.Event.Position
 			checkpoint.LastEventID = event.Event.ID
 			checkpoint.UpdatedAt = domain.Now()
 
