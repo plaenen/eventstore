@@ -85,16 +85,22 @@ func NewEventBus(config Config) (*EventBus, error) {
 	return bus, nil
 }
 
+// StreamInfo returns information about the JetStream stream
+func (b *EventBus) StreamInfo() (*nats.StreamInfo, error) {
+	return b.js.StreamInfo(b.streamName)
+}
+
 // ensureStream creates or updates the JetStream stream.
 func (b *EventBus) ensureStream(config Config) error {
 	streamConfig := &nats.StreamConfig{
-		Name:      config.StreamName,
-		Subjects:  config.StreamSubjects,
-		Retention: nats.InterestPolicy, // Messages deleted when all consumers have processed them
-		MaxAge:    config.MaxAge,
-		MaxBytes:  config.MaxBytes,
-		Storage:   nats.FileStorage,
-		Replicas:  1,
+		Name:       config.StreamName,
+		Subjects:   config.StreamSubjects,
+		Retention:  nats.InterestPolicy, // Messages deleted when all consumers have processed them
+		MaxAge:     config.MaxAge,
+		MaxBytes:   config.MaxBytes,
+		Storage:    nats.FileStorage,
+		Replicas:   1,
+		Duplicates: 2 * time.Minute, // Deduplication window - track message IDs for 2 minutes
 	}
 
 	// Try to get existing stream
@@ -109,10 +115,17 @@ func (b *EventBus) ensureStream(config Config) error {
 	}
 
 	// Update existing stream if needed
-	if stream.Config.MaxAge != config.MaxAge || stream.Config.MaxBytes != config.MaxBytes {
+	needsUpdate := stream.Config.MaxAge != config.MaxAge ||
+		stream.Config.MaxBytes != config.MaxBytes ||
+		stream.Config.Duplicates != streamConfig.Duplicates
+
+	if needsUpdate {
 		_, err = b.js.UpdateStream(streamConfig)
 		if err != nil {
-			return fmt.Errorf("failed to update stream: %w", err)
+			// If update fails due to immutable field (like Duplicates), we can log but continue
+			// In production, you might want to delete and recreate, but that loses data
+			// For now, just log the error
+			return fmt.Errorf("failed to update stream (stream may need recreation for Duplicates): %w", err)
 		}
 	}
 
@@ -202,16 +215,39 @@ func (b *EventBus) Subscribe(
 		consumerConfig.DeliverPolicy = nats.DeliverNewPolicy
 	}
 
-	// Try to create consumer, update if it already exists
+	// Try to create consumer, or update/recreate if it already exists
 	_, err := b.js.AddConsumer(b.streamName, consumerConfig)
 	if err != nil {
 		// Check if consumer already exists (check error message since there's no specific error type)
 		errMsg := err.Error()
 		if strings.Contains(errMsg, "already exists") || strings.Contains(errMsg, "already in use") {
-			// Consumer exists, update it
-			_, err = b.js.UpdateConsumer(b.streamName, consumerConfig)
-			if err != nil {
-				return nil, fmt.Errorf("failed to update existing consumer %s: %w", consumerName, err)
+			// Consumer exists - check if we need to recreate it due to immutable field changes
+			existing, infoErr := b.js.ConsumerInfo(b.streamName, consumerName)
+			if infoErr != nil {
+				return nil, fmt.Errorf("failed to get existing consumer info for %s: %w", consumerName, infoErr)
+			}
+
+			// Check if DeliverPolicy changed (immutable field)
+			// Note: Other immutable fields include FilterSubject, but we don't change that
+			needsRecreate := existing.Config.DeliverPolicy != consumerConfig.DeliverPolicy
+
+			if needsRecreate {
+				// Must delete and recreate consumer due to immutable field change
+				if delErr := b.js.DeleteConsumer(b.streamName, consumerName); delErr != nil {
+					return nil, fmt.Errorf("failed to delete consumer %s for recreation: %w", consumerName, delErr)
+				}
+
+				// Recreate with new configuration
+				_, err = b.js.AddConsumer(b.streamName, consumerConfig)
+				if err != nil {
+					return nil, fmt.Errorf("failed to recreate consumer %s: %w", consumerName, err)
+				}
+			} else {
+				// Safe to update (only mutable fields changed)
+				_, err = b.js.UpdateConsumer(b.streamName, consumerConfig)
+				if err != nil {
+					return nil, fmt.Errorf("failed to update existing consumer %s: %w", consumerName, err)
+				}
 			}
 		} else {
 			return nil, fmt.Errorf("failed to create consumer %s: %w", consumerName, err)

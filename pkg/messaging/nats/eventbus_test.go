@@ -1,6 +1,8 @@
 package nats_test
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -79,13 +81,30 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 	})
 
 	t.Run("EventIdempotency", func(t *testing.T) {
+		// First, verify the stream has Duplicates set
+		streamInfo, err := bus.StreamInfo()
+		if err != nil {
+			t.Fatalf("failed to get stream info: %v", err)
+		}
+		t.Logf("Stream Duplicates window: %v", streamInfo.Config.Duplicates)
+		if streamInfo.Config.Duplicates == 0 {
+			t.Fatal("Stream does not have Duplicates window configured!")
+		}
+
 		received := make(chan *domain.Event, 10)
 
-		// Subscribe to events
+		// Use a unique aggregate type and event ID to avoid collision with other tests
+		uniqueID := fmt.Sprintf("idempotent-event-%d", time.Now().UnixNano())
+
+		// Subscribe - ONLY accept events with our unique ID
 		sub, err := bus.Subscribe(messaging.EventFilter{
 			AggregateTypes: []string{"IdempotentAggregate"},
 		}, func(envelope *domain.EventEnvelope) error {
-			received <- &envelope.Event
+			t.Logf("Received event ID: %s", envelope.Event.ID)
+			// Only forward events with our unique ID
+			if envelope.Event.ID == uniqueID {
+				received <- &envelope.Event
+			}
 			return nil
 		})
 		if err != nil {
@@ -93,11 +112,11 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 		}
 		defer sub.Unsubscribe()
 
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 
 		// Publish same event twice (same ID = deduplication)
 		event := &domain.Event{
-			ID:            "idempotent-event-1",
+			ID:            uniqueID,
 			AggregateID:   "agg-2",
 			AggregateType: "IdempotentAggregate",
 			EventType:     "test.Created",
@@ -113,25 +132,40 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 			t.Fatalf("first publish failed: %v", err)
 		}
 
+		t.Logf("Published first event: %s", uniqueID)
+
+		time.Sleep(50 * time.Millisecond) // Small delay between publishes
+
 		err = bus.Publish([]*domain.Event{event})
 		if err != nil {
 			t.Fatalf("second publish failed: %v", err)
 		}
 
+		t.Logf("Published second event (should be deduplicated): %s", uniqueID)
+
+		time.Sleep(200 * time.Millisecond) // Give time for messages to arrive
+
+		// Check stream message count
+		streamInfo2, err2 := bus.StreamInfo()
+		if err2 != nil {
+			t.Fatalf("failed to get stream info: %v", err2)
+		}
+		t.Logf("Stream total messages: %d", streamInfo2.State.Msgs)
+
 		// Should only receive one event due to deduplication
 		select {
-		case <-received:
-			// First event received (expected)
+		case evt := <-received:
+			t.Logf("Received first event: %s", evt.ID)
 		case <-time.After(2 * time.Second):
 			t.Fatal("timeout waiting for first event")
 		}
 
 		// Check no duplicate
 		select {
-		case <-received:
-			t.Error("received duplicate event (deduplication failed)")
+		case evt := <-received:
+			t.Errorf("received duplicate event (deduplication failed): %s", evt.ID)
 		case <-time.After(500 * time.Millisecond):
-			// Good, no duplicate
+			t.Log("✓ No duplicate received - deduplication working!")
 		}
 	})
 
@@ -251,5 +285,118 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 		case <-time.After(2 * time.Second):
 			t.Fatal("timeout waiting for event - consumer may be pull-based instead of push-based")
 		}
+	})
+
+	// Regression test for DeliverPolicy update issue
+	// https://github.com/plaenen/eventstore/issues/XXX
+	t.Run("ConsumerRecreatedOnDeliverPolicyChange", func(t *testing.T) {
+		// This test simulates what happens when a projection restarts:
+		// 1. First start: No checkpoint → DeliverAll policy
+		// 2. Second start: Has checkpoint with nats_sequence → DeliverByStartSequence policy
+		// The consumer must be recreated since DeliverPolicy is immutable
+
+		received := make(chan *domain.Event, 10)
+
+		// First subscription: DeliverAll (like first projection start)
+		sub1, err := bus.Subscribe(
+			messaging.EventFilter{
+				AggregateTypes: []string{"PolicyChangeAggregate"},
+			},
+			func(envelope *domain.EventEnvelope) error {
+				received <- &envelope.Event
+				return nil
+			},
+			messaging.WithConsumerName("test_policy_change_consumer"),
+			messaging.WithDeliverAll(),
+		)
+		if err != nil {
+			t.Fatalf("failed to create first subscription: %v", err)
+		}
+
+		time.Sleep(100 * time.Millisecond)
+
+		// Publish some events
+		for i := 1; i <= 3; i++ {
+			event := &domain.Event{
+				ID:            fmt.Sprintf("policy-change-%d", i),
+				AggregateID:   "agg-policy",
+				AggregateType: "PolicyChangeAggregate",
+				EventType:     "test.Event",
+				Version:       int64(i),
+				Timestamp:     time.Now(),
+				Data:          []byte(fmt.Sprintf("event %d", i)),
+				Metadata:      domain.EventMetadata{},
+			}
+			if err := bus.Publish([]*domain.Event{event}); err != nil {
+				t.Fatalf("failed to publish event %d: %v", i, err)
+			}
+		}
+
+		// Receive events
+		for i := 0; i < 3; i++ {
+			select {
+			case <-received:
+				// Good
+			case <-time.After(2 * time.Second):
+				t.Fatalf("timeout waiting for event %d", i+1)
+			}
+		}
+
+		// Unsubscribe (simulates app restart)
+		sub1.Unsubscribe()
+		time.Sleep(100 * time.Millisecond)
+
+		// Second subscription: DeliverNew (like projection restart with checkpoint)
+		// This should recreate the consumer with new DeliverPolicy (DeliverAll → DeliverNew)
+		// In real scenario, this would be DeliverByStartSequence, but that requires knowing
+		// the actual stream sequence, so we use DeliverNew to just test policy change
+		sub2, err := bus.Subscribe(
+			messaging.EventFilter{
+				AggregateTypes: []string{"PolicyChangeAggregate"},
+			},
+			func(envelope *domain.EventEnvelope) error {
+				received <- &envelope.Event
+				return nil
+			},
+			messaging.WithConsumerName("test_policy_change_consumer"), // Same name!
+			// No options = DeliverNew policy (different from DeliverAll)
+		)
+		if err != nil {
+			// If we get "deliver policy can not be updated", the fix failed
+			if strings.Contains(err.Error(), "deliver policy can not be updated") {
+				t.Fatalf("consumer recreation failed - got policy update error: %v", err)
+			}
+			t.Fatalf("failed to recreate subscription with different policy: %v", err)
+		}
+		defer sub2.Unsubscribe()
+
+		time.Sleep(100 * time.Millisecond)
+
+		// Publish another event
+		event := &domain.Event{
+			ID:            "policy-change-4",
+			AggregateID:   "agg-policy",
+			AggregateType: "PolicyChangeAggregate",
+			EventType:     "test.Event",
+			Version:       4,
+			Timestamp:     time.Now(),
+			Data:          []byte("event 4"),
+			Metadata:      domain.EventMetadata{},
+		}
+		if err := bus.Publish([]*domain.Event{event}); err != nil {
+			t.Fatalf("failed to publish event after recreation: %v", err)
+		}
+
+		// Should receive the new event (proves consumer was recreated successfully)
+		select {
+		case evt := <-received:
+			if evt.ID != "policy-change-4" {
+				t.Errorf("expected event 'policy-change-4', got '%s'", evt.ID)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("timeout waiting for event after consumer recreation")
+		}
+
+		t.Log("✓ Consumer successfully recreated with new DeliverPolicy")
 	})
 }
