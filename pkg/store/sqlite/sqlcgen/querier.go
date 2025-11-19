@@ -14,15 +14,19 @@ type Querier interface {
 	CleanExpiredCommands(ctx context.Context, expiresAt int64) (int64, error)
 	CountSnapshotsForAggregate(ctx context.Context, aggregateID string) (int64, error)
 	DeleteAllConstraints(ctx context.Context) error
+	DeleteAllMetadata(ctx context.Context, projectionName string) error
 	DeleteCheckpoint(ctx context.Context, projectionName string) error
+	DeleteMetadata(ctx context.Context, arg DeleteMetadataParams) error
 	// Deletes snapshots older than a specific version for an aggregate
 	DeleteOldSnapshots(ctx context.Context, arg DeleteOldSnapshotsParams) error
 	DeleteSnapshotsOlderThan(ctx context.Context, createdAt int64) error
 	GetAggregateVersion(ctx context.Context, aggregateID string) (interface{}, error)
 	GetAllConstraints(ctx context.Context) ([]GetAllConstraintsRow, error)
+	GetAllMetadata(ctx context.Context, projectionName string) ([]GetAllMetadataRow, error)
 	GetConstraintOwner(ctx context.Context, arg GetConstraintOwnerParams) (string, error)
 	GetLatestSnapshot(ctx context.Context, aggregateID string) (Snapshot, error)
 	GetLatestSnapshotBeforeVersion(ctx context.Context, arg GetLatestSnapshotBeforeVersionParams) (Snapshot, error)
+	GetMetadata(ctx context.Context, arg GetMetadataParams) (string, error)
 	GetProcessedCommand(ctx context.Context, arg GetProcessedCommandParams) (GetProcessedCommandRow, error)
 	GetRebuildingProjections(ctx context.Context) ([]ProjectionCheckpoint, error)
 	GetSnapshotAtVersion(ctx context.Context, arg GetSnapshotAtVersionParams) (Snapshot, error)
@@ -30,6 +34,7 @@ type Querier interface {
 	// Position is now assigned atomically at insertion time, not calculated afterward
 	InsertEvent(ctx context.Context, arg InsertEventParams) error
 	InsertProcessedCommand(ctx context.Context, arg InsertProcessedCommandParams) error
+	ListProjectionsWithMetadata(ctx context.Context) ([]string, error)
 	ListSnapshotsForAggregate(ctx context.Context, aggregateID string) ([]Snapshot, error)
 	LoadAllEvents(ctx context.Context, arg LoadAllEventsParams) ([]Event, error)
 	LoadCheckpoint(ctx context.Context, projectionName string) (ProjectionCheckpoint, error)
@@ -38,6 +43,7 @@ type Querier interface {
 	ReleaseConstraint(ctx context.Context, arg ReleaseConstraintParams) error
 	SaveCheckpoint(ctx context.Context, arg SaveCheckpointParams) error
 	SaveSnapshot(ctx context.Context, arg SaveSnapshotParams) error
+	SetMetadata(ctx context.Context, arg SetMetadataParams) error
 	SetRebuildingFlag(ctx context.Context, arg SetRebuildingFlagParams) error
 }
 

@@ -39,8 +39,14 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.deleteAllConstraintsStmt, err = db.PrepareContext(ctx, deleteAllConstraints); err != nil {
 		return nil, fmt.Errorf("error preparing query DeleteAllConstraints: %w", err)
 	}
+	if q.deleteAllMetadataStmt, err = db.PrepareContext(ctx, deleteAllMetadata); err != nil {
+		return nil, fmt.Errorf("error preparing query DeleteAllMetadata: %w", err)
+	}
 	if q.deleteCheckpointStmt, err = db.PrepareContext(ctx, deleteCheckpoint); err != nil {
 		return nil, fmt.Errorf("error preparing query DeleteCheckpoint: %w", err)
+	}
+	if q.deleteMetadataStmt, err = db.PrepareContext(ctx, deleteMetadata); err != nil {
+		return nil, fmt.Errorf("error preparing query DeleteMetadata: %w", err)
 	}
 	if q.deleteOldSnapshotsStmt, err = db.PrepareContext(ctx, deleteOldSnapshots); err != nil {
 		return nil, fmt.Errorf("error preparing query DeleteOldSnapshots: %w", err)
@@ -54,6 +60,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getAllConstraintsStmt, err = db.PrepareContext(ctx, getAllConstraints); err != nil {
 		return nil, fmt.Errorf("error preparing query GetAllConstraints: %w", err)
 	}
+	if q.getAllMetadataStmt, err = db.PrepareContext(ctx, getAllMetadata); err != nil {
+		return nil, fmt.Errorf("error preparing query GetAllMetadata: %w", err)
+	}
 	if q.getConstraintOwnerStmt, err = db.PrepareContext(ctx, getConstraintOwner); err != nil {
 		return nil, fmt.Errorf("error preparing query GetConstraintOwner: %w", err)
 	}
@@ -62,6 +71,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.getLatestSnapshotBeforeVersionStmt, err = db.PrepareContext(ctx, getLatestSnapshotBeforeVersion); err != nil {
 		return nil, fmt.Errorf("error preparing query GetLatestSnapshotBeforeVersion: %w", err)
+	}
+	if q.getMetadataStmt, err = db.PrepareContext(ctx, getMetadata); err != nil {
+		return nil, fmt.Errorf("error preparing query GetMetadata: %w", err)
 	}
 	if q.getProcessedCommandStmt, err = db.PrepareContext(ctx, getProcessedCommand); err != nil {
 		return nil, fmt.Errorf("error preparing query GetProcessedCommand: %w", err)
@@ -80,6 +92,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.insertProcessedCommandStmt, err = db.PrepareContext(ctx, insertProcessedCommand); err != nil {
 		return nil, fmt.Errorf("error preparing query InsertProcessedCommand: %w", err)
+	}
+	if q.listProjectionsWithMetadataStmt, err = db.PrepareContext(ctx, listProjectionsWithMetadata); err != nil {
+		return nil, fmt.Errorf("error preparing query ListProjectionsWithMetadata: %w", err)
 	}
 	if q.listSnapshotsForAggregateStmt, err = db.PrepareContext(ctx, listSnapshotsForAggregate); err != nil {
 		return nil, fmt.Errorf("error preparing query ListSnapshotsForAggregate: %w", err)
@@ -104,6 +119,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.saveSnapshotStmt, err = db.PrepareContext(ctx, saveSnapshot); err != nil {
 		return nil, fmt.Errorf("error preparing query SaveSnapshot: %w", err)
+	}
+	if q.setMetadataStmt, err = db.PrepareContext(ctx, setMetadata); err != nil {
+		return nil, fmt.Errorf("error preparing query SetMetadata: %w", err)
 	}
 	if q.setRebuildingFlagStmt, err = db.PrepareContext(ctx, setRebuildingFlag); err != nil {
 		return nil, fmt.Errorf("error preparing query SetRebuildingFlag: %w", err)
@@ -138,9 +156,19 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing deleteAllConstraintsStmt: %w", cerr)
 		}
 	}
+	if q.deleteAllMetadataStmt != nil {
+		if cerr := q.deleteAllMetadataStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing deleteAllMetadataStmt: %w", cerr)
+		}
+	}
 	if q.deleteCheckpointStmt != nil {
 		if cerr := q.deleteCheckpointStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing deleteCheckpointStmt: %w", cerr)
+		}
+	}
+	if q.deleteMetadataStmt != nil {
+		if cerr := q.deleteMetadataStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing deleteMetadataStmt: %w", cerr)
 		}
 	}
 	if q.deleteOldSnapshotsStmt != nil {
@@ -163,6 +191,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getAllConstraintsStmt: %w", cerr)
 		}
 	}
+	if q.getAllMetadataStmt != nil {
+		if cerr := q.getAllMetadataStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getAllMetadataStmt: %w", cerr)
+		}
+	}
 	if q.getConstraintOwnerStmt != nil {
 		if cerr := q.getConstraintOwnerStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getConstraintOwnerStmt: %w", cerr)
@@ -176,6 +209,11 @@ func (q *Queries) Close() error {
 	if q.getLatestSnapshotBeforeVersionStmt != nil {
 		if cerr := q.getLatestSnapshotBeforeVersionStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getLatestSnapshotBeforeVersionStmt: %w", cerr)
+		}
+	}
+	if q.getMetadataStmt != nil {
+		if cerr := q.getMetadataStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getMetadataStmt: %w", cerr)
 		}
 	}
 	if q.getProcessedCommandStmt != nil {
@@ -206,6 +244,11 @@ func (q *Queries) Close() error {
 	if q.insertProcessedCommandStmt != nil {
 		if cerr := q.insertProcessedCommandStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing insertProcessedCommandStmt: %w", cerr)
+		}
+	}
+	if q.listProjectionsWithMetadataStmt != nil {
+		if cerr := q.listProjectionsWithMetadataStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listProjectionsWithMetadataStmt: %w", cerr)
 		}
 	}
 	if q.listSnapshotsForAggregateStmt != nil {
@@ -246,6 +289,11 @@ func (q *Queries) Close() error {
 	if q.saveSnapshotStmt != nil {
 		if cerr := q.saveSnapshotStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing saveSnapshotStmt: %w", cerr)
+		}
+	}
+	if q.setMetadataStmt != nil {
+		if cerr := q.setMetadataStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing setMetadataStmt: %w", cerr)
 		}
 	}
 	if q.setRebuildingFlagStmt != nil {
@@ -297,20 +345,25 @@ type Queries struct {
 	cleanExpiredCommandsStmt           *sql.Stmt
 	countSnapshotsForAggregateStmt     *sql.Stmt
 	deleteAllConstraintsStmt           *sql.Stmt
+	deleteAllMetadataStmt              *sql.Stmt
 	deleteCheckpointStmt               *sql.Stmt
+	deleteMetadataStmt                 *sql.Stmt
 	deleteOldSnapshotsStmt             *sql.Stmt
 	deleteSnapshotsOlderThanStmt       *sql.Stmt
 	getAggregateVersionStmt            *sql.Stmt
 	getAllConstraintsStmt              *sql.Stmt
+	getAllMetadataStmt                 *sql.Stmt
 	getConstraintOwnerStmt             *sql.Stmt
 	getLatestSnapshotStmt              *sql.Stmt
 	getLatestSnapshotBeforeVersionStmt *sql.Stmt
+	getMetadataStmt                    *sql.Stmt
 	getProcessedCommandStmt            *sql.Stmt
 	getRebuildingProjectionsStmt       *sql.Stmt
 	getSnapshotAtVersionStmt           *sql.Stmt
 	getSnapshotStatsStmt               *sql.Stmt
 	insertEventStmt                    *sql.Stmt
 	insertProcessedCommandStmt         *sql.Stmt
+	listProjectionsWithMetadataStmt    *sql.Stmt
 	listSnapshotsForAggregateStmt      *sql.Stmt
 	loadAllEventsStmt                  *sql.Stmt
 	loadCheckpointStmt                 *sql.Stmt
@@ -319,6 +372,7 @@ type Queries struct {
 	releaseConstraintStmt              *sql.Stmt
 	saveCheckpointStmt                 *sql.Stmt
 	saveSnapshotStmt                   *sql.Stmt
+	setMetadataStmt                    *sql.Stmt
 	setRebuildingFlagStmt              *sql.Stmt
 }
 
@@ -331,20 +385,25 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		cleanExpiredCommandsStmt:           q.cleanExpiredCommandsStmt,
 		countSnapshotsForAggregateStmt:     q.countSnapshotsForAggregateStmt,
 		deleteAllConstraintsStmt:           q.deleteAllConstraintsStmt,
+		deleteAllMetadataStmt:              q.deleteAllMetadataStmt,
 		deleteCheckpointStmt:               q.deleteCheckpointStmt,
+		deleteMetadataStmt:                 q.deleteMetadataStmt,
 		deleteOldSnapshotsStmt:             q.deleteOldSnapshotsStmt,
 		deleteSnapshotsOlderThanStmt:       q.deleteSnapshotsOlderThanStmt,
 		getAggregateVersionStmt:            q.getAggregateVersionStmt,
 		getAllConstraintsStmt:              q.getAllConstraintsStmt,
+		getAllMetadataStmt:                 q.getAllMetadataStmt,
 		getConstraintOwnerStmt:             q.getConstraintOwnerStmt,
 		getLatestSnapshotStmt:              q.getLatestSnapshotStmt,
 		getLatestSnapshotBeforeVersionStmt: q.getLatestSnapshotBeforeVersionStmt,
+		getMetadataStmt:                    q.getMetadataStmt,
 		getProcessedCommandStmt:            q.getProcessedCommandStmt,
 		getRebuildingProjectionsStmt:       q.getRebuildingProjectionsStmt,
 		getSnapshotAtVersionStmt:           q.getSnapshotAtVersionStmt,
 		getSnapshotStatsStmt:               q.getSnapshotStatsStmt,
 		insertEventStmt:                    q.insertEventStmt,
 		insertProcessedCommandStmt:         q.insertProcessedCommandStmt,
+		listProjectionsWithMetadataStmt:    q.listProjectionsWithMetadataStmt,
 		listSnapshotsForAggregateStmt:      q.listSnapshotsForAggregateStmt,
 		loadAllEventsStmt:                  q.loadAllEventsStmt,
 		loadCheckpointStmt:                 q.loadCheckpointStmt,
@@ -353,6 +412,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		releaseConstraintStmt:              q.releaseConstraintStmt,
 		saveCheckpointStmt:                 q.saveCheckpointStmt,
 		saveSnapshotStmt:                   q.saveSnapshotStmt,
+		setMetadataStmt:                    q.setMetadataStmt,
 		setRebuildingFlagStmt:              q.setRebuildingFlagStmt,
 	}
 }

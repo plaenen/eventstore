@@ -38,6 +38,13 @@ type ProjectionCheckpoint struct {
 	IsRebuilding   int64         `json:"is_rebuilding"`
 }
 
+type ProjectionMetadatum struct {
+	ProjectionName string `json:"projection_name"`
+	Key            string `json:"key"`
+	Value          string `json:"value"`
+	UpdatedAt      int64  `json:"updated_at"`
+}
+
 type Snapshot struct {
 	AggregateID   string         `json:"aggregate_id"`
 	AggregateType string         `json:"aggregate_type"`

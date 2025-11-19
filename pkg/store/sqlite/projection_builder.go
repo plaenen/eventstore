@@ -24,6 +24,7 @@ type SQLiteProjectionBuilder struct {
 	db              *sql.DB
 	checkpointStore *CheckpointStore
 	statusStore     *ProjectionStatusStore
+	metadataStore   *ProjectionMetadataStore
 	eventStore      store.EventStore
 	handlers        map[string]TransactionalEventHandler
 	resetFunc       func(context.Context, *sql.Tx) error
@@ -61,11 +62,15 @@ func NewSQLiteProjectionBuilder(
 	// Create status store
 	statusStore, _ := NewProjectionStatusStore(db)
 
+	// Create metadata store
+	metadataStore, _ := NewProjectionMetadataStore(db)
+
 	return &SQLiteProjectionBuilder{
 		name:            name,
 		db:              db,
 		checkpointStore: checkpointStore,
 		statusStore:     statusStore,
+		metadataStore:   metadataStore,
 		eventStore:      eventStore,
 		handlers:        make(map[string]TransactionalEventHandler),
 	}
@@ -164,6 +169,7 @@ func (b *SQLiteProjectionBuilder) Build() (store.Projection, error) {
 		db:              b.db,
 		checkpointStore: b.checkpointStore,
 		statusStore:     b.statusStore,
+		metadataStore:   b.metadataStore,
 		eventStore:      b.eventStore,
 		handlers:        b.handlers,
 		resetFunc:       b.resetFunc,
@@ -185,6 +191,7 @@ type SQLiteProjection struct {
 	db              *sql.DB
 	checkpointStore *CheckpointStore
 	statusStore     *ProjectionStatusStore
+	metadataStore   *ProjectionMetadataStore
 	eventStore      store.EventStore
 	handlers        map[string]TransactionalEventHandler
 	resetFunc       func(context.Context, *sql.Tx) error
@@ -364,6 +371,12 @@ func (p *SQLiteProjection) GetCheckpoint(ctx context.Context) (*store.Projection
 // GetStatus returns the current projection status.
 func (p *SQLiteProjection) GetStatus(ctx context.Context) (*store.ProjectionState, error) {
 	return p.statusStore.Load(p.name)
+}
+
+// MetadataStore returns the metadata store for this projection.
+// Useful for managing schema versions, rebuild flags, and custom configuration.
+func (p *SQLiteProjection) MetadataStore() *ProjectionMetadataStore {
+	return p.metadataStore
 }
 
 // IsReady returns true if the projection is ready to serve queries.
