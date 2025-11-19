@@ -27,6 +27,7 @@ type Querier interface {
 	GetRebuildingProjections(ctx context.Context) ([]ProjectionCheckpoint, error)
 	GetSnapshotAtVersion(ctx context.Context, arg GetSnapshotAtVersionParams) (Snapshot, error)
 	GetSnapshotStats(ctx context.Context) (GetSnapshotStatsRow, error)
+	// Position is now assigned atomically at insertion time, not calculated afterward
 	InsertEvent(ctx context.Context, arg InsertEventParams) error
 	InsertProcessedCommand(ctx context.Context, arg InsertProcessedCommandParams) error
 	ListSnapshotsForAggregate(ctx context.Context, aggregateID string) ([]Snapshot, error)
@@ -38,7 +39,6 @@ type Querier interface {
 	SaveCheckpoint(ctx context.Context, arg SaveCheckpointParams) error
 	SaveSnapshot(ctx context.Context, arg SaveSnapshotParams) error
 	SetRebuildingFlag(ctx context.Context, arg SetRebuildingFlagParams) error
-	UpdateEventPositions(ctx context.Context) error
 }
 
 var _ Querier = (*Queries)(nil)

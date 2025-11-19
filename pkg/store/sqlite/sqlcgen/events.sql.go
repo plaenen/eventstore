@@ -28,7 +28,7 @@ INSERT INTO events (
     event_id, aggregate_id, aggregate_type, event_type,
     version, timestamp, data, metadata, constraints, position
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertEventParams struct {
@@ -41,8 +41,10 @@ type InsertEventParams struct {
 	Data          []byte         `json:"data"`
 	Metadata      string         `json:"metadata"`
 	Constraints   sql.NullString `json:"constraints"`
+	Position      sql.NullInt64  `json:"position"`
 }
 
+// Position is now assigned atomically at insertion time, not calculated afterward
 func (q *Queries) InsertEvent(ctx context.Context, arg InsertEventParams) error {
 	_, err := q.exec(ctx, q.insertEventStmt, insertEvent,
 		arg.EventID,
@@ -54,6 +56,7 @@ func (q *Queries) InsertEvent(ctx context.Context, arg InsertEventParams) error 
 		arg.Data,
 		arg.Metadata,
 		arg.Constraints,
+		arg.Position,
 	)
 	return err
 }
@@ -198,20 +201,4 @@ func (q *Queries) LoadEvents(ctx context.Context, arg LoadEventsParams) ([]LoadE
 		return nil, err
 	}
 	return items, nil
-}
-
-const updateEventPositions = `-- name: UpdateEventPositions :exec
-UPDATE events
-SET position = (
-    SELECT COUNT(*)
-    FROM events e2
-    WHERE e2.timestamp < events.timestamp
-       OR (e2.timestamp = events.timestamp AND e2.event_id <= events.event_id)
-)
-WHERE position IS NULL
-`
-
-func (q *Queries) UpdateEventPositions(ctx context.Context) error {
-	_, err := q.exec(ctx, q.updateEventPositionsStmt, updateEventPositions)
-	return err
 }

@@ -361,6 +361,19 @@ func (s *EventStore) AppendEvents(aggregateID string, expectedVersion int64, eve
 		return domain.ErrConcurrencyConflict
 	}
 
+	// Get next position atomically
+	var maxPos int64
+	err = tx.QueryRow("SELECT COALESCE(MAX(position), 0) FROM events").Scan(&maxPos)
+	if err != nil {
+		return fmt.Errorf("failed to get max position: %w", err)
+	}
+
+	// Assign positions to events before insertion
+	nextPos := maxPos + 1
+	for i := range events {
+		events[i].Position = nextPos + int64(i)
+	}
+
 	// Validate and insert unique constraints
 	for _, event := range events {
 		if err := s.validateConstraints(tx, event, aggregateID); err != nil {
@@ -368,7 +381,7 @@ func (s *EventStore) AppendEvents(aggregateID string, expectedVersion int64, eve
 		}
 	}
 
-	// Insert events
+	// Insert events with pre-assigned positions
 	for _, event := range events {
 		metadataJSON, _ := json.Marshal(event.Metadata)
 		constraintsJSON, _ := json.Marshal(event.UniqueConstraints)
@@ -383,6 +396,7 @@ func (s *EventStore) AppendEvents(aggregateID string, expectedVersion int64, eve
 			Data:          event.Data,
 			Metadata:      string(metadataJSON),
 			Constraints:   sql.NullString{String: string(constraintsJSON), Valid: len(constraintsJSON) > 0},
+			Position:      sql.NullInt64{Int64: event.Position, Valid: true}, // Position assigned atomically above
 		})
 		if err != nil {
 			return fmt.Errorf("failed to insert event: %w", err)
@@ -394,10 +408,7 @@ func (s *EventStore) AppendEvents(aggregateID string, expectedVersion int64, eve
 		}
 	}
 
-	// Update global position
-	if err := s.updatePositions(tx); err != nil {
-		return fmt.Errorf("failed to update positions: %w", err)
-	}
+	// Position assignment is now atomic - no need for updatePositions()
 
 	return tx.Commit()
 }
@@ -464,6 +475,19 @@ func (s *EventStore) AppendEventsIdempotent(
 		return nil, domain.ErrConcurrencyConflict
 	}
 
+	// Get next position atomically
+	var maxPos int64
+	err = tx.QueryRow("SELECT COALESCE(MAX(position), 0) FROM events").Scan(&maxPos)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get max position: %w", err)
+	}
+
+	// Assign positions to events before insertion
+	nextPos := maxPos + 1
+	for i := range events {
+		events[i].Position = nextPos + int64(i)
+	}
+
 	// Validate and insert unique constraints
 	for _, event := range events {
 		if err := s.validateConstraints(tx, event, aggregateID); err != nil {
@@ -487,6 +511,7 @@ func (s *EventStore) AppendEventsIdempotent(
 			Data:          event.Data,
 			Metadata:      string(metadataJSON),
 			Constraints:   sql.NullString{String: string(constraintsJSON), Valid: len(constraintsJSON) > 0},
+			Position:      sql.NullInt64{Int64: event.Position, Valid: true}, // Position assigned atomically above
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to insert event: %w", err)
@@ -494,10 +519,7 @@ func (s *EventStore) AppendEventsIdempotent(
 		eventIDs[i] = event.ID
 	}
 
-	// Update global position
-	if err := s.updatePositions(tx); err != nil {
-		return nil, fmt.Errorf("failed to update positions: %w", err)
-	}
+	// Position assignment is now atomic - no need for updatePositions()
 
 	// Record processed command
 	eventIDsJSON, _ := json.Marshal(eventIDs)
@@ -572,13 +594,6 @@ func (s *EventStore) validateConstraints(tx *sql.Tx, event *domain.Event, aggreg
 		}
 	}
 	return nil
-}
-
-// updatePositions updates the global position for events.
-func (s *EventStore) updatePositions(tx *sql.Tx) error {
-	ctx := context.Background()
-	queries := sqlcgen.New(tx)
-	return queries.UpdateEventPositions(ctx)
 }
 
 // validateAppendEventsInput validates event data before database operations.
@@ -746,6 +761,19 @@ func (s *EventStore) SeedEvents(
 		}
 	}
 
+	// Get next position atomically
+	var maxPos int64
+	err = tx.QueryRow("SELECT COALESCE(MAX(position), 0) FROM events").Scan(&maxPos)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get max position: %w", err)
+	}
+
+	// Assign positions to events before insertion
+	nextPos := maxPos + 1
+	for i := range eventsToSave {
+		eventsToSave[i].Position = nextPos + int64(i)
+	}
+
 	// Process each event
 	for _, event := range eventsToSave {
 		// Handle constraints
@@ -775,6 +803,7 @@ func (s *EventStore) SeedEvents(
 			Data:          event.Data,
 			Metadata:      string(metadataJSON),
 			Constraints:   sql.NullString{String: string(constraintsJSON), Valid: len(constraintsJSON) > 0},
+			Position:      sql.NullInt64{Int64: event.Position, Valid: true}, // Position assigned atomically above
 		})
 		if err != nil {
 			result.Failed++
@@ -791,10 +820,7 @@ func (s *EventStore) SeedEvents(
 		result.Saved++
 	}
 
-	// Update global positions
-	if err := s.updatePositions(tx); err != nil {
-		return nil, fmt.Errorf("failed to update positions: %w", err)
-	}
+	// Position assignment is now atomic - no need for updatePositions()
 
 	// Commit transaction
 	if err := tx.Commit(); err != nil {

@@ -30,6 +30,14 @@ type Event struct {
 	// Timestamp is when the event was created
 	Timestamp time.Time
 
+	// Position is the global sequence number in the event store.
+	// This is assigned atomically during event persistence and is used for:
+	// - Global event ordering across all aggregates
+	// - Projection checkpointing and resume
+	// - Event replay from a specific point in time
+	// Position is guaranteed to be unique, sequential, and never null.
+	Position int64
+
 	// Data is the serialized protobuf payload of the event
 	Data []byte
 

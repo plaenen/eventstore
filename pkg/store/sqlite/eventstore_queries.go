@@ -109,6 +109,7 @@ func (s *EventStore) LoadEvents(aggregateID string, afterVersion int64) ([]*doma
 			Version:       row.Version,
 			Timestamp:     time.Unix(row.Timestamp, 0),
 			Data:          row.Data,
+			// Note: LoadEvents query doesn't return position, only LoadAllEvents does
 		}
 
 		json.Unmarshal([]byte(row.Metadata), &event.Metadata)
@@ -146,6 +147,7 @@ func (s *EventStore) LoadAllEvents(fromPosition int64, limit int) ([]*domain.Eve
 			Version:       row.Version,
 			Timestamp:     time.Unix(row.Timestamp, 0),
 			Data:          row.Data,
+			Position:      row.Position.Int64, // Position from LoadAllEvents query
 		}
 
 		json.Unmarshal([]byte(row.Metadata), &event.Metadata)

@@ -108,9 +108,6 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.setRebuildingFlagStmt, err = db.PrepareContext(ctx, setRebuildingFlag); err != nil {
 		return nil, fmt.Errorf("error preparing query SetRebuildingFlag: %w", err)
 	}
-	if q.updateEventPositionsStmt, err = db.PrepareContext(ctx, updateEventPositions); err != nil {
-		return nil, fmt.Errorf("error preparing query UpdateEventPositions: %w", err)
-	}
 	return &q, nil
 }
 
@@ -256,11 +253,6 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing setRebuildingFlagStmt: %w", cerr)
 		}
 	}
-	if q.updateEventPositionsStmt != nil {
-		if cerr := q.updateEventPositionsStmt.Close(); cerr != nil {
-			err = fmt.Errorf("error closing updateEventPositionsStmt: %w", cerr)
-		}
-	}
 	return err
 }
 
@@ -328,7 +320,6 @@ type Queries struct {
 	saveCheckpointStmt                 *sql.Stmt
 	saveSnapshotStmt                   *sql.Stmt
 	setRebuildingFlagStmt              *sql.Stmt
-	updateEventPositionsStmt           *sql.Stmt
 }
 
 func (q *Queries) WithTx(tx *sql.Tx) *Queries {
@@ -363,6 +354,5 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		saveCheckpointStmt:                 q.saveCheckpointStmt,
 		saveSnapshotStmt:                   q.saveSnapshotStmt,
 		setRebuildingFlagStmt:              q.setRebuildingFlagStmt,
-		updateEventPositionsStmt:           q.updateEventPositionsStmt,
 	}
 }

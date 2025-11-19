@@ -4,11 +4,12 @@ FROM events
 WHERE aggregate_id = ?;
 
 -- name: InsertEvent :exec
+-- Position is now assigned atomically at insertion time, not calculated afterward
 INSERT INTO events (
     event_id, aggregate_id, aggregate_type, event_type,
     version, timestamp, data, metadata, constraints, position
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL);
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: LoadEventByID :one
 SELECT event_id, aggregate_id, aggregate_type, event_type,
@@ -31,12 +32,5 @@ WHERE position >= ?
 ORDER BY position ASC
 LIMIT ?;
 
--- name: UpdateEventPositions :exec
-UPDATE events
-SET position = (
-    SELECT COUNT(*)
-    FROM events e2
-    WHERE e2.timestamp < events.timestamp
-       OR (e2.timestamp = events.timestamp AND e2.event_id <= events.event_id)
-)
-WHERE position IS NULL;
+-- UpdateEventPositions is no longer needed - positions are assigned atomically during INSERT
+-- See AppendEvents method which uses: SELECT MAX(position) + 1
