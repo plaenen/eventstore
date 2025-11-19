@@ -197,4 +197,59 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 			}
 		}
 	})
+
+	// Regression test for consumer type mismatch bug
+	// https://github.com/plaenen/eventstore/issues/XXX
+	t.Run("DurableConsumerIsPushBased", func(t *testing.T) {
+		// This test verifies that durable consumers created with WithConsumerName
+		// are push-based (have DeliverSubject set), preventing the error:
+		// "nats: must use pull subscribe to bind to pull based consumer"
+
+		received := make(chan *domain.Event, 1)
+
+		// Subscribe with a deterministic consumer name (like projections do)
+		sub, err := bus.Subscribe(
+			messaging.EventFilter{
+				AggregateTypes: []string{"DurableTestAggregate"},
+			},
+			func(envelope *domain.EventEnvelope) error {
+				received <- &envelope.Event
+				return nil
+			},
+			messaging.WithConsumerName("test_projection_consumer"),
+		)
+		if err != nil {
+			t.Fatalf("failed to create durable consumer: %v", err)
+		}
+		defer sub.Unsubscribe()
+
+		time.Sleep(100 * time.Millisecond)
+
+		// Publish an event
+		event := &domain.Event{
+			ID:            "durable-test-1",
+			AggregateID:   "agg-durable",
+			AggregateType: "DurableTestAggregate",
+			EventType:     "test.Created",
+			Version:       1,
+			Timestamp:     time.Now(),
+			Data:          []byte("test"),
+			Metadata:      domain.EventMetadata{},
+		}
+
+		err = bus.Publish([]*domain.Event{event})
+		if err != nil {
+			t.Fatalf("failed to publish: %v", err)
+		}
+
+		// Verify event was received (proves push-based consumer works)
+		select {
+		case evt := <-received:
+			if evt.ID != "durable-test-1" {
+				t.Errorf("expected event ID 'durable-test-1', got '%s'", evt.ID)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("timeout waiting for event - consumer may be pull-based instead of push-based")
+		}
+	})
 }

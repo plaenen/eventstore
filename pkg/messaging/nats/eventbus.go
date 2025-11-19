@@ -177,6 +177,7 @@ func (b *EventBus) Subscribe(
 	// Create consumer configuration
 	consumerConfig := &nats.ConsumerConfig{
 		Durable:           consumerName,
+		DeliverSubject:    fmt.Sprintf("_INBOX.%s.%s", b.streamName, consumerName),
 		AckPolicy:         nats.AckExplicitPolicy,
 		AckWait:           30 * time.Second,
 		MaxDeliver:        10,
