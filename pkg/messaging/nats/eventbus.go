@@ -181,6 +181,7 @@ func (b *EventBus) Subscribe(
 		AckPolicy:         nats.AckExplicitPolicy,
 		AckWait:           30 * time.Second,
 		MaxDeliver:        10,
+		MaxAckPending:     1, // Only 1 unacked message at a time across ALL instances (maintains ordering)
 		InactiveThreshold: 24 * time.Hour, // Prevent auto-deletion
 		FilterSubject:     subject,
 	}
