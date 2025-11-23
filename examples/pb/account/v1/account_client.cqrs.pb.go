@@ -10,20 +10,41 @@ import (
 	"github.com/plaenen/eventstore/pkg/cqrs"
 )
 
-// AccountCommandServiceClient provides type-safe client methods for AccountCommandService
-type AccountCommandServiceClient struct {
-	transport cqrs.Transport
+// CqrsAccountCommandServiceClient provides type-safe client methods for AccountCommandService
+type CqrsAccountCommandServiceClient struct {
+	transport      cqrs.Transport
+	subjectBuilder cqrs.SubjectBuilder
 }
 
-// NewAccountCommandServiceClient creates a new client for AccountCommandService
-func NewAccountCommandServiceClient(transport cqrs.Transport) *AccountCommandServiceClient {
-	return &AccountCommandServiceClient{transport: transport}
+func (c *CqrsAccountCommandServiceClient) setSubjectBuilder(builder cqrs.SubjectBuilder) {
+	c.subjectBuilder = builder
+}
+
+// NewCqrsAccountCommandServiceClient creates a new client for AccountCommandService.
+// By default, uses DefaultSubjectBuilder which creates subjects in the format:
+//
+//	package.service.method (e.g., "account.v1.AccountService.OpenAccount")
+//
+// Options:
+//   - cqrs.WithClientSubjectBuilder: Use a custom SubjectBuilder for dynamic subject routing
+func NewCqrsAccountCommandServiceClient(transport cqrs.Transport, opts ...cqrs.ClientOption) *CqrsAccountCommandServiceClient {
+	c := &CqrsAccountCommandServiceClient{
+		transport:      transport,
+		subjectBuilder: &cqrs.DefaultSubjectBuilder{},
+	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
 }
 
 // OpenAccount sends a OpenAccount command and returns the response
-func (c *AccountCommandServiceClient) OpenAccount(ctx context.Context, cmd *OpenAccountCommand) (*OpenAccountResponse, error) {
+func (c *CqrsAccountCommandServiceClient) OpenAccount(ctx context.Context, cmd *OpenAccountCommand) (*OpenAccountResponse, error) {
+	// Build subject using SubjectBuilder
+	subject := c.subjectBuilder.BuildSubject(ctx, "account.v1", "AccountCommandService", "OpenAccount")
+
 	// Send request via transport
-	resp, err := c.transport.Request(ctx, "account.v1.AccountCommandService.OpenAccount", cmd)
+	resp, err := c.transport.Request(ctx, subject, cmd)
 	if err != nil {
 		return nil, err
 	}
@@ -43,9 +64,12 @@ func (c *AccountCommandServiceClient) OpenAccount(ctx context.Context, cmd *Open
 }
 
 // Deposit sends a Deposit command and returns the response
-func (c *AccountCommandServiceClient) Deposit(ctx context.Context, cmd *DepositCommand) (*DepositResponse, error) {
+func (c *CqrsAccountCommandServiceClient) Deposit(ctx context.Context, cmd *DepositCommand) (*DepositResponse, error) {
+	// Build subject using SubjectBuilder
+	subject := c.subjectBuilder.BuildSubject(ctx, "account.v1", "AccountCommandService", "Deposit")
+
 	// Send request via transport
-	resp, err := c.transport.Request(ctx, "account.v1.AccountCommandService.Deposit", cmd)
+	resp, err := c.transport.Request(ctx, subject, cmd)
 	if err != nil {
 		return nil, err
 	}
@@ -65,9 +89,12 @@ func (c *AccountCommandServiceClient) Deposit(ctx context.Context, cmd *DepositC
 }
 
 // Withdraw sends a Withdraw command and returns the response
-func (c *AccountCommandServiceClient) Withdraw(ctx context.Context, cmd *WithdrawCommand) (*WithdrawResponse, error) {
+func (c *CqrsAccountCommandServiceClient) Withdraw(ctx context.Context, cmd *WithdrawCommand) (*WithdrawResponse, error) {
+	// Build subject using SubjectBuilder
+	subject := c.subjectBuilder.BuildSubject(ctx, "account.v1", "AccountCommandService", "Withdraw")
+
 	// Send request via transport
-	resp, err := c.transport.Request(ctx, "account.v1.AccountCommandService.Withdraw", cmd)
+	resp, err := c.transport.Request(ctx, subject, cmd)
 	if err != nil {
 		return nil, err
 	}
@@ -87,9 +114,12 @@ func (c *AccountCommandServiceClient) Withdraw(ctx context.Context, cmd *Withdra
 }
 
 // CloseAccount sends a CloseAccount command and returns the response
-func (c *AccountCommandServiceClient) CloseAccount(ctx context.Context, cmd *CloseAccountCommand) (*CloseAccountResponse, error) {
+func (c *CqrsAccountCommandServiceClient) CloseAccount(ctx context.Context, cmd *CloseAccountCommand) (*CloseAccountResponse, error) {
+	// Build subject using SubjectBuilder
+	subject := c.subjectBuilder.BuildSubject(ctx, "account.v1", "AccountCommandService", "CloseAccount")
+
 	// Send request via transport
-	resp, err := c.transport.Request(ctx, "account.v1.AccountCommandService.CloseAccount", cmd)
+	resp, err := c.transport.Request(ctx, subject, cmd)
 	if err != nil {
 		return nil, err
 	}
@@ -108,20 +138,41 @@ func (c *AccountCommandServiceClient) CloseAccount(ctx context.Context, cmd *Clo
 	return result, nil
 }
 
-// AccountQueryServiceClient provides type-safe client methods for AccountQueryService
-type AccountQueryServiceClient struct {
-	transport cqrs.Transport
+// CqrsAccountQueryServiceClient provides type-safe client methods for AccountQueryService
+type CqrsAccountQueryServiceClient struct {
+	transport      cqrs.Transport
+	subjectBuilder cqrs.SubjectBuilder
 }
 
-// NewAccountQueryServiceClient creates a new client for AccountQueryService
-func NewAccountQueryServiceClient(transport cqrs.Transport) *AccountQueryServiceClient {
-	return &AccountQueryServiceClient{transport: transport}
+func (c *CqrsAccountQueryServiceClient) setSubjectBuilder(builder cqrs.SubjectBuilder) {
+	c.subjectBuilder = builder
+}
+
+// NewCqrsAccountQueryServiceClient creates a new client for AccountQueryService.
+// By default, uses DefaultSubjectBuilder which creates subjects in the format:
+//
+//	package.service.method (e.g., "account.v1.AccountService.OpenAccount")
+//
+// Options:
+//   - cqrs.WithClientSubjectBuilder: Use a custom SubjectBuilder for dynamic subject routing
+func NewCqrsAccountQueryServiceClient(transport cqrs.Transport, opts ...cqrs.ClientOption) *CqrsAccountQueryServiceClient {
+	c := &CqrsAccountQueryServiceClient{
+		transport:      transport,
+		subjectBuilder: &cqrs.DefaultSubjectBuilder{},
+	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
 }
 
 // GetAccount executes a GetAccount query and returns the result
-func (c *AccountQueryServiceClient) GetAccount(ctx context.Context, query *GetAccountRequest) (*AccountView, error) {
+func (c *CqrsAccountQueryServiceClient) GetAccount(ctx context.Context, query *GetAccountRequest) (*AccountView, error) {
+	// Build subject using SubjectBuilder
+	subject := c.subjectBuilder.BuildSubject(ctx, "account.v1", "AccountQueryService", "GetAccount")
+
 	// Send request via transport
-	resp, err := c.transport.Request(ctx, "account.v1.AccountQueryService.GetAccount", query)
+	resp, err := c.transport.Request(ctx, subject, query)
 	if err != nil {
 		return nil, err
 	}
@@ -141,9 +192,12 @@ func (c *AccountQueryServiceClient) GetAccount(ctx context.Context, query *GetAc
 }
 
 // ListAccounts executes a ListAccounts query and returns the result
-func (c *AccountQueryServiceClient) ListAccounts(ctx context.Context, query *ListAccountsRequest) (*ListAccountsResponse, error) {
+func (c *CqrsAccountQueryServiceClient) ListAccounts(ctx context.Context, query *ListAccountsRequest) (*ListAccountsResponse, error) {
+	// Build subject using SubjectBuilder
+	subject := c.subjectBuilder.BuildSubject(ctx, "account.v1", "AccountQueryService", "ListAccounts")
+
 	// Send request via transport
-	resp, err := c.transport.Request(ctx, "account.v1.AccountQueryService.ListAccounts", query)
+	resp, err := c.transport.Request(ctx, subject, query)
 	if err != nil {
 		return nil, err
 	}
@@ -163,9 +217,12 @@ func (c *AccountQueryServiceClient) ListAccounts(ctx context.Context, query *Lis
 }
 
 // GetAccountBalance executes a GetAccountBalance query and returns the result
-func (c *AccountQueryServiceClient) GetAccountBalance(ctx context.Context, query *GetAccountBalanceRequest) (*BalanceView, error) {
+func (c *CqrsAccountQueryServiceClient) GetAccountBalance(ctx context.Context, query *GetAccountBalanceRequest) (*BalanceView, error) {
+	// Build subject using SubjectBuilder
+	subject := c.subjectBuilder.BuildSubject(ctx, "account.v1", "AccountQueryService", "GetAccountBalance")
+
 	// Send request via transport
-	resp, err := c.transport.Request(ctx, "account.v1.AccountQueryService.GetAccountBalance", query)
+	resp, err := c.transport.Request(ctx, subject, query)
 	if err != nil {
 		return nil, err
 	}
@@ -185,9 +242,12 @@ func (c *AccountQueryServiceClient) GetAccountBalance(ctx context.Context, query
 }
 
 // GetAccountHistory executes a GetAccountHistory query and returns the result
-func (c *AccountQueryServiceClient) GetAccountHistory(ctx context.Context, query *GetAccountHistoryRequest) (*AccountHistoryResponse, error) {
+func (c *CqrsAccountQueryServiceClient) GetAccountHistory(ctx context.Context, query *GetAccountHistoryRequest) (*AccountHistoryResponse, error) {
+	// Build subject using SubjectBuilder
+	subject := c.subjectBuilder.BuildSubject(ctx, "account.v1", "AccountQueryService", "GetAccountHistory")
+
 	// Send request via transport
-	resp, err := c.transport.Request(ctx, "account.v1.AccountQueryService.GetAccountHistory", query)
+	resp, err := c.transport.Request(ctx, subject, query)
 	if err != nil {
 		return nil, err
 	}

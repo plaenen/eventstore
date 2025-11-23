@@ -1,0 +1,133 @@
+syntax = "proto3";
+
+package orders.v1;
+
+option go_package = "github.com/plaenen/eventstore/examples/pb/orders/v1;ordersv1";
+
+import "cqrs/options.proto";
+
+// =============================================================================
+// PURE CQRS EXAMPLE - No Event Sourcing
+// =============================================================================
+// This example demonstrates CQRS infrastructure without event sourcing.
+// Use cases:
+// - Services that don't need event sourcing
+// - Multi-tenant deployments with dynamic subject routing
+// - Microservices communication over NATS
+// =============================================================================
+
+// OrderCommandService handles order write operations
+service OrderCommandService {
+  option (cqrs.service) = {
+    service_type: SERVICE_TYPE_COMMAND
+    generate_client: true
+    timeout_ms: 10000
+    max_retries: 3
+    queue_group: "order-handlers"
+  };
+
+  rpc CreateOrder(CreateOrderRequest) returns (CreateOrderResponse);
+  rpc CancelOrder(CancelOrderRequest) returns (CancelOrderResponse);
+  rpc UpdateOrderStatus(UpdateOrderStatusRequest) returns (UpdateOrderStatusResponse);
+}
+
+// OrderQueryService handles order read operations
+service OrderQueryService {
+  option (cqrs.service) = {
+    service_type: SERVICE_TYPE_QUERY
+    generate_client: true
+    timeout_ms: 5000
+  };
+
+  rpc GetOrder(GetOrderRequest) returns (Order);
+  rpc ListOrders(ListOrdersRequest) returns (ListOrdersResponse);
+  rpc GetOrdersByStatus(GetOrdersByStatusRequest) returns (ListOrdersResponse);
+}
+
+// Commands
+
+message CreateOrderRequest {
+  string customer_id = 1;
+  repeated OrderItem items = 2;
+  string shipping_address = 3;
+}
+
+message CreateOrderResponse {
+  string order_id = 1;
+  string status = 2;
+  string total_amount = 3;
+}
+
+message CancelOrderRequest {
+  string order_id = 1;
+  string reason = 2;
+}
+
+message CancelOrderResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message UpdateOrderStatusRequest {
+  string order_id = 1;
+  OrderStatus new_status = 2;
+}
+
+message UpdateOrderStatusResponse {
+  bool success = 1;
+  OrderStatus current_status = 2;
+}
+
+// Queries
+
+message GetOrderRequest {
+  string order_id = 1;
+}
+
+message ListOrdersRequest {
+  string customer_id = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message GetOrdersByStatusRequest {
+  OrderStatus status = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListOrdersResponse {
+  repeated Order orders = 1;
+  string next_page_token = 2;
+  int32 total_count = 3;
+}
+
+// Domain Models
+
+message Order {
+  string order_id = 1;
+  string customer_id = 2;
+  repeated OrderItem items = 3;
+  OrderStatus status = 4;
+  string total_amount = 5;
+  string shipping_address = 6;
+  int64 created_at = 7;
+  int64 updated_at = 8;
+}
+
+message OrderItem {
+  string product_id = 1;
+  string product_name = 2;
+  int32 quantity = 3;
+  string price = 4;
+}
+
+enum OrderStatus {
+  ORDER_STATUS_UNSPECIFIED = 0;
+  ORDER_STATUS_PENDING = 1;
+  ORDER_STATUS_CONFIRMED = 2;
+  ORDER_STATUS_PROCESSING = 3;
+  ORDER_STATUS_SHIPPED = 4;
+  ORDER_STATUS_DELIVERED = 5;
+  ORDER_STATUS_CANCELLED = 6;
+}

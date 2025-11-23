@@ -189,19 +189,38 @@ func generateClients(gen *protogen.Plugin, file *protogen.File, services []*Serv
 			continue // Skip if client generation not requested
 		}
 
-		clientName := svc.Name + "Client"
+		clientName := "Cqrs" + svc.Name + "Client"
 
 		// Client struct
 		g.P("// ", clientName, " provides type-safe client methods for ", svc.Name)
 		g.P("type ", clientName, " struct {")
-		g.P("	transport cqrs.Transport")
+		g.P("	transport      cqrs.Transport")
+		g.P("	subjectBuilder cqrs.SubjectBuilder")
+		g.P("}")
+		g.P()
+
+		// Private setter for SubjectBuilder (used by shared ClientOption)
+		g.P("func (c *", clientName, ") setSubjectBuilder(builder cqrs.SubjectBuilder) {")
+		g.P("	c.subjectBuilder = builder")
 		g.P("}")
 		g.P()
 
 		// Constructor
-		g.P("// New", clientName, " creates a new client for ", svc.Name)
-		g.P("func New", clientName, "(transport cqrs.Transport) *", clientName, " {")
-		g.P("	return &", clientName, "{transport: transport}")
+		g.P("// New", clientName, " creates a new client for ", svc.Name, ".")
+		g.P("// By default, uses DefaultSubjectBuilder which creates subjects in the format:")
+		g.P("//   package.service.method (e.g., \"account.v1.AccountService.OpenAccount\")")
+		g.P("//")
+		g.P("// Options:")
+		g.P("//   - cqrs.WithClientSubjectBuilder: Use a custom SubjectBuilder for dynamic subject routing")
+		g.P("func New", clientName, "(transport cqrs.Transport, opts ...cqrs.ClientOption) *", clientName, " {")
+		g.P("	c := &", clientName, "{")
+		g.P("		transport:      transport,")
+		g.P("		subjectBuilder: &cqrs.DefaultSubjectBuilder{},")
+		g.P("	}")
+		g.P("	for _, opt := range opts {")
+		g.P("		opt(c)")
+		g.P("	}")
+		g.P("	return c")
 		g.P("}")
 		g.P()
 
@@ -210,12 +229,15 @@ func generateClients(gen *protogen.Plugin, file *protogen.File, services []*Serv
 			methodName := method.GoName
 			inputType := g.QualifiedGoIdent(method.Input.GoIdent)
 			outputType := g.QualifiedGoIdent(method.Output.GoIdent)
-			subject := string(file.Desc.Package()) + "." + svc.Name + "." + methodName
+			packageName := string(file.Desc.Package())
 
 			g.P("// ", methodName, " sends a ", methodName, " command and returns the response")
 			g.P("func (c *", clientName, ") ", methodName, "(ctx context.Context, cmd *", inputType, ") (*", outputType, ", error) {")
+			g.P("	// Build subject using SubjectBuilder")
+			g.P(`	subject := c.subjectBuilder.BuildSubject(ctx, "`, packageName, `", "`, svc.Name, `", "`, methodName, `")`)
+			g.P()
 			g.P("	// Send request via transport")
-			g.P(`	resp, err := c.transport.Request(ctx, "`, subject, `", cmd)`)
+			g.P(`	resp, err := c.transport.Request(ctx, subject, cmd)`)
 			g.P("	if err != nil {")
 			g.P("		return nil, err")
 			g.P("	}")
@@ -241,12 +263,15 @@ func generateClients(gen *protogen.Plugin, file *protogen.File, services []*Serv
 			methodName := method.GoName
 			inputType := g.QualifiedGoIdent(method.Input.GoIdent)
 			outputType := g.QualifiedGoIdent(method.Output.GoIdent)
-			subject := string(file.Desc.Package()) + "." + svc.Name + "." + methodName
+			packageName := string(file.Desc.Package())
 
 			g.P("// ", methodName, " executes a ", methodName, " query and returns the result")
 			g.P("func (c *", clientName, ") ", methodName, "(ctx context.Context, query *", inputType, ") (*", outputType, ", error) {")
+			g.P("	// Build subject using SubjectBuilder")
+			g.P(`	subject := c.subjectBuilder.BuildSubject(ctx, "`, packageName, `", "`, svc.Name, `", "`, methodName, `")`)
+			g.P()
 			g.P("	// Send request via transport")
-			g.P(`	resp, err := c.transport.Request(ctx, "`, subject, `", query)`)
+			g.P(`	resp, err := c.transport.Request(ctx, subject, query)`)
 			g.P("	if err != nil {")
 			g.P("		return nil, err")
 			g.P("	}")
@@ -292,8 +317,8 @@ func generateCQRSServer(gen *protogen.Plugin, file *protogen.File, services []*S
 
 	// Generate handler interfaces and servers for each service
 	for _, svc := range services {
-		serverName := svc.Name + "Server"
-		handlerName := svc.Name + "Handler"
+		serverName := "Cqrs" + svc.Name + "Server"
+		handlerName := "Cqrs" + svc.Name + "Handler"
 
 		// Generate handler interface
 		g.P("// ", handlerName, " defines the business logic for ", svc.Name)

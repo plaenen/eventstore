@@ -179,3 +179,29 @@ func SubjectBuilderFromContext(ctx context.Context) SubjectBuilder {
 func WithSubjectBuilder(ctx context.Context, builder SubjectBuilder) context.Context {
 	return context.WithValue(ctx, SubjectBuilderKey, builder)
 }
+
+// ClientOption configures a CQRS client.
+// This is a shared option type used by all generated clients.
+type ClientOption func(client interface{})
+
+// WithClientSubjectBuilder returns a ClientOption that sets a custom SubjectBuilder.
+// Use this for multi-tenant deployments, environment-specific routing, etc.
+//
+// Example:
+//
+//	tenantBuilder := &cqrs.PrefixedSubjectBuilder{
+//	    PrefixFunc: func(ctx context.Context) string {
+//	        return ctx.Value("tenant_id").(string)
+//	    },
+//	}
+//	client := NewOrderCommandServiceClient(transport, cqrs.WithClientSubjectBuilder(tenantBuilder))
+func WithClientSubjectBuilder(builder SubjectBuilder) ClientOption {
+	return func(client interface{}) {
+		type subjectBuilderSetter interface {
+			setSubjectBuilder(SubjectBuilder)
+		}
+		if c, ok := client.(subjectBuilderSetter); ok {
+			c.setSubjectBuilder(builder)
+		}
+	}
+}

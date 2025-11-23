@@ -13,30 +13,30 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// AccountCommandServiceHandler defines the business logic for AccountCommandService
-type AccountCommandServiceHandler interface {
+// CqrsAccountCommandServiceHandler defines the business logic for AccountCommandService
+type CqrsAccountCommandServiceHandler interface {
 	OpenAccount(ctx context.Context, cmd *OpenAccountCommand) (*OpenAccountResponse, error)
 	Deposit(ctx context.Context, cmd *DepositCommand) (*DepositResponse, error)
 	Withdraw(ctx context.Context, cmd *WithdrawCommand) (*WithdrawResponse, error)
 	CloseAccount(ctx context.Context, cmd *CloseAccountCommand) (*CloseAccountResponse, error)
 }
 
-// AccountCommandServiceServer routes requests to the AccountCommandServiceHandler implementation
-type AccountCommandServiceServer struct {
+// CqrsAccountCommandServiceServer routes requests to the CqrsAccountCommandServiceHandler implementation
+type CqrsAccountCommandServiceServer struct {
 	server  cqrs.Server
-	handler AccountCommandServiceHandler
+	handler CqrsAccountCommandServiceHandler
 }
 
-// NewAccountCommandServiceServer creates a new server
-func NewAccountCommandServiceServer(server cqrs.Server, handler AccountCommandServiceHandler) *AccountCommandServiceServer {
-	return &AccountCommandServiceServer{
+// NewCqrsAccountCommandServiceServer creates a new server
+func NewCqrsAccountCommandServiceServer(server cqrs.Server, handler CqrsAccountCommandServiceHandler) *CqrsAccountCommandServiceServer {
+	return &CqrsAccountCommandServiceServer{
 		server:  server,
 		handler: handler,
 	}
 }
 
 // Start registers handlers and starts the server
-func (s *AccountCommandServiceServer) Start(ctx context.Context) error {
+func (s *CqrsAccountCommandServiceServer) Start(ctx context.Context) error {
 	if err := s.server.RegisterHandler("account.v1.AccountCommandService.OpenAccount", s.handleOpenAccount); err != nil {
 		return fmt.Errorf("failed to register OpenAccount: %w", err)
 	}
@@ -53,7 +53,7 @@ func (s *AccountCommandServiceServer) Start(ctx context.Context) error {
 	return s.server.Start(ctx)
 }
 
-func (s *AccountCommandServiceServer) handleOpenAccount(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
+func (s *CqrsAccountCommandServiceServer) handleOpenAccount(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
 	req := request.(*OpenAccountCommand)
 	result, err := s.handler.OpenAccount(ctx, req)
 	if err != nil {
@@ -65,7 +65,7 @@ func (s *AccountCommandServiceServer) handleOpenAccount(ctx context.Context, req
 	return eventsourcing.NewSuccessResponse(result)
 }
 
-func (s *AccountCommandServiceServer) handleDeposit(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
+func (s *CqrsAccountCommandServiceServer) handleDeposit(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
 	req := request.(*DepositCommand)
 	result, err := s.handler.Deposit(ctx, req)
 	if err != nil {
@@ -77,7 +77,7 @@ func (s *AccountCommandServiceServer) handleDeposit(ctx context.Context, request
 	return eventsourcing.NewSuccessResponse(result)
 }
 
-func (s *AccountCommandServiceServer) handleWithdraw(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
+func (s *CqrsAccountCommandServiceServer) handleWithdraw(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
 	req := request.(*WithdrawCommand)
 	result, err := s.handler.Withdraw(ctx, req)
 	if err != nil {
@@ -89,7 +89,7 @@ func (s *AccountCommandServiceServer) handleWithdraw(ctx context.Context, reques
 	return eventsourcing.NewSuccessResponse(result)
 }
 
-func (s *AccountCommandServiceServer) handleCloseAccount(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
+func (s *CqrsAccountCommandServiceServer) handleCloseAccount(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
 	req := request.(*CloseAccountCommand)
 	result, err := s.handler.CloseAccount(ctx, req)
 	if err != nil {
@@ -102,34 +102,34 @@ func (s *AccountCommandServiceServer) handleCloseAccount(ctx context.Context, re
 }
 
 // Close stops the server
-func (s *AccountCommandServiceServer) Close() error {
+func (s *CqrsAccountCommandServiceServer) Close() error {
 	return s.server.Close()
 }
 
-// AccountQueryServiceHandler defines the business logic for AccountQueryService
-type AccountQueryServiceHandler interface {
+// CqrsAccountQueryServiceHandler defines the business logic for AccountQueryService
+type CqrsAccountQueryServiceHandler interface {
 	GetAccount(ctx context.Context, query *GetAccountRequest) (*AccountView, error)
 	ListAccounts(ctx context.Context, query *ListAccountsRequest) (*ListAccountsResponse, error)
 	GetAccountBalance(ctx context.Context, query *GetAccountBalanceRequest) (*BalanceView, error)
 	GetAccountHistory(ctx context.Context, query *GetAccountHistoryRequest) (*AccountHistoryResponse, error)
 }
 
-// AccountQueryServiceServer routes requests to the AccountQueryServiceHandler implementation
-type AccountQueryServiceServer struct {
+// CqrsAccountQueryServiceServer routes requests to the CqrsAccountQueryServiceHandler implementation
+type CqrsAccountQueryServiceServer struct {
 	server  cqrs.Server
-	handler AccountQueryServiceHandler
+	handler CqrsAccountQueryServiceHandler
 }
 
-// NewAccountQueryServiceServer creates a new server
-func NewAccountQueryServiceServer(server cqrs.Server, handler AccountQueryServiceHandler) *AccountQueryServiceServer {
-	return &AccountQueryServiceServer{
+// NewCqrsAccountQueryServiceServer creates a new server
+func NewCqrsAccountQueryServiceServer(server cqrs.Server, handler CqrsAccountQueryServiceHandler) *CqrsAccountQueryServiceServer {
+	return &CqrsAccountQueryServiceServer{
 		server:  server,
 		handler: handler,
 	}
 }
 
 // Start registers handlers and starts the server
-func (s *AccountQueryServiceServer) Start(ctx context.Context) error {
+func (s *CqrsAccountQueryServiceServer) Start(ctx context.Context) error {
 	if err := s.server.RegisterHandler("account.v1.AccountQueryService.GetAccount", s.handleGetAccount); err != nil {
 		return fmt.Errorf("failed to register GetAccount: %w", err)
 	}
@@ -146,7 +146,7 @@ func (s *AccountQueryServiceServer) Start(ctx context.Context) error {
 	return s.server.Start(ctx)
 }
 
-func (s *AccountQueryServiceServer) handleGetAccount(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
+func (s *CqrsAccountQueryServiceServer) handleGetAccount(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
 	req := request.(*GetAccountRequest)
 	result, err := s.handler.GetAccount(ctx, req)
 	if err != nil {
@@ -158,7 +158,7 @@ func (s *AccountQueryServiceServer) handleGetAccount(ctx context.Context, reques
 	return eventsourcing.NewSuccessResponse(result)
 }
 
-func (s *AccountQueryServiceServer) handleListAccounts(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
+func (s *CqrsAccountQueryServiceServer) handleListAccounts(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
 	req := request.(*ListAccountsRequest)
 	result, err := s.handler.ListAccounts(ctx, req)
 	if err != nil {
@@ -170,7 +170,7 @@ func (s *AccountQueryServiceServer) handleListAccounts(ctx context.Context, requ
 	return eventsourcing.NewSuccessResponse(result)
 }
 
-func (s *AccountQueryServiceServer) handleGetAccountBalance(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
+func (s *CqrsAccountQueryServiceServer) handleGetAccountBalance(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
 	req := request.(*GetAccountBalanceRequest)
 	result, err := s.handler.GetAccountBalance(ctx, req)
 	if err != nil {
@@ -182,7 +182,7 @@ func (s *AccountQueryServiceServer) handleGetAccountBalance(ctx context.Context,
 	return eventsourcing.NewSuccessResponse(result)
 }
 
-func (s *AccountQueryServiceServer) handleGetAccountHistory(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
+func (s *CqrsAccountQueryServiceServer) handleGetAccountHistory(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
 	req := request.(*GetAccountHistoryRequest)
 	result, err := s.handler.GetAccountHistory(ctx, req)
 	if err != nil {
@@ -195,6 +195,6 @@ func (s *AccountQueryServiceServer) handleGetAccountHistory(ctx context.Context,
 }
 
 // Close stops the server
-func (s *AccountQueryServiceServer) Close() error {
+func (s *CqrsAccountQueryServiceServer) Close() error {
 	return s.server.Close()
 }

@@ -203,12 +203,12 @@ func main() {
 	// This keeps CQRS independent from eventsourcing-specific concerns
 	cqrsAdapter := &accountCQRSAdapter{handler: handler}
 
-	commandService := accountv1.NewAccountCommandServiceServer(natsServer, cqrsAdapter)
+	commandService := accountv1.NewCqrsAccountCommandServiceServer(natsServer, cqrsAdapter)
 	if err := commandService.Start(ctx); err != nil {
 		log.Fatalf("Failed to start command service: %v", err)
 	}
 
-	queryService := accountv1.NewAccountQueryServiceServer(natsServer, cqrsAdapter)
+	queryService := accountv1.NewCqrsAccountQueryServiceServer(natsServer, cqrsAdapter)
 	if err := queryService.Start(ctx); err != nil {
 		log.Fatalf("Failed to start query service: %v", err)
 	}
@@ -235,8 +235,8 @@ func main() {
 	defer transport.Close()
 
 	// Create separate clients for commands and queries
-	commandClient := accountv1.NewAccountCommandServiceClient(transport)
-	queryClient := accountv1.NewAccountQueryServiceClient(transport)
+	commandClient := accountv1.NewCqrsAccountCommandServiceClient(transport)
+	queryClient := accountv1.NewCqrsAccountQueryServiceClient(transport)
 	fmt.Println("   ✅ Clients ready")
 	fmt.Println()
 
