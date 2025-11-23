@@ -22,18 +22,6 @@ import "google/protobuf/descriptor.proto";
 // - See: https://protobuf.dev/programming-guides/proto3/#updating
 // =============================================================================
 
-// ServiceType defines the type of service (command vs query)
-enum ServiceType {
-  // Default value - will infer from service name (deprecated)
-  SERVICE_TYPE_UNSPECIFIED = 0;
-
-  // Command service - handles write operations
-  SERVICE_TYPE_COMMAND = 1;
-
-  // Query service - handles read operations
-  SERVICE_TYPE_QUERY = 2;
-}
-
 // ServiceOptions declares which aggregate a service operates on
 // This is the PRIMARY source of truth for aggregate association
 message ServiceOptions {
@@ -52,13 +40,6 @@ message ServiceOptions {
   // This enables passing authentication, tracing, and other cross-cutting concerns
   // Default: false
   bool aggregate_handler = 3;
-
-  // OPTIONAL: The type of service (command or query)
-  // If not specified (UNSPECIFIED), the generator will infer from service name suffix
-  // (CommandService = command, QueryService = query)
-  // Recommended to explicitly specify to avoid naming convention requirements
-  // Default: SERVICE_TYPE_UNSPECIFIED (infer from name)
-  ServiceType service_type = 4;
 }
 
 // AggregateRootOptions marks a proto message as an aggregate root

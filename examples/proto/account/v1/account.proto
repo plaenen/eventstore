@@ -32,6 +32,7 @@ service AccountCommandService {
   // CQRS options - for transport infrastructure
   option (cqrs.service) = {
     service_type: SERVICE_TYPE_COMMAND
+    generate_client: true
   };
 
   // OpenAccount creates a new bank account
@@ -59,6 +60,7 @@ service AccountQueryService {
   // CQRS options - for transport infrastructure
   option (cqrs.service) = {
     service_type: SERVICE_TYPE_QUERY
+    generate_client: true
   };
 
   // GetAccount retrieves account details by ID

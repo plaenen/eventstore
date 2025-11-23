@@ -28,23 +28,66 @@ enum ServiceType {
 }
 
 // ServiceOptions configures CQRS behavior for a service
+//
+// DESIGN PHILOSOPHY:
+// The protoc-gen-cqrs plugin follows a "one service = one client" approach
+// for simplicity and predictability (similar to gRPC). There is NO automatic
+// grouping or SDK wrapper generation. If you want to group multiple clients
+// together, create a facade in your application code.
+//
+// EXAMPLE USAGE:
+//
+//   service AccountCommandService {
+//     option (cqrs.service) = {
+//       service_type: SERVICE_TYPE_COMMAND
+//       generate_client: true  // Generates AccountCommandServiceClient
+//     };
+//     rpc OpenAccount(OpenAccountCommand) returns (OpenAccountResponse);
+//     rpc Deposit(DepositCommand) returns (DepositResponse);
+//   }
+//
+//   service AccountQueryService {
+//     option (cqrs.service) = {
+//       service_type: SERVICE_TYPE_QUERY
+//       generate_client: true  // Generates AccountQueryServiceClient
+//     };
+//     rpc GetAccount(GetAccountRequest) returns (AccountView);
+//   }
+//
+// This generates TWO separate clients:
+//   - AccountCommandServiceClient (with OpenAccount, Deposit methods)
+//   - AccountQueryServiceClient (with GetAccount method)
+//
+// If you want a unified facade, create one in your application:
+//
+//   type AccountClient struct {
+//     Commands *AccountCommandServiceClient
+//     Queries  *AccountQueryServiceClient
+//   }
+//
 message ServiceOptions {
   // REQUIRED: The type of service (command or query)
   // This determines how the service is exposed and routed
   ServiceType service_type = 1;
 
+  // OPTIONAL: Generate client code for this service
+  // When true, generates a type-safe client for calling this service
+  // When false, only the server handler interface is generated
+  // Default: false (no client generated)
+  bool generate_client = 2;
+
   // OPTIONAL: Timeout for operations in milliseconds
   // Default: 5000 (5 seconds)
-  int32 timeout_ms = 2;
+  int32 timeout_ms = 3;
 
   // OPTIONAL: Maximum number of retry attempts
   // Default: 3
-  int32 max_retries = 3;
+  int32 max_retries = 4;
 
   // OPTIONAL: Queue group for load balancing (NATS-specific)
   // When multiple instances subscribe to the same queue group,
   // only one instance receives each message
-  string queue_group = 4;
+  string queue_group = 5;
 }
 
 // Extend service options

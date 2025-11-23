@@ -5,22 +5,7 @@ import (
 	"time"
 
 	"github.com/plaenen/eventstore/pkg/domain"
-	"github.com/plaenen/eventstore/pkg/eventsourcing"
-	"google.golang.org/protobuf/proto"
 )
-
-// Transport handles request/reply communication between client and server
-// Implementations include NATS, HTTP, gRPC, etc.
-type Transport interface {
-	// Request sends a request and waits for a response
-	// subject: The topic/subject to send to (e.g., "account.v1.AccountCommandService.OpenAccount")
-	// request: The command or query message
-	// Returns the Response wrapper
-	Request(ctx context.Context, subject string, request proto.Message) (*eventsourcing.Response, error)
-
-	// Close cleans up resources
-	Close() error
-}
 
 // TransportConfig holds common transport configuration
 type TransportConfig struct {
@@ -45,24 +30,6 @@ func DefaultTransportConfig() *TransportConfig {
 		ReconnectWait:        2 * time.Second,
 		MaxRetries:           3, // Retry up to 3 times on version conflicts
 	}
-}
-
-// HandlerFunc processes a request and returns a response
-// This is used by the server-side to handle incoming requests
-type HandlerFunc = eventsourcing.HandlerFunc
-
-// Server handles incoming requests from a transport
-type Server interface {
-	// RegisterHandler registers a handler for a specific subject
-	// subject: The topic/subject to listen on (e.g., "account.v1.AccountCommandService.OpenAccount")
-	// handler: The function that processes requests
-	RegisterHandler(subject string, handler HandlerFunc) error
-
-	// Start begins listening for requests
-	Start(ctx context.Context) error
-
-	// Close stops the server and cleans up resources
-	Close() error
 }
 
 // ServerConfig holds server configuration

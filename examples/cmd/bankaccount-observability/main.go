@@ -19,6 +19,47 @@ import (
 	_ "modernc.org/sqlite" // SQLite driver
 )
 
+// accountCQRSAdapter adapts the eventsourcing handler (with MethodOptions)
+// to the CQRS handler interface (without options).
+// This keeps CQRS independent from eventsourcing-specific concerns.
+type accountCQRSAdapter struct {
+	handler *handlers.AccountHandler
+}
+
+// Command methods - strip MethodOptions
+func (a *accountCQRSAdapter) OpenAccount(ctx context.Context, cmd *accountv1.OpenAccountCommand) (*accountv1.OpenAccountResponse, error) {
+	return a.handler.OpenAccount(ctx, cmd /* no options */)
+}
+
+func (a *accountCQRSAdapter) Deposit(ctx context.Context, cmd *accountv1.DepositCommand) (*accountv1.DepositResponse, error) {
+	return a.handler.Deposit(ctx, cmd /* no options */)
+}
+
+func (a *accountCQRSAdapter) Withdraw(ctx context.Context, cmd *accountv1.WithdrawCommand) (*accountv1.WithdrawResponse, error) {
+	return a.handler.Withdraw(ctx, cmd /* no options */)
+}
+
+func (a *accountCQRSAdapter) CloseAccount(ctx context.Context, cmd *accountv1.CloseAccountCommand) (*accountv1.CloseAccountResponse, error) {
+	return a.handler.CloseAccount(ctx, cmd /* no options */)
+}
+
+// Query methods - strip MethodOptions
+func (a *accountCQRSAdapter) GetAccount(ctx context.Context, query *accountv1.GetAccountRequest) (*accountv1.AccountView, error) {
+	return a.handler.GetAccount(ctx, query /* no options */)
+}
+
+func (a *accountCQRSAdapter) ListAccounts(ctx context.Context, query *accountv1.ListAccountsRequest) (*accountv1.ListAccountsResponse, error) {
+	return a.handler.ListAccounts(ctx, query /* no options */)
+}
+
+func (a *accountCQRSAdapter) GetAccountBalance(ctx context.Context, query *accountv1.GetAccountBalanceRequest) (*accountv1.BalanceView, error) {
+	return a.handler.GetAccountBalance(ctx, query /* no options */)
+}
+
+func (a *accountCQRSAdapter) GetAccountHistory(ctx context.Context, query *accountv1.GetAccountHistoryRequest) (*accountv1.AccountHistoryResponse, error) {
+	return a.handler.GetAccountHistory(ctx, query /* no options */)
+}
+
 func main() {
 	fmt.Println("=== Bank Account SQLite Observability Demo ===")
 	fmt.Println("Single-binary application with file-based storage")
@@ -157,12 +198,17 @@ func main() {
 
 	// 6. Start Services
 	fmt.Println("6️⃣  Starting services...")
-	commandService := accountv1.NewAccountCommandServiceServer(natsServer, handler)
+
+	// Create CQRS adapter that strips eventsourcing MethodOptions
+	// This keeps CQRS independent from eventsourcing-specific concerns
+	cqrsAdapter := &accountCQRSAdapter{handler: handler}
+
+	commandService := accountv1.NewAccountCommandServiceServer(natsServer, cqrsAdapter)
 	if err := commandService.Start(ctx); err != nil {
 		log.Fatalf("Failed to start command service: %v", err)
 	}
 
-	queryService := accountv1.NewAccountQueryServiceServer(natsServer, handler)
+	queryService := accountv1.NewAccountQueryServiceServer(natsServer, cqrsAdapter)
 	if err := queryService.Start(ctx); err != nil {
 		log.Fatalf("Failed to start query service: %v", err)
 	}
@@ -188,8 +234,10 @@ func main() {
 	}
 	defer transport.Close()
 
-	client := accountv1.NewAccountClient(transport)
-	fmt.Println("   ✅ Client ready")
+	// Create separate clients for commands and queries
+	commandClient := accountv1.NewAccountCommandServiceClient(transport)
+	queryClient := accountv1.NewAccountQueryServiceClient(transport)
+	fmt.Println("   ✅ Clients ready")
 	fmt.Println()
 
 	// 8. Execute Transactions
@@ -200,13 +248,13 @@ func main() {
 
 	// Open Account
 	fmt.Println("   📝 Opening account...")
-	openResp, appErr := client.OpenAccount(ctx, &accountv1.OpenAccountCommand{
+	openResp, err := commandClient.OpenAccount(ctx, &accountv1.OpenAccountCommand{
 		AccountId:      accountID,
 		OwnerName:      "Charlie Brown",
 		InitialBalance: "3000.00",
 	})
-	if appErr != nil {
-		fmt.Printf("   ❌ Error: [%s] %s\n", appErr.Code, appErr.Message)
+	if err != nil {
+		fmt.Printf("   ❌ Error: %v\n", err)
 	} else {
 		fmt.Printf("   ✅ Account opened: %s\n", openResp.AccountId)
 	}
@@ -214,12 +262,12 @@ func main() {
 	// Multiple deposits (transport layer handles retries automatically)
 	for i := 1; i <= 3; i++ {
 		fmt.Printf("   💵 Deposit #%d ($%d00)...\n", i, i)
-		resp, appErr := client.Deposit(ctx, &accountv1.DepositCommand{
+		resp, err := commandClient.Deposit(ctx, &accountv1.DepositCommand{
 			AccountId: accountID,
 			Amount:    fmt.Sprintf("%d00.00", i),
 		})
-		if appErr != nil {
-			fmt.Printf("   ❌ Error: [%s] %s\n", appErr.Code, appErr.Message)
+		if err != nil {
+			fmt.Printf("   ❌ Error: %v\n", err)
 		} else {
 			fmt.Printf("   ✅ New balance: %s\n", resp.NewBalance)
 		}
@@ -228,23 +276,23 @@ func main() {
 	// Multiple withdrawals (transport layer handles retries automatically)
 	for i := 1; i <= 2; i++ {
 		fmt.Printf("   💸 Withdrawal #%d ($%d50)...\n", i, i)
-		resp, appErr := client.Withdraw(ctx, &accountv1.WithdrawCommand{
+		resp, err := commandClient.Withdraw(ctx, &accountv1.WithdrawCommand{
 			AccountId: accountID,
 			Amount:    fmt.Sprintf("%d50.00", i),
 		})
-		if appErr != nil {
-			fmt.Printf("   ❌ Error: [%s] %s\n", appErr.Code, appErr.Message)
+		if err != nil {
+			fmt.Printf("   ❌ Error: %v\n", err)
 		} else {
 			fmt.Printf("   ✅ New balance: %s\n", resp.NewBalance)
 		}
 	}
 
 	// Get balance
-	balance, appErr := client.GetAccountBalance(ctx, &accountv1.GetAccountBalanceRequest{
+	balance, err := queryClient.GetAccountBalance(ctx, &accountv1.GetAccountBalanceRequest{
 		AccountId: accountID,
 	})
-	if appErr != nil {
-		fmt.Printf("   ❌ Error: [%s] %s\n", appErr.Code, appErr.Message)
+	if err != nil {
+		fmt.Printf("   ❌ Error: %v\n", err)
 	} else {
 		fmt.Printf("   ✅ Final balance: %s\n", balance.Balance)
 	}

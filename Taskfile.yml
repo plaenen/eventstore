@@ -49,14 +49,18 @@ tasks:
       - task: generate:proto:buf
 
   generate:proto:copy-options:
-    desc: Copy eventsourcing options.proto to examples
+    desc: Copy eventsourcing and CQRS options.proto to examples
     cmds:
       - mkdir -p examples/proto/eventsourcing
       - cp proto/eventsourcing/options.proto examples/proto/eventsourcing/options.proto
+      - mkdir -p examples/proto/cqrs
+      - cp proto/cqrs/options.proto examples/proto/cqrs/options.proto
     sources:
       - proto/eventsourcing/options.proto
+      - proto/cqrs/options.proto
     generates:
       - examples/proto/eventsourcing/options.proto
+      - examples/proto/cqrs/options.proto
 
   generate:proto:buf:
     desc: Run buf generate for examples
@@ -64,7 +68,6 @@ tasks:
     cmds:
       - rm -f .task/checksum/generate-proto-buf
       - buf generate
-      - task: generate:sdk:unified
     sources:
       - proto/**/*.proto
       - buf.yaml
@@ -72,17 +75,6 @@ tasks:
     generates:
       - pb/*.pb.go
       - pb/*connect/*.go
-
-  generate:sdk:unified:
-    desc: Generate unified SDK from all service SDKs
-    dir: .
-    cmds:
-      - task: build:sdk-generator
-      - ./bin/generate-unified-sdk -pb-dir ./examples/pb -output ./examples/sdk/unified.go
-    sources:
-      - examples/pb/**/*_sdk.es.pb.go
-    generates:
-      - examples/sdk/unified.go
 
   generate:mocks:
     desc: Generate mock implementations for testing
@@ -92,7 +84,7 @@ tasks:
   # Build tasks
   build:
     desc: Build all binaries
-    deps: [build:plugin, build:sdk-generator]
+    deps: [build:plugin]
 
   build:plugin:
     desc: Build protoc-gen-eventsourcing plugin
@@ -104,16 +96,6 @@ tasks:
       - "**/*.go"
     generates:
       - ../../bin/protoc-gen-eventsourcing
-
-  build:sdk-generator:
-    desc: Build generate-unified-sdk tool
-    dir: "{{.CMD_DIR}}/generate-unified-sdk"
-    cmds:
-      - go build -o ../../bin/generate-unified-sdk .
-    sources:
-      - "*.go"
-    generates:
-      - ../../bin/generate-unified-sdk
 
   # Linting and formatting tasks
   lint:

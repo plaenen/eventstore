@@ -76,21 +76,62 @@ func (ServiceType) EnumDescriptor() ([]byte, []int) {
 }
 
 // ServiceOptions configures CQRS behavior for a service
+//
+// DESIGN PHILOSOPHY:
+// The protoc-gen-cqrs plugin follows a "one service = one client" approach
+// for simplicity and predictability (similar to gRPC). There is NO automatic
+// grouping or SDK wrapper generation. If you want to group multiple clients
+// together, create a facade in your application code.
+//
+// EXAMPLE USAGE:
+//
+//	service AccountCommandService {
+//	  option (cqrs.service) = {
+//	    service_type: SERVICE_TYPE_COMMAND
+//	    generate_client: true  // Generates AccountCommandServiceClient
+//	  };
+//	  rpc OpenAccount(OpenAccountCommand) returns (OpenAccountResponse);
+//	  rpc Deposit(DepositCommand) returns (DepositResponse);
+//	}
+//
+//	service AccountQueryService {
+//	  option (cqrs.service) = {
+//	    service_type: SERVICE_TYPE_QUERY
+//	    generate_client: true  // Generates AccountQueryServiceClient
+//	  };
+//	  rpc GetAccount(GetAccountRequest) returns (AccountView);
+//	}
+//
+// This generates TWO separate clients:
+//   - AccountCommandServiceClient (with OpenAccount, Deposit methods)
+//   - AccountQueryServiceClient (with GetAccount method)
+//
+// If you want a unified facade, create one in your application:
+//
+//	type AccountClient struct {
+//	  Commands *AccountCommandServiceClient
+//	  Queries  *AccountQueryServiceClient
+//	}
 type ServiceOptions struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// REQUIRED: The type of service (command or query)
 	// This determines how the service is exposed and routed
 	ServiceType ServiceType `protobuf:"varint,1,opt,name=service_type,json=serviceType,proto3,enum=cqrs.ServiceType" json:"service_type,omitempty"`
+	// OPTIONAL: Generate client code for this service
+	// When true, generates a type-safe client for calling this service
+	// When false, only the server handler interface is generated
+	// Default: false (no client generated)
+	GenerateClient bool `protobuf:"varint,2,opt,name=generate_client,json=generateClient,proto3" json:"generate_client,omitempty"`
 	// OPTIONAL: Timeout for operations in milliseconds
 	// Default: 5000 (5 seconds)
-	TimeoutMs int32 `protobuf:"varint,2,opt,name=timeout_ms,json=timeoutMs,proto3" json:"timeout_ms,omitempty"`
+	TimeoutMs int32 `protobuf:"varint,3,opt,name=timeout_ms,json=timeoutMs,proto3" json:"timeout_ms,omitempty"`
 	// OPTIONAL: Maximum number of retry attempts
 	// Default: 3
-	MaxRetries int32 `protobuf:"varint,3,opt,name=max_retries,json=maxRetries,proto3" json:"max_retries,omitempty"`
+	MaxRetries int32 `protobuf:"varint,4,opt,name=max_retries,json=maxRetries,proto3" json:"max_retries,omitempty"`
 	// OPTIONAL: Queue group for load balancing (NATS-specific)
 	// When multiple instances subscribe to the same queue group,
 	// only one instance receives each message
-	QueueGroup    string `protobuf:"bytes,4,opt,name=queue_group,json=queueGroup,proto3" json:"queue_group,omitempty"`
+	QueueGroup    string `protobuf:"bytes,5,opt,name=queue_group,json=queueGroup,proto3" json:"queue_group,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -130,6 +171,13 @@ func (x *ServiceOptions) GetServiceType() ServiceType {
 		return x.ServiceType
 	}
 	return ServiceType_SERVICE_TYPE_UNSPECIFIED
+}
+
+func (x *ServiceOptions) GetGenerateClient() bool {
+	if x != nil {
+		return x.GenerateClient
+	}
+	return false
 }
 
 func (x *ServiceOptions) GetTimeoutMs() int32 {
@@ -174,14 +222,15 @@ var File_cqrs_options_proto protoreflect.FileDescriptor
 
 const file_cqrs_options_proto_rawDesc = "" +
 	"\n" +
-	"\x12cqrs/options.proto\x12\x04cqrs\x1a google/protobuf/descriptor.proto\"\xa7\x01\n" +
+	"\x12cqrs/options.proto\x12\x04cqrs\x1a google/protobuf/descriptor.proto\"\xd0\x01\n" +
 	"\x0eServiceOptions\x124\n" +
-	"\fservice_type\x18\x01 \x01(\x0e2\x11.cqrs.ServiceTypeR\vserviceType\x12\x1d\n" +
+	"\fservice_type\x18\x01 \x01(\x0e2\x11.cqrs.ServiceTypeR\vserviceType\x12'\n" +
+	"\x0fgenerate_client\x18\x02 \x01(\bR\x0egenerateClient\x12\x1d\n" +
 	"\n" +
-	"timeout_ms\x18\x02 \x01(\x05R\ttimeoutMs\x12\x1f\n" +
-	"\vmax_retries\x18\x03 \x01(\x05R\n" +
+	"timeout_ms\x18\x03 \x01(\x05R\ttimeoutMs\x12\x1f\n" +
+	"\vmax_retries\x18\x04 \x01(\x05R\n" +
 	"maxRetries\x12\x1f\n" +
-	"\vqueue_group\x18\x04 \x01(\tR\n" +
+	"\vqueue_group\x18\x05 \x01(\tR\n" +
 	"queueGroup*]\n" +
 	"\vServiceType\x12\x1c\n" +
 	"\x18SERVICE_TYPE_UNSPECIFIED\x10\x00\x12\x18\n" +

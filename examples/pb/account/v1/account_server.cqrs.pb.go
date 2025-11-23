@@ -8,18 +8,27 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/plaenen/eventstore/pkg/cqrs"
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"google.golang.org/protobuf/proto"
 )
 
-// AccountCommandServiceServer routes requests to the AccountHandler implementation
+// AccountCommandServiceHandler defines the business logic for AccountCommandService
+type AccountCommandServiceHandler interface {
+	OpenAccount(ctx context.Context, cmd *OpenAccountCommand) (*OpenAccountResponse, error)
+	Deposit(ctx context.Context, cmd *DepositCommand) (*DepositResponse, error)
+	Withdraw(ctx context.Context, cmd *WithdrawCommand) (*WithdrawResponse, error)
+	CloseAccount(ctx context.Context, cmd *CloseAccountCommand) (*CloseAccountResponse, error)
+}
+
+// AccountCommandServiceServer routes requests to the AccountCommandServiceHandler implementation
 type AccountCommandServiceServer struct {
-	server  eventsourcing.Server
-	handler AccountHandler
+	server  cqrs.Server
+	handler AccountCommandServiceHandler
 }
 
 // NewAccountCommandServiceServer creates a new server
-func NewAccountCommandServiceServer(server eventsourcing.Server, handler AccountHandler) *AccountCommandServiceServer {
+func NewAccountCommandServiceServer(server cqrs.Server, handler AccountCommandServiceHandler) *AccountCommandServiceServer {
 	return &AccountCommandServiceServer{
 		server:  server,
 		handler: handler,
@@ -46,9 +55,7 @@ func (s *AccountCommandServiceServer) Start(ctx context.Context) error {
 
 func (s *AccountCommandServiceServer) handleOpenAccount(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
 	req := request.(*OpenAccountCommand)
-	// Extract method options from context (set by middleware)
-	opts := eventsourcing.ExtractMethodOptionsFromContext(ctx)
-	result, err := s.handler.OpenAccount(ctx, req, opts...)
+	result, err := s.handler.OpenAccount(ctx, req)
 	if err != nil {
 		return &eventsourcing.Response{
 			Success: false,
@@ -60,9 +67,7 @@ func (s *AccountCommandServiceServer) handleOpenAccount(ctx context.Context, req
 
 func (s *AccountCommandServiceServer) handleDeposit(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
 	req := request.(*DepositCommand)
-	// Extract method options from context (set by middleware)
-	opts := eventsourcing.ExtractMethodOptionsFromContext(ctx)
-	result, err := s.handler.Deposit(ctx, req, opts...)
+	result, err := s.handler.Deposit(ctx, req)
 	if err != nil {
 		return &eventsourcing.Response{
 			Success: false,
@@ -74,9 +79,7 @@ func (s *AccountCommandServiceServer) handleDeposit(ctx context.Context, request
 
 func (s *AccountCommandServiceServer) handleWithdraw(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
 	req := request.(*WithdrawCommand)
-	// Extract method options from context (set by middleware)
-	opts := eventsourcing.ExtractMethodOptionsFromContext(ctx)
-	result, err := s.handler.Withdraw(ctx, req, opts...)
+	result, err := s.handler.Withdraw(ctx, req)
 	if err != nil {
 		return &eventsourcing.Response{
 			Success: false,
@@ -88,9 +91,7 @@ func (s *AccountCommandServiceServer) handleWithdraw(ctx context.Context, reques
 
 func (s *AccountCommandServiceServer) handleCloseAccount(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
 	req := request.(*CloseAccountCommand)
-	// Extract method options from context (set by middleware)
-	opts := eventsourcing.ExtractMethodOptionsFromContext(ctx)
-	result, err := s.handler.CloseAccount(ctx, req, opts...)
+	result, err := s.handler.CloseAccount(ctx, req)
 	if err != nil {
 		return &eventsourcing.Response{
 			Success: false,
@@ -105,14 +106,22 @@ func (s *AccountCommandServiceServer) Close() error {
 	return s.server.Close()
 }
 
-// AccountQueryServiceServer routes requests to the AccountHandler implementation
+// AccountQueryServiceHandler defines the business logic for AccountQueryService
+type AccountQueryServiceHandler interface {
+	GetAccount(ctx context.Context, query *GetAccountRequest) (*AccountView, error)
+	ListAccounts(ctx context.Context, query *ListAccountsRequest) (*ListAccountsResponse, error)
+	GetAccountBalance(ctx context.Context, query *GetAccountBalanceRequest) (*BalanceView, error)
+	GetAccountHistory(ctx context.Context, query *GetAccountHistoryRequest) (*AccountHistoryResponse, error)
+}
+
+// AccountQueryServiceServer routes requests to the AccountQueryServiceHandler implementation
 type AccountQueryServiceServer struct {
-	server  eventsourcing.Server
-	handler AccountHandler
+	server  cqrs.Server
+	handler AccountQueryServiceHandler
 }
 
 // NewAccountQueryServiceServer creates a new server
-func NewAccountQueryServiceServer(server eventsourcing.Server, handler AccountHandler) *AccountQueryServiceServer {
+func NewAccountQueryServiceServer(server cqrs.Server, handler AccountQueryServiceHandler) *AccountQueryServiceServer {
 	return &AccountQueryServiceServer{
 		server:  server,
 		handler: handler,
@@ -139,9 +148,7 @@ func (s *AccountQueryServiceServer) Start(ctx context.Context) error {
 
 func (s *AccountQueryServiceServer) handleGetAccount(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
 	req := request.(*GetAccountRequest)
-	// Extract method options from context (set by middleware)
-	opts := eventsourcing.ExtractMethodOptionsFromContext(ctx)
-	result, err := s.handler.GetAccount(ctx, req, opts...)
+	result, err := s.handler.GetAccount(ctx, req)
 	if err != nil {
 		return &eventsourcing.Response{
 			Success: false,
@@ -153,9 +160,7 @@ func (s *AccountQueryServiceServer) handleGetAccount(ctx context.Context, reques
 
 func (s *AccountQueryServiceServer) handleListAccounts(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
 	req := request.(*ListAccountsRequest)
-	// Extract method options from context (set by middleware)
-	opts := eventsourcing.ExtractMethodOptionsFromContext(ctx)
-	result, err := s.handler.ListAccounts(ctx, req, opts...)
+	result, err := s.handler.ListAccounts(ctx, req)
 	if err != nil {
 		return &eventsourcing.Response{
 			Success: false,
@@ -167,9 +172,7 @@ func (s *AccountQueryServiceServer) handleListAccounts(ctx context.Context, requ
 
 func (s *AccountQueryServiceServer) handleGetAccountBalance(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
 	req := request.(*GetAccountBalanceRequest)
-	// Extract method options from context (set by middleware)
-	opts := eventsourcing.ExtractMethodOptionsFromContext(ctx)
-	result, err := s.handler.GetAccountBalance(ctx, req, opts...)
+	result, err := s.handler.GetAccountBalance(ctx, req)
 	if err != nil {
 		return &eventsourcing.Response{
 			Success: false,
@@ -181,9 +184,7 @@ func (s *AccountQueryServiceServer) handleGetAccountBalance(ctx context.Context,
 
 func (s *AccountQueryServiceServer) handleGetAccountHistory(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
 	req := request.(*GetAccountHistoryRequest)
-	// Extract method options from context (set by middleware)
-	opts := eventsourcing.ExtractMethodOptionsFromContext(ctx)
-	result, err := s.handler.GetAccountHistory(ctx, req, opts...)
+	result, err := s.handler.GetAccountHistory(ctx, req)
 	if err != nil {
 		return &eventsourcing.Response{
 			Success: false,
