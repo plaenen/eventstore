@@ -86,6 +86,9 @@ Desktop.ini
 jetstream/
 nats-data/
 
+# Restate data directory (not used by this project)
+restate-data/
+
 # Observability data (if using file-based exporters)
 traces/
 metrics/
