@@ -9,7 +9,6 @@ import (
 	"fmt"
 
 	"github.com/plaenen/eventstore/pkg/cqrs"
-	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -53,52 +52,44 @@ func (s *CqrsAccountCommandServiceServer) Start(ctx context.Context) error {
 	return s.server.Start(ctx)
 }
 
-func (s *CqrsAccountCommandServiceServer) handleOpenAccount(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
+// handleOpenAccount is the internal handler wrapper for OpenAccount
+func (s *CqrsAccountCommandServiceServer) handleOpenAccount(ctx context.Context, request proto.Message) (proto.Message, error) {
 	req := request.(*OpenAccountCommand)
 	result, err := s.handler.OpenAccount(ctx, req)
 	if err != nil {
-		return &eventsourcing.Response{
-			Success: false,
-			Error:   eventsourcing.ErrorToAppError(err),
-		}, nil
+		return nil, err
 	}
-	return eventsourcing.NewSuccessResponse(result)
+	return result, nil
 }
 
-func (s *CqrsAccountCommandServiceServer) handleDeposit(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
+// handleDeposit is the internal handler wrapper for Deposit
+func (s *CqrsAccountCommandServiceServer) handleDeposit(ctx context.Context, request proto.Message) (proto.Message, error) {
 	req := request.(*DepositCommand)
 	result, err := s.handler.Deposit(ctx, req)
 	if err != nil {
-		return &eventsourcing.Response{
-			Success: false,
-			Error:   eventsourcing.ErrorToAppError(err),
-		}, nil
+		return nil, err
 	}
-	return eventsourcing.NewSuccessResponse(result)
+	return result, nil
 }
 
-func (s *CqrsAccountCommandServiceServer) handleWithdraw(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
+// handleWithdraw is the internal handler wrapper for Withdraw
+func (s *CqrsAccountCommandServiceServer) handleWithdraw(ctx context.Context, request proto.Message) (proto.Message, error) {
 	req := request.(*WithdrawCommand)
 	result, err := s.handler.Withdraw(ctx, req)
 	if err != nil {
-		return &eventsourcing.Response{
-			Success: false,
-			Error:   eventsourcing.ErrorToAppError(err),
-		}, nil
+		return nil, err
 	}
-	return eventsourcing.NewSuccessResponse(result)
+	return result, nil
 }
 
-func (s *CqrsAccountCommandServiceServer) handleCloseAccount(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
+// handleCloseAccount is the internal handler wrapper for CloseAccount
+func (s *CqrsAccountCommandServiceServer) handleCloseAccount(ctx context.Context, request proto.Message) (proto.Message, error) {
 	req := request.(*CloseAccountCommand)
 	result, err := s.handler.CloseAccount(ctx, req)
 	if err != nil {
-		return &eventsourcing.Response{
-			Success: false,
-			Error:   eventsourcing.ErrorToAppError(err),
-		}, nil
+		return nil, err
 	}
-	return eventsourcing.NewSuccessResponse(result)
+	return result, nil
 }
 
 // Close stops the server
@@ -146,52 +137,44 @@ func (s *CqrsAccountQueryServiceServer) Start(ctx context.Context) error {
 	return s.server.Start(ctx)
 }
 
-func (s *CqrsAccountQueryServiceServer) handleGetAccount(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
+// handleGetAccount is the internal handler wrapper for GetAccount
+func (s *CqrsAccountQueryServiceServer) handleGetAccount(ctx context.Context, request proto.Message) (proto.Message, error) {
 	req := request.(*GetAccountRequest)
 	result, err := s.handler.GetAccount(ctx, req)
 	if err != nil {
-		return &eventsourcing.Response{
-			Success: false,
-			Error:   eventsourcing.ErrorToAppError(err),
-		}, nil
+		return nil, err
 	}
-	return eventsourcing.NewSuccessResponse(result)
+	return result, nil
 }
 
-func (s *CqrsAccountQueryServiceServer) handleListAccounts(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
+// handleListAccounts is the internal handler wrapper for ListAccounts
+func (s *CqrsAccountQueryServiceServer) handleListAccounts(ctx context.Context, request proto.Message) (proto.Message, error) {
 	req := request.(*ListAccountsRequest)
 	result, err := s.handler.ListAccounts(ctx, req)
 	if err != nil {
-		return &eventsourcing.Response{
-			Success: false,
-			Error:   eventsourcing.ErrorToAppError(err),
-		}, nil
+		return nil, err
 	}
-	return eventsourcing.NewSuccessResponse(result)
+	return result, nil
 }
 
-func (s *CqrsAccountQueryServiceServer) handleGetAccountBalance(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
+// handleGetAccountBalance is the internal handler wrapper for GetAccountBalance
+func (s *CqrsAccountQueryServiceServer) handleGetAccountBalance(ctx context.Context, request proto.Message) (proto.Message, error) {
 	req := request.(*GetAccountBalanceRequest)
 	result, err := s.handler.GetAccountBalance(ctx, req)
 	if err != nil {
-		return &eventsourcing.Response{
-			Success: false,
-			Error:   eventsourcing.ErrorToAppError(err),
-		}, nil
+		return nil, err
 	}
-	return eventsourcing.NewSuccessResponse(result)
+	return result, nil
 }
 
-func (s *CqrsAccountQueryServiceServer) handleGetAccountHistory(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
+// handleGetAccountHistory is the internal handler wrapper for GetAccountHistory
+func (s *CqrsAccountQueryServiceServer) handleGetAccountHistory(ctx context.Context, request proto.Message) (proto.Message, error) {
 	req := request.(*GetAccountHistoryRequest)
 	result, err := s.handler.GetAccountHistory(ctx, req)
 	if err != nil {
-		return &eventsourcing.Response{
-			Success: false,
-			Error:   eventsourcing.ErrorToAppError(err),
-		}, nil
+		return nil, err
 	}
-	return eventsourcing.NewSuccessResponse(result)
+	return result, nil
 }
 
 // Close stops the server

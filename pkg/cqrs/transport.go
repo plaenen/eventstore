@@ -3,7 +3,6 @@ package cqrs
 import (
 	"context"
 
-	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -15,8 +14,9 @@ type Transport interface {
 	// Request sends a request and waits for a response.
 	// subject: The topic/subject to send to (e.g., "account.v1.AccountService.OpenAccount")
 	// request: The command or query message (proto.Message)
-	// Returns the Response wrapper and any transport-level error
-	Request(ctx context.Context, subject string, request proto.Message) (*eventsourcing.Response, error)
+	// Returns the response message directly or an error if the operation failed.
+	// This is Go-idiomatic: success returns (message, nil), failure returns (nil, error).
+	Request(ctx context.Context, subject string, request proto.Message) (proto.Message, error)
 
 	// Close cleans up resources and connections
 	Close() error
@@ -39,9 +39,9 @@ type Server interface {
 }
 
 // HandlerFunc is a function that handles an incoming request.
-// It receives the request message and returns a Response (or error).
-// This is an alias to eventsourcing.HandlerFunc for compatibility with middleware.
-type HandlerFunc = eventsourcing.HandlerFunc
+// It receives the request message and returns the response message or an error.
+// This is Go-idiomatic: success returns (message, nil), failure returns (nil, error).
+type HandlerFunc func(ctx context.Context, request proto.Message) (proto.Message, error)
 
 // Interceptor allows intercepting requests on the client or server side.
 // Interceptors can modify the context, add logging, handle authentication, etc.
@@ -60,7 +60,7 @@ type ClientInterceptor interface {
 
 	// InterceptResponse is called after receiving a response.
 	// It can inspect or modify the response before returning to the caller.
-	InterceptResponse(ctx context.Context, subject string, response *eventsourcing.Response, err error) (*eventsourcing.Response, error)
+	InterceptResponse(ctx context.Context, subject string, response proto.Message, err error) (proto.Message, error)
 }
 
 // ServerInterceptor intercepts inbound requests before they reach the handler.
@@ -89,7 +89,7 @@ func (c *chainedClientInterceptor) InterceptRequest(ctx context.Context, subject
 	return ctx, nil
 }
 
-func (c *chainedClientInterceptor) InterceptResponse(ctx context.Context, subject string, response *eventsourcing.Response, err error) (*eventsourcing.Response, error) {
+func (c *chainedClientInterceptor) InterceptResponse(ctx context.Context, subject string, response proto.Message, err error) (proto.Message, error) {
 	// Apply interceptors in reverse order for responses
 	for i := len(c.interceptors) - 1; i >= 0; i-- {
 		response, err = c.interceptors[i].InterceptResponse(ctx, subject, response, err)

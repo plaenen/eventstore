@@ -8,7 +8,7 @@ import (
 	exampledomain "github.com/plaenen/eventstore/examples/bankaccount/domain"
 	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
 	"github.com/plaenen/eventstore/pkg/domain"
-	"github.com/plaenen/eventstore/pkg/eventsourcing"
+	"github.com/plaenen/eventstore/pkg/protocol"
 	"github.com/shopspring/decimal"
 )
 
@@ -25,32 +25,20 @@ func NewAccountCommandHandler(repo *accountv1.AccountRepository) *AccountCommand
 }
 
 // OpenAccount handles the OpenAccount command
-func (h *AccountCommandHandler) OpenAccount(ctx context.Context, cmd *accountv1.OpenAccountCommand) (*accountv1.OpenAccountResponse, *eventsourcing.AppError) {
+func (h *AccountCommandHandler) OpenAccount(ctx context.Context, cmd *accountv1.OpenAccountCommand) (*accountv1.OpenAccountResponse, error) {
 	// Validate command
 	if cmd.AccountId == "" {
-		return nil, &eventsourcing.AppError{
-			Code:     "INVALID_ACCOUNT_ID",
-			Message:  "Account ID is required",
-			Solution: "Provide a valid account ID",
-		}
+		return nil, protocol.ErrInvalidArgument("Account ID is required")
 	}
 
 	if cmd.OwnerName == "" {
-		return nil, &eventsourcing.AppError{
-			Code:     "INVALID_OWNER_NAME",
-			Message:  "Owner name is required",
-			Solution: "Provide a valid owner name",
-		}
+		return nil, protocol.ErrInvalidArgument("Owner name is required")
 	}
 
 	// Parse initial balance
 	balance, err := decimal.NewFromString(cmd.InitialBalance)
 	if err != nil || balance.IsNegative() {
-		return nil, &eventsourcing.AppError{
-			Code:     "INVALID_BALANCE",
-			Message:  "Initial balance must be a non-negative number",
-			Solution: "Provide a valid balance (e.g., '100.00')",
-		}
+		return nil, protocol.ErrInvalidArgument("Initial balance must be a non-negative number")
 	}
 
 	// Create new aggregate (appliers are injected by domain factory)
@@ -72,18 +60,12 @@ func (h *AccountCommandHandler) OpenAccount(ctx context.Context, cmd *accountv1.
 			Operation: domain.ConstraintClaim,
 		}),
 	); err != nil {
-		return nil, &eventsourcing.AppError{
-			Code:    "EVENT_EMIT_FAILED",
-			Message: fmt.Sprintf("Failed to emit event: %v", err),
-		}
+		return nil, fmt.Errorf("failed to emit event: %w", err)
 	}
 
 	// Save aggregate
 	if err := h.repo.Save(agg); err != nil {
-		return nil, &eventsourcing.AppError{
-			Code:    "SAVE_FAILED",
-			Message: fmt.Sprintf("Failed to save account: %v", err),
-		}
+		return nil, fmt.Errorf("failed to save account: %w", err)
 	}
 
 	return &accountv1.OpenAccountResponse{
@@ -93,23 +75,15 @@ func (h *AccountCommandHandler) OpenAccount(ctx context.Context, cmd *accountv1.
 }
 
 // Deposit handles the Deposit command
-func (h *AccountCommandHandler) Deposit(ctx context.Context, cmd *accountv1.DepositCommand) (*accountv1.DepositResponse, *eventsourcing.AppError) {
+func (h *AccountCommandHandler) Deposit(ctx context.Context, cmd *accountv1.DepositCommand) (*accountv1.DepositResponse, error) {
 	// Validate command
 	if cmd.AccountId == "" {
-		return nil, &eventsourcing.AppError{
-			Code:     "INVALID_ACCOUNT_ID",
-			Message:  "Account ID is required",
-			Solution: "Provide a valid account ID",
-		}
+		return nil, protocol.ErrInvalidArgument("Account ID is required")
 	}
 
 	amount, err := decimal.NewFromString(cmd.Amount)
 	if err != nil || amount.LessThanOrEqual(decimal.Zero) {
-		return nil, &eventsourcing.AppError{
-			Code:     "INVALID_AMOUNT",
-			Message:  "Amount must be a positive number",
-			Solution: "Provide a valid amount (e.g., '50.00')",
-		}
+		return nil, protocol.ErrInvalidArgument("Amount must be a positive number")
 	}
 
 	var response *accountv1.DepositResponse
@@ -153,34 +127,22 @@ func (h *AccountCommandHandler) Deposit(ctx context.Context, cmd *accountv1.Depo
 	})
 
 	if err != nil {
-		// Convert error to AppError
-		return nil, &eventsourcing.AppError{
-			Code:    "OPERATION_FAILED",
-			Message: err.Error(),
-		}
+		return nil, fmt.Errorf("operation failed: %w", err)
 	}
 
 	return response, nil
 }
 
 // Withdraw handles the Withdraw command
-func (h *AccountCommandHandler) Withdraw(ctx context.Context, cmd *accountv1.WithdrawCommand) (*accountv1.WithdrawResponse, *eventsourcing.AppError) {
+func (h *AccountCommandHandler) Withdraw(ctx context.Context, cmd *accountv1.WithdrawCommand) (*accountv1.WithdrawResponse, error) {
 	// Validate command
 	if cmd.AccountId == "" {
-		return nil, &eventsourcing.AppError{
-			Code:     "INVALID_ACCOUNT_ID",
-			Message:  "Account ID is required",
-			Solution: "Provide a valid account ID",
-		}
+		return nil, protocol.ErrInvalidArgument("Account ID is required")
 	}
 
 	amount, err := decimal.NewFromString(cmd.Amount)
 	if err != nil || amount.LessThanOrEqual(decimal.Zero) {
-		return nil, &eventsourcing.AppError{
-			Code:     "INVALID_AMOUNT",
-			Message:  "Amount must be a positive number",
-			Solution: "Provide a valid amount (e.g., '50.00')",
-		}
+		return nil, protocol.ErrInvalidArgument("Amount must be a positive number")
 	}
 
 	var response *accountv1.WithdrawResponse
@@ -229,43 +191,28 @@ func (h *AccountCommandHandler) Withdraw(ctx context.Context, cmd *accountv1.Wit
 	})
 
 	if err != nil {
-		// Convert error to AppError
-		return nil, &eventsourcing.AppError{
-			Code:    "OPERATION_FAILED",
-			Message: err.Error(),
-		}
+		return nil, fmt.Errorf("operation failed: %w", err)
 	}
 
 	return response, nil
 }
 
 // CloseAccount handles the CloseAccount command
-func (h *AccountCommandHandler) CloseAccount(ctx context.Context, cmd *accountv1.CloseAccountCommand) (*accountv1.CloseAccountResponse, *eventsourcing.AppError) {
+func (h *AccountCommandHandler) CloseAccount(ctx context.Context, cmd *accountv1.CloseAccountCommand) (*accountv1.CloseAccountResponse, error) {
 	// Validate command
 	if cmd.AccountId == "" {
-		return nil, &eventsourcing.AppError{
-			Code:     "INVALID_ACCOUNT_ID",
-			Message:  "Account ID is required",
-			Solution: "Provide a valid account ID",
-		}
+		return nil, protocol.ErrInvalidArgument("Account ID is required")
 	}
 
 	// Load aggregate
 	agg, err := h.repo.Load(cmd.AccountId)
 	if err != nil {
-		return nil, &eventsourcing.AppError{
-			Code:    "ACCOUNT_NOT_FOUND",
-			Message: fmt.Sprintf("Account not found: %v", err),
-		}
+		return nil, protocol.ErrNotFound(fmt.Sprintf("Account not found: %v", err))
 	}
 
 	// Check account is not already closed
 	if agg.Status == accountv1.AccountStatus_ACCOUNT_STATUS_CLOSED {
-		return nil, &eventsourcing.AppError{
-			Code:     "ACCOUNT_ALREADY_CLOSED",
-			Message:  "Account is already closed",
-			Solution: "No action needed",
-		}
+		return nil, protocol.ErrConflict("Account is already closed")
 	}
 
 	// Create and emit event using type-safe helper
@@ -283,18 +230,12 @@ func (h *AccountCommandHandler) CloseAccount(ctx context.Context, cmd *accountv1
 			Operation: domain.ConstraintRelease,
 		}),
 	); err != nil {
-		return nil, &eventsourcing.AppError{
-			Code:    "EVENT_EMIT_FAILED",
-			Message: fmt.Sprintf("Failed to emit event: %v", err),
-		}
+		return nil, fmt.Errorf("failed to emit event: %w", err)
 	}
 
 	// Save aggregate
 	if err := h.repo.Save(agg); err != nil {
-		return nil, &eventsourcing.AppError{
-			Code:    "SAVE_FAILED",
-			Message: fmt.Sprintf("Failed to save account: %v", err),
-		}
+		return nil, fmt.Errorf("failed to save account: %w", err)
 	}
 
 	return &accountv1.CloseAccountResponse{

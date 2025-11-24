@@ -6,6 +6,7 @@ package accountv1
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/plaenen/eventstore/pkg/cqrs"
 )
@@ -38,101 +39,85 @@ func NewCqrsAccountCommandServiceClient(transport cqrs.Transport, opts ...cqrs.C
 	return c
 }
 
-// OpenAccount sends a OpenAccount command and returns the response
+// OpenAccount sends a OpenAccount command and returns the response.
+// Returns (result, nil) on success or (nil, error) on failure.
 func (c *CqrsAccountCommandServiceClient) OpenAccount(ctx context.Context, cmd *OpenAccountCommand) (*OpenAccountResponse, error) {
 	// Build subject using SubjectBuilder
 	subject := c.subjectBuilder.BuildSubject(ctx, "account.v1", "AccountCommandService", "OpenAccount")
 
-	// Send request via transport
-	resp, err := c.transport.Request(ctx, subject, cmd)
+	// Send request via transport - returns (proto.Message, error)
+	respMsg, err := c.transport.Request(ctx, subject, cmd)
 	if err != nil {
 		return nil, err
 	}
 
-	// Check if request succeeded
-	if !resp.Success {
-		return nil, resp.AsError()
-	}
-
-	// Unpack response data
-	result := &OpenAccountResponse{}
-	if err := resp.UnpackData(result); err != nil {
-		return nil, err
+	// Type-assert to expected response type
+	result, ok := respMsg.(*OpenAccountResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response type: %T", respMsg)
 	}
 
 	return result, nil
 }
 
-// Deposit sends a Deposit command and returns the response
+// Deposit sends a Deposit command and returns the response.
+// Returns (result, nil) on success or (nil, error) on failure.
 func (c *CqrsAccountCommandServiceClient) Deposit(ctx context.Context, cmd *DepositCommand) (*DepositResponse, error) {
 	// Build subject using SubjectBuilder
 	subject := c.subjectBuilder.BuildSubject(ctx, "account.v1", "AccountCommandService", "Deposit")
 
-	// Send request via transport
-	resp, err := c.transport.Request(ctx, subject, cmd)
+	// Send request via transport - returns (proto.Message, error)
+	respMsg, err := c.transport.Request(ctx, subject, cmd)
 	if err != nil {
 		return nil, err
 	}
 
-	// Check if request succeeded
-	if !resp.Success {
-		return nil, resp.AsError()
-	}
-
-	// Unpack response data
-	result := &DepositResponse{}
-	if err := resp.UnpackData(result); err != nil {
-		return nil, err
+	// Type-assert to expected response type
+	result, ok := respMsg.(*DepositResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response type: %T", respMsg)
 	}
 
 	return result, nil
 }
 
-// Withdraw sends a Withdraw command and returns the response
+// Withdraw sends a Withdraw command and returns the response.
+// Returns (result, nil) on success or (nil, error) on failure.
 func (c *CqrsAccountCommandServiceClient) Withdraw(ctx context.Context, cmd *WithdrawCommand) (*WithdrawResponse, error) {
 	// Build subject using SubjectBuilder
 	subject := c.subjectBuilder.BuildSubject(ctx, "account.v1", "AccountCommandService", "Withdraw")
 
-	// Send request via transport
-	resp, err := c.transport.Request(ctx, subject, cmd)
+	// Send request via transport - returns (proto.Message, error)
+	respMsg, err := c.transport.Request(ctx, subject, cmd)
 	if err != nil {
 		return nil, err
 	}
 
-	// Check if request succeeded
-	if !resp.Success {
-		return nil, resp.AsError()
-	}
-
-	// Unpack response data
-	result := &WithdrawResponse{}
-	if err := resp.UnpackData(result); err != nil {
-		return nil, err
+	// Type-assert to expected response type
+	result, ok := respMsg.(*WithdrawResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response type: %T", respMsg)
 	}
 
 	return result, nil
 }
 
-// CloseAccount sends a CloseAccount command and returns the response
+// CloseAccount sends a CloseAccount command and returns the response.
+// Returns (result, nil) on success or (nil, error) on failure.
 func (c *CqrsAccountCommandServiceClient) CloseAccount(ctx context.Context, cmd *CloseAccountCommand) (*CloseAccountResponse, error) {
 	// Build subject using SubjectBuilder
 	subject := c.subjectBuilder.BuildSubject(ctx, "account.v1", "AccountCommandService", "CloseAccount")
 
-	// Send request via transport
-	resp, err := c.transport.Request(ctx, subject, cmd)
+	// Send request via transport - returns (proto.Message, error)
+	respMsg, err := c.transport.Request(ctx, subject, cmd)
 	if err != nil {
 		return nil, err
 	}
 
-	// Check if request succeeded
-	if !resp.Success {
-		return nil, resp.AsError()
-	}
-
-	// Unpack response data
-	result := &CloseAccountResponse{}
-	if err := resp.UnpackData(result); err != nil {
-		return nil, err
+	// Type-assert to expected response type
+	result, ok := respMsg.(*CloseAccountResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response type: %T", respMsg)
 	}
 
 	return result, nil
@@ -166,101 +151,85 @@ func NewCqrsAccountQueryServiceClient(transport cqrs.Transport, opts ...cqrs.Cli
 	return c
 }
 
-// GetAccount executes a GetAccount query and returns the result
+// GetAccount executes a GetAccount query and returns the result.
+// Returns (result, nil) on success or (nil, error) on failure.
 func (c *CqrsAccountQueryServiceClient) GetAccount(ctx context.Context, query *GetAccountRequest) (*AccountView, error) {
 	// Build subject using SubjectBuilder
 	subject := c.subjectBuilder.BuildSubject(ctx, "account.v1", "AccountQueryService", "GetAccount")
 
-	// Send request via transport
-	resp, err := c.transport.Request(ctx, subject, query)
+	// Send request via transport - returns (proto.Message, error)
+	respMsg, err := c.transport.Request(ctx, subject, query)
 	if err != nil {
 		return nil, err
 	}
 
-	// Check if request succeeded
-	if !resp.Success {
-		return nil, resp.AsError()
-	}
-
-	// Unpack response data
-	result := &AccountView{}
-	if err := resp.UnpackData(result); err != nil {
-		return nil, err
+	// Type-assert to expected response type
+	result, ok := respMsg.(*AccountView)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response type: %T", respMsg)
 	}
 
 	return result, nil
 }
 
-// ListAccounts executes a ListAccounts query and returns the result
+// ListAccounts executes a ListAccounts query and returns the result.
+// Returns (result, nil) on success or (nil, error) on failure.
 func (c *CqrsAccountQueryServiceClient) ListAccounts(ctx context.Context, query *ListAccountsRequest) (*ListAccountsResponse, error) {
 	// Build subject using SubjectBuilder
 	subject := c.subjectBuilder.BuildSubject(ctx, "account.v1", "AccountQueryService", "ListAccounts")
 
-	// Send request via transport
-	resp, err := c.transport.Request(ctx, subject, query)
+	// Send request via transport - returns (proto.Message, error)
+	respMsg, err := c.transport.Request(ctx, subject, query)
 	if err != nil {
 		return nil, err
 	}
 
-	// Check if request succeeded
-	if !resp.Success {
-		return nil, resp.AsError()
-	}
-
-	// Unpack response data
-	result := &ListAccountsResponse{}
-	if err := resp.UnpackData(result); err != nil {
-		return nil, err
+	// Type-assert to expected response type
+	result, ok := respMsg.(*ListAccountsResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response type: %T", respMsg)
 	}
 
 	return result, nil
 }
 
-// GetAccountBalance executes a GetAccountBalance query and returns the result
+// GetAccountBalance executes a GetAccountBalance query and returns the result.
+// Returns (result, nil) on success or (nil, error) on failure.
 func (c *CqrsAccountQueryServiceClient) GetAccountBalance(ctx context.Context, query *GetAccountBalanceRequest) (*BalanceView, error) {
 	// Build subject using SubjectBuilder
 	subject := c.subjectBuilder.BuildSubject(ctx, "account.v1", "AccountQueryService", "GetAccountBalance")
 
-	// Send request via transport
-	resp, err := c.transport.Request(ctx, subject, query)
+	// Send request via transport - returns (proto.Message, error)
+	respMsg, err := c.transport.Request(ctx, subject, query)
 	if err != nil {
 		return nil, err
 	}
 
-	// Check if request succeeded
-	if !resp.Success {
-		return nil, resp.AsError()
-	}
-
-	// Unpack response data
-	result := &BalanceView{}
-	if err := resp.UnpackData(result); err != nil {
-		return nil, err
+	// Type-assert to expected response type
+	result, ok := respMsg.(*BalanceView)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response type: %T", respMsg)
 	}
 
 	return result, nil
 }
 
-// GetAccountHistory executes a GetAccountHistory query and returns the result
+// GetAccountHistory executes a GetAccountHistory query and returns the result.
+// Returns (result, nil) on success or (nil, error) on failure.
 func (c *CqrsAccountQueryServiceClient) GetAccountHistory(ctx context.Context, query *GetAccountHistoryRequest) (*AccountHistoryResponse, error) {
 	// Build subject using SubjectBuilder
 	subject := c.subjectBuilder.BuildSubject(ctx, "account.v1", "AccountQueryService", "GetAccountHistory")
 
-	// Send request via transport
-	resp, err := c.transport.Request(ctx, subject, query)
+	// Send request via transport - returns (proto.Message, error)
+	respMsg, err := c.transport.Request(ctx, subject, query)
 	if err != nil {
 		return nil, err
 	}
 
-	// Check if request succeeded
-	if !resp.Success {
-		return nil, resp.AsError()
-	}
-
-	// Unpack response data
-	result := &AccountHistoryResponse{}
-	if err := resp.UnpackData(result); err != nil {
-		return nil, err
+	// Type-assert to expected response type
+	result, ok := respMsg.(*AccountHistoryResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response type: %T", respMsg)
 	}
 
 	return result, nil

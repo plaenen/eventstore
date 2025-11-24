@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/plaenen/eventstore/pkg/eventsourcing"
+	"github.com/plaenen/eventstore/pkg/cqrs"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -12,11 +12,11 @@ import (
 )
 
 // HandlerMiddleware wraps a HandlerFunc with observability (tracing and metrics)
-func HandlerMiddleware(tel *Telemetry, subject string) func(eventsourcing.HandlerFunc) eventsourcing.HandlerFunc {
-	tracer := tel.Tracer("eventsourcing.handler")
+func HandlerMiddleware(tel *Telemetry, subject string) func(cqrs.HandlerFunc) cqrs.HandlerFunc {
+	tracer := tel.Tracer("cqrs.handler")
 
-	return func(next eventsourcing.HandlerFunc) eventsourcing.HandlerFunc {
-		return func(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
+	return func(next cqrs.HandlerFunc) cqrs.HandlerFunc {
+		return func(ctx context.Context, request proto.Message) (proto.Message, error) {
 			// Extract message type for better observability
 			messageType := string(request.ProtoReflect().Descriptor().FullName())
 
@@ -50,14 +50,6 @@ func HandlerMiddleware(tel *Telemetry, subject string) func(eventsourcing.Handle
 				span.RecordError(err)
 				span.SetStatus(codes.Error, err.Error())
 				span.SetAttributes(attribute.Bool("success", false))
-			} else if response != nil && response.Error != nil {
-				// Application error (not transport error)
-				span.SetAttributes(
-					attribute.Bool("success", false),
-					attribute.String("app.error.code", response.Error.Code),
-					attribute.String("app.error.message", response.Error.Message),
-				)
-				span.SetStatus(codes.Error, response.Error.Message)
 			} else {
 				span.SetStatus(codes.Ok, "")
 				span.SetAttributes(attribute.Bool("success", true))
@@ -252,8 +244,8 @@ func NewTransportMiddleware(tel *Telemetry) *TransportMiddleware {
 }
 
 // WrapRequest wraps a transport Request operation with tracing and metrics
-func (m *TransportMiddleware) WrapRequest(ctx context.Context, subject string, request proto.Message, operation func(context.Context) (*eventsourcing.Response, error)) (*eventsourcing.Response, error) {
-	tracer := m.tel.Tracer("eventsourcing.transport")
+func (m *TransportMiddleware) WrapRequest(ctx context.Context, subject string, request proto.Message, operation func(context.Context) (proto.Message, error)) (proto.Message, error) {
+	tracer := m.tel.Tracer("cqrs.transport")
 	messageType := string(request.ProtoReflect().Descriptor().FullName())
 
 	ctx, span := tracer.Start(ctx, subject,
@@ -275,12 +267,6 @@ func (m *TransportMiddleware) WrapRequest(ctx context.Context, subject string, r
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-	} else if response != nil && response.Error != nil {
-		span.SetAttributes(
-			attribute.String("app.error.code", response.Error.Code),
-			attribute.String("app.error.message", response.Error.Message),
-		)
-		span.SetStatus(codes.Error, response.Error.Message)
 	} else {
 		span.SetStatus(codes.Ok, "")
 	}

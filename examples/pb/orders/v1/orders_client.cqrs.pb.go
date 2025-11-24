@@ -6,6 +6,7 @@ package ordersv1
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/plaenen/eventstore/pkg/cqrs"
 )
@@ -38,76 +39,64 @@ func NewCqrsOrderCommandServiceClient(transport cqrs.Transport, opts ...cqrs.Cli
 	return c
 }
 
-// CreateOrder sends a CreateOrder command and returns the response
+// CreateOrder sends a CreateOrder command and returns the response.
+// Returns (result, nil) on success or (nil, error) on failure.
 func (c *CqrsOrderCommandServiceClient) CreateOrder(ctx context.Context, cmd *CreateOrderRequest) (*CreateOrderResponse, error) {
 	// Build subject using SubjectBuilder
 	subject := c.subjectBuilder.BuildSubject(ctx, "orders.v1", "OrderCommandService", "CreateOrder")
 
-	// Send request via transport
-	resp, err := c.transport.Request(ctx, subject, cmd)
+	// Send request via transport - returns (proto.Message, error)
+	respMsg, err := c.transport.Request(ctx, subject, cmd)
 	if err != nil {
 		return nil, err
 	}
 
-	// Check if request succeeded
-	if !resp.Success {
-		return nil, resp.AsError()
-	}
-
-	// Unpack response data
-	result := &CreateOrderResponse{}
-	if err := resp.UnpackData(result); err != nil {
-		return nil, err
+	// Type-assert to expected response type
+	result, ok := respMsg.(*CreateOrderResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response type: %T", respMsg)
 	}
 
 	return result, nil
 }
 
-// CancelOrder sends a CancelOrder command and returns the response
+// CancelOrder sends a CancelOrder command and returns the response.
+// Returns (result, nil) on success or (nil, error) on failure.
 func (c *CqrsOrderCommandServiceClient) CancelOrder(ctx context.Context, cmd *CancelOrderRequest) (*CancelOrderResponse, error) {
 	// Build subject using SubjectBuilder
 	subject := c.subjectBuilder.BuildSubject(ctx, "orders.v1", "OrderCommandService", "CancelOrder")
 
-	// Send request via transport
-	resp, err := c.transport.Request(ctx, subject, cmd)
+	// Send request via transport - returns (proto.Message, error)
+	respMsg, err := c.transport.Request(ctx, subject, cmd)
 	if err != nil {
 		return nil, err
 	}
 
-	// Check if request succeeded
-	if !resp.Success {
-		return nil, resp.AsError()
-	}
-
-	// Unpack response data
-	result := &CancelOrderResponse{}
-	if err := resp.UnpackData(result); err != nil {
-		return nil, err
+	// Type-assert to expected response type
+	result, ok := respMsg.(*CancelOrderResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response type: %T", respMsg)
 	}
 
 	return result, nil
 }
 
-// UpdateOrderStatus sends a UpdateOrderStatus command and returns the response
+// UpdateOrderStatus sends a UpdateOrderStatus command and returns the response.
+// Returns (result, nil) on success or (nil, error) on failure.
 func (c *CqrsOrderCommandServiceClient) UpdateOrderStatus(ctx context.Context, cmd *UpdateOrderStatusRequest) (*UpdateOrderStatusResponse, error) {
 	// Build subject using SubjectBuilder
 	subject := c.subjectBuilder.BuildSubject(ctx, "orders.v1", "OrderCommandService", "UpdateOrderStatus")
 
-	// Send request via transport
-	resp, err := c.transport.Request(ctx, subject, cmd)
+	// Send request via transport - returns (proto.Message, error)
+	respMsg, err := c.transport.Request(ctx, subject, cmd)
 	if err != nil {
 		return nil, err
 	}
 
-	// Check if request succeeded
-	if !resp.Success {
-		return nil, resp.AsError()
-	}
-
-	// Unpack response data
-	result := &UpdateOrderStatusResponse{}
-	if err := resp.UnpackData(result); err != nil {
-		return nil, err
+	// Type-assert to expected response type
+	result, ok := respMsg.(*UpdateOrderStatusResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response type: %T", respMsg)
 	}
 
 	return result, nil
@@ -141,76 +130,64 @@ func NewCqrsOrderQueryServiceClient(transport cqrs.Transport, opts ...cqrs.Clien
 	return c
 }
 
-// GetOrder executes a GetOrder query and returns the result
+// GetOrder executes a GetOrder query and returns the result.
+// Returns (result, nil) on success or (nil, error) on failure.
 func (c *CqrsOrderQueryServiceClient) GetOrder(ctx context.Context, query *GetOrderRequest) (*Order, error) {
 	// Build subject using SubjectBuilder
 	subject := c.subjectBuilder.BuildSubject(ctx, "orders.v1", "OrderQueryService", "GetOrder")
 
-	// Send request via transport
-	resp, err := c.transport.Request(ctx, subject, query)
+	// Send request via transport - returns (proto.Message, error)
+	respMsg, err := c.transport.Request(ctx, subject, query)
 	if err != nil {
 		return nil, err
 	}
 
-	// Check if request succeeded
-	if !resp.Success {
-		return nil, resp.AsError()
-	}
-
-	// Unpack response data
-	result := &Order{}
-	if err := resp.UnpackData(result); err != nil {
-		return nil, err
+	// Type-assert to expected response type
+	result, ok := respMsg.(*Order)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response type: %T", respMsg)
 	}
 
 	return result, nil
 }
 
-// ListOrders executes a ListOrders query and returns the result
+// ListOrders executes a ListOrders query and returns the result.
+// Returns (result, nil) on success or (nil, error) on failure.
 func (c *CqrsOrderQueryServiceClient) ListOrders(ctx context.Context, query *ListOrdersRequest) (*ListOrdersResponse, error) {
 	// Build subject using SubjectBuilder
 	subject := c.subjectBuilder.BuildSubject(ctx, "orders.v1", "OrderQueryService", "ListOrders")
 
-	// Send request via transport
-	resp, err := c.transport.Request(ctx, subject, query)
+	// Send request via transport - returns (proto.Message, error)
+	respMsg, err := c.transport.Request(ctx, subject, query)
 	if err != nil {
 		return nil, err
 	}
 
-	// Check if request succeeded
-	if !resp.Success {
-		return nil, resp.AsError()
-	}
-
-	// Unpack response data
-	result := &ListOrdersResponse{}
-	if err := resp.UnpackData(result); err != nil {
-		return nil, err
+	// Type-assert to expected response type
+	result, ok := respMsg.(*ListOrdersResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response type: %T", respMsg)
 	}
 
 	return result, nil
 }
 
-// GetOrdersByStatus executes a GetOrdersByStatus query and returns the result
+// GetOrdersByStatus executes a GetOrdersByStatus query and returns the result.
+// Returns (result, nil) on success or (nil, error) on failure.
 func (c *CqrsOrderQueryServiceClient) GetOrdersByStatus(ctx context.Context, query *GetOrdersByStatusRequest) (*ListOrdersResponse, error) {
 	// Build subject using SubjectBuilder
 	subject := c.subjectBuilder.BuildSubject(ctx, "orders.v1", "OrderQueryService", "GetOrdersByStatus")
 
-	// Send request via transport
-	resp, err := c.transport.Request(ctx, subject, query)
+	// Send request via transport - returns (proto.Message, error)
+	respMsg, err := c.transport.Request(ctx, subject, query)
 	if err != nil {
 		return nil, err
 	}
 
-	// Check if request succeeded
-	if !resp.Success {
-		return nil, resp.AsError()
-	}
-
-	// Unpack response data
-	result := &ListOrdersResponse{}
-	if err := resp.UnpackData(result); err != nil {
-		return nil, err
+	// Type-assert to expected response type
+	result, ok := respMsg.(*ListOrdersResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response type: %T", respMsg)
 	}
 
 	return result, nil

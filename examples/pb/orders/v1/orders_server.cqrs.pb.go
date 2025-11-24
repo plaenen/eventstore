@@ -9,7 +9,6 @@ import (
 	"fmt"
 
 	"github.com/plaenen/eventstore/pkg/cqrs"
-	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -49,40 +48,34 @@ func (s *CqrsOrderCommandServiceServer) Start(ctx context.Context) error {
 	return s.server.Start(ctx)
 }
 
-func (s *CqrsOrderCommandServiceServer) handleCreateOrder(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
+// handleCreateOrder is the internal handler wrapper for CreateOrder
+func (s *CqrsOrderCommandServiceServer) handleCreateOrder(ctx context.Context, request proto.Message) (proto.Message, error) {
 	req := request.(*CreateOrderRequest)
 	result, err := s.handler.CreateOrder(ctx, req)
 	if err != nil {
-		return &eventsourcing.Response{
-			Success: false,
-			Error:   eventsourcing.ErrorToAppError(err),
-		}, nil
+		return nil, err
 	}
-	return eventsourcing.NewSuccessResponse(result)
+	return result, nil
 }
 
-func (s *CqrsOrderCommandServiceServer) handleCancelOrder(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
+// handleCancelOrder is the internal handler wrapper for CancelOrder
+func (s *CqrsOrderCommandServiceServer) handleCancelOrder(ctx context.Context, request proto.Message) (proto.Message, error) {
 	req := request.(*CancelOrderRequest)
 	result, err := s.handler.CancelOrder(ctx, req)
 	if err != nil {
-		return &eventsourcing.Response{
-			Success: false,
-			Error:   eventsourcing.ErrorToAppError(err),
-		}, nil
+		return nil, err
 	}
-	return eventsourcing.NewSuccessResponse(result)
+	return result, nil
 }
 
-func (s *CqrsOrderCommandServiceServer) handleUpdateOrderStatus(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
+// handleUpdateOrderStatus is the internal handler wrapper for UpdateOrderStatus
+func (s *CqrsOrderCommandServiceServer) handleUpdateOrderStatus(ctx context.Context, request proto.Message) (proto.Message, error) {
 	req := request.(*UpdateOrderStatusRequest)
 	result, err := s.handler.UpdateOrderStatus(ctx, req)
 	if err != nil {
-		return &eventsourcing.Response{
-			Success: false,
-			Error:   eventsourcing.ErrorToAppError(err),
-		}, nil
+		return nil, err
 	}
-	return eventsourcing.NewSuccessResponse(result)
+	return result, nil
 }
 
 // Close stops the server
@@ -126,40 +119,34 @@ func (s *CqrsOrderQueryServiceServer) Start(ctx context.Context) error {
 	return s.server.Start(ctx)
 }
 
-func (s *CqrsOrderQueryServiceServer) handleGetOrder(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
+// handleGetOrder is the internal handler wrapper for GetOrder
+func (s *CqrsOrderQueryServiceServer) handleGetOrder(ctx context.Context, request proto.Message) (proto.Message, error) {
 	req := request.(*GetOrderRequest)
 	result, err := s.handler.GetOrder(ctx, req)
 	if err != nil {
-		return &eventsourcing.Response{
-			Success: false,
-			Error:   eventsourcing.ErrorToAppError(err),
-		}, nil
+		return nil, err
 	}
-	return eventsourcing.NewSuccessResponse(result)
+	return result, nil
 }
 
-func (s *CqrsOrderQueryServiceServer) handleListOrders(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
+// handleListOrders is the internal handler wrapper for ListOrders
+func (s *CqrsOrderQueryServiceServer) handleListOrders(ctx context.Context, request proto.Message) (proto.Message, error) {
 	req := request.(*ListOrdersRequest)
 	result, err := s.handler.ListOrders(ctx, req)
 	if err != nil {
-		return &eventsourcing.Response{
-			Success: false,
-			Error:   eventsourcing.ErrorToAppError(err),
-		}, nil
+		return nil, err
 	}
-	return eventsourcing.NewSuccessResponse(result)
+	return result, nil
 }
 
-func (s *CqrsOrderQueryServiceServer) handleGetOrdersByStatus(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
+// handleGetOrdersByStatus is the internal handler wrapper for GetOrdersByStatus
+func (s *CqrsOrderQueryServiceServer) handleGetOrdersByStatus(ctx context.Context, request proto.Message) (proto.Message, error) {
 	req := request.(*GetOrdersByStatusRequest)
 	result, err := s.handler.GetOrdersByStatus(ctx, req)
 	if err != nil {
-		return &eventsourcing.Response{
-			Success: false,
-			Error:   eventsourcing.ErrorToAppError(err),
-		}, nil
+		return nil, err
 	}
-	return eventsourcing.NewSuccessResponse(result)
+	return result, nil
 }
 
 // Close stops the server

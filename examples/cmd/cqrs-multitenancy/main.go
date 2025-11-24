@@ -12,7 +12,6 @@ import (
 	ordersv1 "github.com/plaenen/eventstore/examples/pb/orders/v1"
 	"github.com/plaenen/eventstore/pkg/cqrs"
 	cqrsnats "github.com/plaenen/eventstore/pkg/cqrs/nats"
-	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -224,7 +223,7 @@ func (t *TenantSubjectBuilder) BuildSubject(ctx context.Context, packageName, se
 type TenantExtractorInterceptor struct{}
 
 func (i *TenantExtractorInterceptor) InterceptHandler(next cqrs.HandlerFunc) cqrs.HandlerFunc {
-	return func(ctx context.Context, request proto.Message) (*eventsourcing.Response, error) {
+	return func(ctx context.Context, request proto.Message) (proto.Message, error) {
 		// In a real implementation, you'd extract the tenant from the NATS message subject
 		// For this example, we'll extract it from the subject if available in context
 		// The NATS server would need to pass this via context

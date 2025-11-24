@@ -8,14 +8,12 @@ import (
 	exampledomain "github.com/plaenen/eventstore/examples/bankaccount/domain"
 	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
 	"github.com/plaenen/eventstore/pkg/domain"
-	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"github.com/shopspring/decimal"
 )
 
-// AccountHandler implements the AccountHandler interface (combines commands and queries)
+// AccountHandler implements CQRS handler interfaces for commands and queries
 type AccountHandler struct {
-	accountv1.UnimplementedAccountHandler // Embed for default implementations
-	repo                                  *accountv1.AccountRepository
+	repo *accountv1.AccountRepository
 }
 
 // NewAccountHandler creates a new unified account handler
@@ -25,20 +23,16 @@ func NewAccountHandler(repo *accountv1.AccountRepository) *AccountHandler {
 	}
 }
 
+// Ensure AccountHandler implements the CQRS interfaces
+var _ accountv1.CqrsAccountCommandServiceHandler = (*AccountHandler)(nil)
+var _ accountv1.CqrsAccountQueryServiceHandler = (*AccountHandler)(nil)
+
 // ============================================================================
 // Commands
 // ============================================================================
 
 // OpenAccount handles the OpenAccount command
-func (h *AccountHandler) OpenAccount(ctx context.Context, cmd *accountv1.OpenAccountCommand, opts ...eventsourcing.MethodOption) (*accountv1.OpenAccountResponse, error) {
-	// Extract options for authentication, tracing, etc.
-	options := eventsourcing.ApplyMethodOptions(opts...)
-
-	// TODO: Use options.Principal for authorization checks
-	// if options.Principal != nil && !options.Principal.HasPermission("account.create") {
-	//     return nil, fmt.Errorf("permission denied")
-	// }
-
+func (h *AccountHandler) OpenAccount(ctx context.Context, cmd *accountv1.OpenAccountCommand) (*accountv1.OpenAccountResponse, error) {
 	// Validate command
 	if cmd.AccountId == "" {
 		return nil, fmt.Errorf("account ID is required")
@@ -65,34 +59,15 @@ func (h *AccountHandler) OpenAccount(ctx context.Context, cmd *accountv1.OpenAcc
 		Timestamp:      time.Now().Unix(),
 	}
 
-	// Add metadata with audit trail from options
-	metadata := domain.EventMetadata{}
-	if options.Principal != nil {
-		metadata.PrincipalID = options.Principal.ID
-		if metadata.Custom == nil {
-			metadata.Custom = make(map[string]string)
-		}
-		metadata.Custom["username"] = options.Principal.Username
-	}
-	if options.TenantID != "" {
-		metadata.TenantID = options.TenantID
-	}
-	if options.CorrelationID != "" {
-		metadata.CorrelationID = options.CorrelationID
-	}
-
 	// Use generated type-safe Apply method with unique constraint
-	applyOpts := []accountv1.ApplyEventOption{
+	// Note: Metadata can be extracted from context if needed using standard Go context patterns
+	if err := agg.ApplyAccountOpenedEvent(event,
 		accountv1.WithUniqueConstraints(domain.UniqueConstraint{
 			IndexName: "account_id",
 			Value:     cmd.AccountId,
 			Operation: domain.ConstraintClaim,
 		}),
-	}
-	// Always add metadata (even if empty)
-	applyOpts = append(applyOpts, accountv1.WithMetadata(metadata))
-
-	if err := agg.ApplyAccountOpenedEvent(event, applyOpts...); err != nil {
+	); err != nil {
 		return nil, fmt.Errorf("failed to emit event: %w", err)
 	}
 
@@ -108,7 +83,7 @@ func (h *AccountHandler) OpenAccount(ctx context.Context, cmd *accountv1.OpenAcc
 }
 
 // Deposit handles the Deposit command
-func (h *AccountHandler) Deposit(ctx context.Context, cmd *accountv1.DepositCommand, opts ...eventsourcing.MethodOption) (*accountv1.DepositResponse, error) {
+func (h *AccountHandler) Deposit(ctx context.Context, cmd *accountv1.DepositCommand) (*accountv1.DepositResponse, error) {
 	// Validate command
 	if cmd.AccountId == "" {
 		return nil, fmt.Errorf("account ID is required")
@@ -167,7 +142,7 @@ func (h *AccountHandler) Deposit(ctx context.Context, cmd *accountv1.DepositComm
 }
 
 // Withdraw handles the Withdraw command
-func (h *AccountHandler) Withdraw(ctx context.Context, cmd *accountv1.WithdrawCommand, opts ...eventsourcing.MethodOption) (*accountv1.WithdrawResponse, error) {
+func (h *AccountHandler) Withdraw(ctx context.Context, cmd *accountv1.WithdrawCommand) (*accountv1.WithdrawResponse, error) {
 	// Validate command
 	if cmd.AccountId == "" {
 		return nil, fmt.Errorf("account ID is required")
@@ -231,7 +206,7 @@ func (h *AccountHandler) Withdraw(ctx context.Context, cmd *accountv1.WithdrawCo
 }
 
 // CloseAccount handles the CloseAccount command
-func (h *AccountHandler) CloseAccount(ctx context.Context, cmd *accountv1.CloseAccountCommand, opts ...eventsourcing.MethodOption) (*accountv1.CloseAccountResponse, error) {
+func (h *AccountHandler) CloseAccount(ctx context.Context, cmd *accountv1.CloseAccountCommand) (*accountv1.CloseAccountResponse, error) {
 	// Validate command
 	if cmd.AccountId == "" {
 		return nil, fmt.Errorf("account ID is required")
@@ -282,7 +257,7 @@ func (h *AccountHandler) CloseAccount(ctx context.Context, cmd *accountv1.CloseA
 // ============================================================================
 
 // GetAccount handles the GetAccount query
-func (h *AccountHandler) GetAccount(ctx context.Context, query *accountv1.GetAccountRequest, opts ...eventsourcing.MethodOption) (*accountv1.AccountView, error) {
+func (h *AccountHandler) GetAccount(ctx context.Context, query *accountv1.GetAccountRequest) (*accountv1.AccountView, error) {
 	if query.AccountId == "" {
 		return nil, fmt.Errorf("account ID is required")
 	}
@@ -304,7 +279,7 @@ func (h *AccountHandler) GetAccount(ctx context.Context, query *accountv1.GetAcc
 }
 
 // ListAccounts handles the ListAccounts query
-func (h *AccountHandler) ListAccounts(ctx context.Context, query *accountv1.ListAccountsRequest, opts ...eventsourcing.MethodOption) (*accountv1.ListAccountsResponse, error) {
+func (h *AccountHandler) ListAccounts(ctx context.Context, query *accountv1.ListAccountsRequest) (*accountv1.ListAccountsResponse, error) {
 	// For now, return empty list (would need proper read model implementation)
 	return &accountv1.ListAccountsResponse{
 		Accounts:      []*accountv1.AccountView{},
@@ -314,7 +289,7 @@ func (h *AccountHandler) ListAccounts(ctx context.Context, query *accountv1.List
 }
 
 // GetAccountBalance handles the GetAccountBalance query
-func (h *AccountHandler) GetAccountBalance(ctx context.Context, query *accountv1.GetAccountBalanceRequest, opts ...eventsourcing.MethodOption) (*accountv1.BalanceView, error) {
+func (h *AccountHandler) GetAccountBalance(ctx context.Context, query *accountv1.GetAccountBalanceRequest) (*accountv1.BalanceView, error) {
 	if query.AccountId == "" {
 		return nil, fmt.Errorf("account ID is required")
 	}
@@ -333,7 +308,7 @@ func (h *AccountHandler) GetAccountBalance(ctx context.Context, query *accountv1
 }
 
 // GetAccountHistory handles the GetAccountHistory query
-func (h *AccountHandler) GetAccountHistory(ctx context.Context, query *accountv1.GetAccountHistoryRequest, opts ...eventsourcing.MethodOption) (*accountv1.AccountHistoryResponse, error) {
+func (h *AccountHandler) GetAccountHistory(ctx context.Context, query *accountv1.GetAccountHistoryRequest) (*accountv1.AccountHistoryResponse, error) {
 	// For now, return empty history (would need proper event store query)
 	return &accountv1.AccountHistoryResponse{
 		Transactions: []*accountv1.TransactionView{},

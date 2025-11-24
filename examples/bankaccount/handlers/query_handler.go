@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
-	"github.com/plaenen/eventstore/pkg/eventsourcing"
+	"github.com/plaenen/eventstore/pkg/protocol"
 )
 
 // AccountQueryHandler implements the AccountQueryServiceHandler interface
@@ -21,22 +21,15 @@ func NewAccountQueryHandler(repo *accountv1.AccountRepository) *AccountQueryHand
 }
 
 // GetAccount handles the GetAccount query
-func (h *AccountQueryHandler) GetAccount(ctx context.Context, query *accountv1.GetAccountRequest) (*accountv1.AccountView, *eventsourcing.AppError) {
+func (h *AccountQueryHandler) GetAccount(ctx context.Context, query *accountv1.GetAccountRequest) (*accountv1.AccountView, error) {
 	if query.AccountId == "" {
-		return nil, &eventsourcing.AppError{
-			Code:     "INVALID_ACCOUNT_ID",
-			Message:  "Account ID is required",
-			Solution: "Provide a valid account ID",
-		}
+		return nil, protocol.ErrInvalidArgument("Account ID is required")
 	}
 
 	// Load aggregate
 	agg, err := h.repo.Load(query.AccountId)
 	if err != nil {
-		return nil, &eventsourcing.AppError{
-			Code:    "ACCOUNT_NOT_FOUND",
-			Message: fmt.Sprintf("Account not found: %v", err),
-		}
+		return nil, protocol.ErrNotFound(fmt.Sprintf("Account not found: %v", err))
 	}
 
 	// Convert to view
@@ -50,7 +43,7 @@ func (h *AccountQueryHandler) GetAccount(ctx context.Context, query *accountv1.G
 }
 
 // ListAccounts handles the ListAccounts query
-func (h *AccountQueryHandler) ListAccounts(ctx context.Context, query *accountv1.ListAccountsRequest) (*accountv1.ListAccountsResponse, *eventsourcing.AppError) {
+func (h *AccountQueryHandler) ListAccounts(ctx context.Context, query *accountv1.ListAccountsRequest) (*accountv1.ListAccountsResponse, error) {
 	// For now, return empty list (would need proper read model implementation)
 	return &accountv1.ListAccountsResponse{
 		Accounts:      []*accountv1.AccountView{},
@@ -60,22 +53,15 @@ func (h *AccountQueryHandler) ListAccounts(ctx context.Context, query *accountv1
 }
 
 // GetAccountBalance handles the GetAccountBalance query
-func (h *AccountQueryHandler) GetAccountBalance(ctx context.Context, query *accountv1.GetAccountBalanceRequest) (*accountv1.BalanceView, *eventsourcing.AppError) {
+func (h *AccountQueryHandler) GetAccountBalance(ctx context.Context, query *accountv1.GetAccountBalanceRequest) (*accountv1.BalanceView, error) {
 	if query.AccountId == "" {
-		return nil, &eventsourcing.AppError{
-			Code:     "INVALID_ACCOUNT_ID",
-			Message:  "Account ID is required",
-			Solution: "Provide a valid account ID",
-		}
+		return nil, protocol.ErrInvalidArgument("Account ID is required")
 	}
 
 	// Load aggregate
 	agg, err := h.repo.Load(query.AccountId)
 	if err != nil {
-		return nil, &eventsourcing.AppError{
-			Code:    "ACCOUNT_NOT_FOUND",
-			Message: fmt.Sprintf("Account not found: %v", err),
-		}
+		return nil, protocol.ErrNotFound(fmt.Sprintf("Account not found: %v", err))
 	}
 
 	return &accountv1.BalanceView{
@@ -86,7 +72,7 @@ func (h *AccountQueryHandler) GetAccountBalance(ctx context.Context, query *acco
 }
 
 // GetAccountHistory handles the GetAccountHistory query
-func (h *AccountQueryHandler) GetAccountHistory(ctx context.Context, query *accountv1.GetAccountHistoryRequest) (*accountv1.AccountHistoryResponse, *eventsourcing.AppError) {
+func (h *AccountQueryHandler) GetAccountHistory(ctx context.Context, query *accountv1.GetAccountHistoryRequest) (*accountv1.AccountHistoryResponse, error) {
 	// For now, return empty history (would need proper event store query)
 	return &accountv1.AccountHistoryResponse{
 		Transactions: []*accountv1.TransactionView{},

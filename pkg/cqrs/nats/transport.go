@@ -2,17 +2,20 @@ package nats
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/nats-io/nats.go"
 	"github.com/plaenen/eventstore/pkg/cqrs"
-	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"github.com/plaenen/eventstore/pkg/observability"
+	"github.com/plaenen/eventstore/pkg/protocol"
 	"github.com/plaenen/eventstore/pkg/security/credentials"
 	"github.com/plaenen/eventstore/pkg/security/tls"
 	"go.opentelemetry.io/otel/propagation"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
 // Transport implements cqrs.Transport using NATS request/reply
@@ -166,22 +169,18 @@ func NewTransport(config *TransportConfig) (*Transport, error) {
 	}, nil
 }
 
-// Request sends a request and waits for a response with automatic retry on version conflicts
-func (t *Transport) Request(ctx context.Context, subject string, request proto.Message) (*eventsourcing.Response, error) {
-	// Use transport middleware if telemetry is available
-	if t.telemetry != nil {
-		middleware := observability.NewTransportMiddleware(t.telemetry)
-		return middleware.WrapRequest(ctx, subject, request, func(ctx context.Context) (*eventsourcing.Response, error) {
-			return t.doRequestWithRetry(ctx, subject, request)
-		})
-	}
+// Request sends a request and waits for a response with automatic retry on version conflicts.
+// Returns (message, nil) on success or (nil, error) on failure.
+// This is Go-idiomatic error handling.
+func (t *Transport) Request(ctx context.Context, subject string, request proto.Message) (proto.Message, error) {
+	// TODO: Update observability middleware to work with new signature
+	// For now, bypass middleware
 	return t.doRequestWithRetry(ctx, subject, request)
 }
 
 // doRequestWithRetry wraps doRequest with retry logic for handling version conflicts
-func (t *Transport) doRequestWithRetry(ctx context.Context, subject string, request proto.Message) (*eventsourcing.Response, error) {
+func (t *Transport) doRequestWithRetry(ctx context.Context, subject string, request proto.Message) (proto.Message, error) {
 	maxRetries := t.config.MaxRetries
-	var lastResponse *eventsourcing.Response
 	var lastErr error
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
@@ -198,17 +197,23 @@ func (t *Transport) doRequestWithRetry(ctx context.Context, subject string, requ
 			return nil, err
 		}
 
-		lastResponse = resp
-
-		// If no application error, success!
-		if resp.Error == nil {
+		// Success! Return the response
+		if resp != nil {
 			return resp, nil
+		}
+
+		// Response is nil, meaning we got an error - check if retryable
+		if err == nil {
+			// This shouldn't happen, but if it does, return an error
+			return nil, protocol.ErrInternal("received nil response with no error")
 		}
 
 		// Check if this is a retryable error (concurrency conflict)
-		if !t.isRetryableError(resp.Error) {
-			return resp, nil
+		if !t.isRetryableError(err) {
+			return nil, err
 		}
+
+		lastErr = err
 
 		// Don't retry on last attempt
 		if attempt == maxRetries {
@@ -223,21 +228,25 @@ func (t *Transport) doRequestWithRetry(ctx context.Context, subject string, requ
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
-
-		lastErr = fmt.Errorf("retrying after %v (attempt %d/%d)", backoff, attempt+1, maxRetries)
 	}
 
 	// All retries exhausted
 	if lastErr != nil {
-		// Could log here if needed: fmt.Printf("All retries exhausted: %v\n", lastErr)
+		return nil, protocol.FormatError(lastErr, fmt.Sprintf("all retries exhausted after %d attempts", maxRetries+1))
 	}
-	return lastResponse, nil
+	return nil, protocol.ErrInternal("request failed with no error details")
 }
 
 // isRetryableError determines if an application error should trigger a retry
-func (t *Transport) isRetryableError(appErr *eventsourcing.AppError) bool {
+func (t *Transport) isRetryableError(err error) bool {
+	// Check if it's an AppError
+	appErr, ok := err.(*protocol.AppError)
+	if !ok {
+		return false
+	}
+
 	// Retry on concurrency conflicts (optimistic locking failures)
-	if appErr.Code == "SAVE_FAILED" {
+	if appErr.Code == "SAVE_FAILED" || appErr.Code == protocol.ErrCodeConflict {
 		// Check if the message indicates a version mismatch
 		if len(appErr.Message) > 0 &&
 			(containsString(appErr.Message, "concurrency conflict") ||
@@ -267,8 +276,9 @@ func findSubstring(s, substr string) bool {
 	return false
 }
 
-// doRequest performs the actual NATS request
-func (t *Transport) doRequest(ctx context.Context, subject string, request proto.Message) (*eventsourcing.Response, error) {
+// doRequest performs the actual NATS request.
+// Returns (message, nil) on success or (nil, error) on failure.
+func (t *Transport) doRequest(ctx context.Context, subject string, request proto.Message) (proto.Message, error) {
 	// Serialize request
 	requestData, err := proto.Marshal(request)
 	if err != nil {
@@ -293,8 +303,8 @@ func (t *Transport) doRequest(ctx context.Context, subject string, request proto
 		propagator.Inject(ctx, &natsHeaderCarrier{header: msg.Header})
 	}
 
-	// Set message type for server-side routing
-	msg.Header.Set("Message-Type", string(request.ProtoReflect().Descriptor().FullName()))
+	// Set request message type for server-side routing
+	msg.Header.Set("Request-Type", string(request.ProtoReflect().Descriptor().FullName()))
 
 	// Determine timeout from context or use default
 	timeout := t.config.Timeout
@@ -306,18 +316,42 @@ func (t *Transport) doRequest(ctx context.Context, subject string, request proto
 	respMsg, err := t.nc.RequestMsg(msg, timeout)
 	if err != nil {
 		if err == nats.ErrTimeout {
-			return eventsourcing.NewSimpleErrorResponse("TIMEOUT", "Request timed out"), nil
+			return nil, protocol.ErrTimeout("Request timed out")
 		}
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 
+	// Check if response is an error (indicated by Error header)
+	if errHeader := respMsg.Header.Get("Error"); errHeader == "true" {
+		// Deserialize error from response body (JSON encoded AppError)
+		var appErr protocol.AppError
+		if err := json.Unmarshal(respMsg.Data, &appErr); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal error response: %w", err)
+		}
+		return nil, &appErr
+	}
+
+	// Get expected response type from header
+	responseTypeName := respMsg.Header.Get("Response-Type")
+	if responseTypeName == "" {
+		return nil, protocol.ErrInternal("response missing Response-Type header")
+	}
+
+	// Look up the message type in the proto registry
+	msgType, err := protoregistry.GlobalTypes.FindMessageByName(protoreflect.FullName(responseTypeName))
+	if err != nil {
+		return nil, fmt.Errorf("unknown response type %s: %w", responseTypeName, err)
+	}
+
+	// Create a new instance of the response message type
+	responseMsg := msgType.New().Interface()
+
 	// Deserialize response
-	response := &eventsourcing.Response{}
-	if err := proto.Unmarshal(respMsg.Data, response); err != nil {
+	if err := proto.Unmarshal(respMsg.Data, responseMsg); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
-	return response, nil
+	return responseMsg, nil
 }
 
 // natsHeaderCarrier adapts NATS headers to propagation.TextMapCarrier

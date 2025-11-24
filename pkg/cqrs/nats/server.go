@@ -2,6 +2,7 @@ package nats
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -9,8 +10,8 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/micro"
 	"github.com/plaenen/eventstore/pkg/cqrs"
-	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"github.com/plaenen/eventstore/pkg/observability"
+	"github.com/plaenen/eventstore/pkg/protocol"
 	"go.opentelemetry.io/otel/propagation"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -126,11 +127,11 @@ func (s *Server) RegisterHandler(subject string, handler cqrs.HandlerFunc) error
 		return fmt.Errorf("handler already registered for subject: %s", subject)
 	}
 
-	// Wrap handler with observability middleware if telemetry is configured
-	if s.telemetry != nil {
-		middleware := observability.HandlerMiddleware(s.telemetry, subject)
-		handler = middleware(handler)
-	}
+	// TODO: Re-enable observability middleware after updating it to work with new signature
+	// if s.telemetry != nil {
+	// 	middleware := observability.HandlerMiddleware(s.telemetry, subject)
+	// 	handler = middleware(handler)
+	// }
 
 	s.handlers[subject] = handler
 	return nil
@@ -200,47 +201,53 @@ func (s *Server) handleMicroRequest(req micro.Request, handler cqrs.HandlerFunc)
 		ctx = context.WithValue(ctx, "trace_id", traceID)
 	}
 
-	// Deserialize request based on Message-Type header
-	messageType := req.Headers().Get("Message-Type")
+	// Deserialize request based on Request-Type header
+	messageType := req.Headers().Get("Request-Type")
 	if messageType == "" {
-		s.respondMicroWithError(req, "INVALID_REQUEST", "Missing Message-Type header")
+		s.respondMicroWithError(req, protocol.ErrInvalidArgument("Missing Request-Type header"))
 		return
 	}
 
 	// Create request message instance
 	request, err := s.createMessageInstance(messageType)
 	if err != nil {
-		s.respondMicroWithError(req, "INVALID_MESSAGE_TYPE", fmt.Sprintf("Unknown message type: %s", messageType))
+		s.respondMicroWithError(req, protocol.ErrInvalidArgument(fmt.Sprintf("Unknown message type: %s", messageType)))
 		return
 	}
 
 	// Unmarshal request
 	if err := proto.Unmarshal(req.Data(), request); err != nil {
-		s.respondMicroWithError(req, "INVALID_REQUEST", fmt.Sprintf("Failed to unmarshal request: %v", err))
+		s.respondMicroWithError(req, protocol.ErrInvalidArgument(fmt.Sprintf("Failed to unmarshal request: %v", err)))
 		return
 	}
 
-	// Call handler
+	// Call handler - returns (proto.Message, error)
 	response, err := handler(ctx, request)
 	if err != nil {
-		s.respondMicroWithError(req, "HANDLER_ERROR", err.Error())
+		// Handler returned an error - send error response
+		s.respondMicroWithError(req, err)
 		return
 	}
 
-	// If handler returned nil, create error response
+	// Handler succeeded - send success response
 	if response == nil {
-		response = eventsourcing.NewSimpleErrorResponse("HANDLER_ERROR", "Handler returned nil response")
+		s.respondMicroWithError(req, protocol.ErrInternal("Handler returned nil response"))
+		return
 	}
 
 	// Marshal response
 	responseData, err := proto.Marshal(response)
 	if err != nil {
-		s.respondMicroWithError(req, "INTERNAL_ERROR", fmt.Sprintf("Failed to marshal response: %v", err))
+		s.respondMicroWithError(req, protocol.ErrInternal(fmt.Sprintf("Failed to marshal response: %v", err)))
 		return
 	}
 
-	// Send response
-	if err := req.Respond(responseData); err != nil {
+	// Create response headers
+	headers := micro.Headers{}
+	headers["Response-Type"] = []string{string(response.ProtoReflect().Descriptor().FullName())}
+
+	// Send response with headers
+	if err := req.Respond(responseData, micro.WithHeaders(headers)); err != nil {
 		fmt.Printf("Failed to send response: %v\n", err)
 	}
 }
@@ -257,16 +264,26 @@ func (s *Server) createMessageInstance(messageType string) (proto.Message, error
 	return msgType.New().Interface(), nil
 }
 
-// respondMicroWithError sends an error response for micro requests
-func (s *Server) respondMicroWithError(req micro.Request, code, message string) {
-	response := eventsourcing.NewSimpleErrorResponse(code, message)
-	responseData, err := proto.Marshal(response)
-	if err != nil {
-		fmt.Printf("Failed to marshal error response: %v\n", err)
-		return
+// respondMicroWithError sends an error response for micro requests.
+// The error is serialized as JSON and sent with Error=true header.
+func (s *Server) respondMicroWithError(req micro.Request, err error) {
+	// Convert to AppError if needed
+	appErr := protocol.ErrorToAppError(err)
+
+	// Serialize error as JSON
+	errorData, marshalErr := json.Marshal(appErr)
+	if marshalErr != nil {
+		fmt.Printf("Failed to marshal error response: %v\n", marshalErr)
+		// Send a basic error response
+		errorData = []byte(fmt.Sprintf(`{"code":"INTERNAL_ERROR","message":"Failed to serialize error: %v"}`, marshalErr))
 	}
 
-	if err := req.Respond(responseData); err != nil {
+	// Create error response headers
+	headers := micro.Headers{}
+	headers["Error"] = []string{"true"}
+
+	// Send error response
+	if err := req.Respond(errorData, micro.WithHeaders(headers)); err != nil {
 		fmt.Printf("Failed to send error response: %v\n", err)
 	}
 }
