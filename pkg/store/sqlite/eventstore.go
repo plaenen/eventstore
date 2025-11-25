@@ -344,7 +344,7 @@ func (s *EventStore) AppendEvents(aggregateID string, expectedVersion int64, eve
 
 	tx, err := s.db.Begin()
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return translateError(err, "EventStore", "transaction")
 	}
 	defer tx.Rollback()
 
@@ -353,7 +353,7 @@ func (s *EventStore) AppendEvents(aggregateID string, expectedVersion int64, eve
 	queries := sqlcgen.New(tx)
 	currentVersionRaw, err := queries.GetAggregateVersion(ctx, aggregateID)
 	if err != nil {
-		return fmt.Errorf("failed to check current version: %w", err)
+		return translateError(err, "Aggregate", aggregateID)
 	}
 	currentVersion := currentVersionRaw.(int64)
 
@@ -365,7 +365,7 @@ func (s *EventStore) AppendEvents(aggregateID string, expectedVersion int64, eve
 	var maxPos int64
 	err = tx.QueryRow("SELECT COALESCE(MAX(position), 0) FROM events").Scan(&maxPos)
 	if err != nil {
-		return fmt.Errorf("failed to get max position: %w", err)
+		return translateError(err, "EventStore", "position")
 	}
 
 	// Assign positions to events before insertion
@@ -399,18 +399,21 @@ func (s *EventStore) AppendEvents(aggregateID string, expectedVersion int64, eve
 			Position:      sql.NullInt64{Int64: event.Position, Valid: true}, // Position assigned atomically above
 		})
 		if err != nil {
-			return fmt.Errorf("failed to insert event: %w", err)
+			return translateError(err, "Event", event.ID)
 		}
 
 		// Insert into outbox for publishing (transactional outbox pattern)
 		if err := s.insertOutbox(tx, event); err != nil {
-			return fmt.Errorf("failed to insert into outbox: %w", err)
+			return translateError(err, "Outbox", event.ID)
 		}
 	}
 
 	// Position assignment is now atomic - no need for updatePositions()
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return translateError(err, "EventStore", aggregateID)
+	}
+	return nil
 }
 
 // AppendEventsIdempotent appends events with command-level idempotency.

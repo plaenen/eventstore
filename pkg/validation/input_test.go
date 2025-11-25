@@ -414,42 +414,6 @@ func TestValidateVersion(t *testing.T) {
 	}
 }
 
-func TestDefaultInputValidators(t *testing.T) {
-	validators := DefaultInputValidators()
-
-	// Test that all validators are set
-	if validators.ValidateAggregateID == nil {
-		t.Error("ValidateAggregateID is nil")
-	}
-	if validators.ValidateCommandID == nil {
-		t.Error("ValidateCommandID is nil")
-	}
-	if validators.ValidateEmail == nil {
-		t.Error("ValidateEmail is nil")
-	}
-	if validators.ValidateTenantID == nil {
-		t.Error("ValidateTenantID is nil")
-	}
-	if validators.ValidatePrincipalID == nil {
-		t.Error("ValidatePrincipalID is nil")
-	}
-	if validators.ValidateEventType == nil {
-		t.Error("ValidateEventType is nil")
-	}
-	if validators.ValidateAggregateType == nil {
-		t.Error("ValidateAggregateType is nil")
-	}
-
-	// Test that validators work
-	if err := validators.ValidateAggregateID("550e8400-e29b-41d4-a716-446655440000"); err != nil {
-		t.Errorf("ValidateAggregateID failed: %v", err)
-	}
-
-	if err := validators.ValidateEmail("user@example.com"); err != nil {
-		t.Errorf("ValidateEmail failed: %v", err)
-	}
-}
-
 // Benchmark tests
 func BenchmarkValidateUUIDv4(b *testing.B) {
 	uuid := "550e8400-e29b-41d4-a716-446655440000"

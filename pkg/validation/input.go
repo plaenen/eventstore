@@ -1,10 +1,48 @@
 package validation
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
 	"unicode/utf8"
+)
+
+// Sentinel errors for validation failures.
+// Use errors.Is() to check for specific validation error types.
+var (
+	// ErrInvalidUUID indicates the provided string is not a valid UUIDv4.
+	ErrInvalidUUID = errors.New("invalid UUID format")
+
+	// ErrInvalidEmail indicates the provided string is not a valid email address.
+	ErrInvalidEmail = errors.New("invalid email format")
+
+	// ErrInvalidTenantID indicates the tenant ID doesn't meet requirements.
+	ErrInvalidTenantID = errors.New("invalid tenant_id")
+
+	// ErrInvalidPrincipalID indicates the principal ID doesn't meet requirements.
+	ErrInvalidPrincipalID = errors.New("invalid principal_id")
+
+	// ErrInvalidEventType indicates the event type doesn't meet requirements.
+	ErrInvalidEventType = errors.New("invalid event_type")
+
+	// ErrInvalidAggregateType indicates the aggregate type doesn't meet requirements.
+	ErrInvalidAggregateType = errors.New("invalid aggregate_type")
+
+	// ErrEmptyValue indicates a required field is empty.
+	ErrEmptyValue = errors.New("value cannot be empty")
+
+	// ErrTooShort indicates a string is shorter than the minimum length.
+	ErrTooShort = errors.New("value too short")
+
+	// ErrTooLong indicates a string exceeds the maximum length.
+	ErrTooLong = errors.New("value too long")
+
+	// ErrTooLarge indicates a size exceeds the maximum allowed.
+	ErrTooLarge = errors.New("size too large")
+
+	// ErrInvalidVersion indicates an invalid aggregate version.
+	ErrInvalidVersion = errors.New("invalid version")
 )
 
 // Input validation for preventing injection attacks and enforcing data integrity.
@@ -32,6 +70,12 @@ var (
 
 	// Principal ID regex - alphanumeric, hyphens, underscores, @, . (for emails or IDs)
 	principalIDRegex = regexp.MustCompile(`^[a-zA-Z0-9_\-@.]{1,256}$`)
+
+	// Event type regex - alphanumeric, dots, and underscores
+	eventTypeRegex = regexp.MustCompile(`^[a-zA-Z0-9._]+$`)
+
+	// Aggregate type regex - alphanumeric and underscores
+	aggregateTypeRegex = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
 )
 
 // Default limits
@@ -60,17 +104,17 @@ const (
 // Example:
 //
 //	err := ValidateUUIDv4("550e8400-e29b-41d4-a716-446655440000")  // nil
-//	err := ValidateUUIDv4("not-a-uuid")                           // error
+//	err := ValidateUUIDv4("not-a-uuid")                           // error with ErrInvalidUUID
 func ValidateUUIDv4(uuid string) error {
 	if uuid == "" {
-		return fmt.Errorf("UUID cannot be empty")
+		return fmt.Errorf("%w: UUID cannot be empty", ErrEmptyValue)
 	}
 
 	// Normalize to lowercase for validation
 	uuid = strings.ToLower(uuid)
 
 	if !uuidV4Regex.MatchString(uuid) {
-		return fmt.Errorf("invalid UUIDv4 format: must be xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx")
+		return fmt.Errorf("%w: must be xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx", ErrInvalidUUID)
 	}
 
 	return nil
@@ -79,11 +123,11 @@ func ValidateUUIDv4(uuid string) error {
 // ValidateAggregateID validates an aggregate ID (UUIDv4 format).
 func ValidateAggregateID(aggregateID string) error {
 	if aggregateID == "" {
-		return fmt.Errorf("aggregate_id cannot be empty")
+		return fmt.Errorf("aggregate_id: %w", ErrEmptyValue)
 	}
 
 	if err := ValidateUUIDv4(aggregateID); err != nil {
-		return fmt.Errorf("invalid aggregate_id: %w", err)
+		return fmt.Errorf("aggregate_id: %w", err)
 	}
 
 	return nil
@@ -92,11 +136,11 @@ func ValidateAggregateID(aggregateID string) error {
 // ValidateCommandID validates a command ID (UUIDv4 format).
 func ValidateCommandID(commandID string) error {
 	if commandID == "" {
-		return fmt.Errorf("command_id cannot be empty")
+		return fmt.Errorf("command_id: %w", ErrEmptyValue)
 	}
 
 	if err := ValidateUUIDv4(commandID); err != nil {
-		return fmt.Errorf("invalid command_id: %w", err)
+		return fmt.Errorf("command_id: %w", err)
 	}
 
 	return nil
@@ -113,21 +157,21 @@ func ValidateCommandID(commandID string) error {
 // Example:
 //
 //	err := ValidateEmail("user@example.com")  // nil
-//	err := ValidateEmail("invalid.email")     // error
+//	err := ValidateEmail("invalid.email")     // error with ErrInvalidEmail
 func ValidateEmail(email string) error {
 	if email == "" {
-		return fmt.Errorf("email cannot be empty")
+		return fmt.Errorf("email: %w", ErrEmptyValue)
 	}
 
 	if len(email) > 256 {
-		return fmt.Errorf("email too long: %d characters (max 256)", len(email))
+		return fmt.Errorf("email: %w: %d characters (max 256)", ErrTooLong, len(email))
 	}
 
 	// Normalize to lowercase for validation
 	email = strings.ToLower(email)
 
 	if !emailRegex.MatchString(email) {
-		return fmt.Errorf("invalid email format")
+		return fmt.Errorf("%w: must be valid email (user@domain.tld)", ErrInvalidEmail)
 	}
 
 	return nil
@@ -143,14 +187,14 @@ func ValidateEmail(email string) error {
 // Example:
 //
 //	err := ValidateTenantID("tenant-123")    // nil
-//	err := ValidateTenantID("tenant 123")    // error - contains space
+//	err := ValidateTenantID("tenant 123")    // error with ErrInvalidTenantID
 func ValidateTenantID(tenantID string) error {
 	if tenantID == "" {
-		return fmt.Errorf("tenant_id cannot be empty")
+		return fmt.Errorf("tenant_id: %w", ErrEmptyValue)
 	}
 
 	if !tenantIDRegex.MatchString(tenantID) {
-		return fmt.Errorf("invalid tenant_id: must be alphanumeric with hyphens/underscores, 1-128 characters")
+		return fmt.Errorf("%w: must be alphanumeric with hyphens/underscores, 1-128 characters", ErrInvalidTenantID)
 	}
 
 	return nil
@@ -170,11 +214,11 @@ func ValidateTenantID(tenantID string) error {
 //	err := ValidatePrincipalID("user@domain")         // nil
 func ValidatePrincipalID(principalID string) error {
 	if principalID == "" {
-		return fmt.Errorf("principal_id cannot be empty")
+		return fmt.Errorf("principal_id: %w", ErrEmptyValue)
 	}
 
 	if !principalIDRegex.MatchString(principalID) {
-		return fmt.Errorf("invalid principal_id: must be alphanumeric with hyphens/underscores/@/., 1-256 characters")
+		return fmt.Errorf("%w: must be alphanumeric with hyphens/underscores/@/., 1-256 characters", ErrInvalidPrincipalID)
 	}
 
 	return nil
@@ -190,8 +234,8 @@ func ValidatePrincipalID(principalID string) error {
 // Example:
 //
 //	err := ValidateStringLength("hello", "name", 1, 100)   // nil
-//	err := ValidateStringLength("", "name", 1, 100)        // error - too short
-//	err := ValidateStringLength("x"*101, "name", 1, 100)   // error - too long
+//	err := ValidateStringLength("", "name", 1, 100)        // error with ErrTooShort
+//	err := ValidateStringLength("x"*101, "name", 1, 100)   // error with ErrTooLong
 func ValidateStringLength(value, fieldName string, minLength, maxLength int) error {
 	if maxLength <= 0 {
 		return fmt.Errorf("maxLength must be > 0")
@@ -200,11 +244,11 @@ func ValidateStringLength(value, fieldName string, minLength, maxLength int) err
 	length := utf8.RuneCountInString(value)
 
 	if minLength > 0 && length < minLength {
-		return fmt.Errorf("%s too short: %d characters (min %d)", fieldName, length, minLength)
+		return fmt.Errorf("%s: %w: %d characters (min %d)", fieldName, ErrTooShort, length, minLength)
 	}
 
 	if length > maxLength {
-		return fmt.Errorf("%s too long: %d characters (max %d)", fieldName, length, maxLength)
+		return fmt.Errorf("%s: %w: %d characters (max %d)", fieldName, ErrTooLong, length, maxLength)
 	}
 
 	return nil
@@ -219,11 +263,11 @@ func ValidateStringLength(value, fieldName string, minLength, maxLength int) err
 // Example:
 //
 //	err := ValidateStringNotEmpty("hello", "name")   // nil
-//	err := ValidateStringNotEmpty("", "name")        // error
-//	err := ValidateStringNotEmpty("   ", "name")     // error
+//	err := ValidateStringNotEmpty("", "name")        // error with ErrEmptyValue
+//	err := ValidateStringNotEmpty("   ", "name")     // error with ErrEmptyValue
 func ValidateStringNotEmpty(value, fieldName string) error {
 	if strings.TrimSpace(value) == "" {
-		return fmt.Errorf("%s cannot be empty", fieldName)
+		return fmt.Errorf("%s: %w", fieldName, ErrEmptyValue)
 	}
 	return nil
 }
@@ -237,14 +281,14 @@ func ValidateStringNotEmpty(value, fieldName string) error {
 // Example:
 //
 //	err := ValidateArraySize(10, "items", 100)   // nil
-//	err := ValidateArraySize(101, "items", 100)  // error
+//	err := ValidateArraySize(101, "items", 100)  // error with ErrTooLarge
 func ValidateArraySize(size int, fieldName string, maxSize int) error {
 	if maxSize <= 0 {
 		return fmt.Errorf("maxSize must be > 0")
 	}
 
 	if size > maxSize {
-		return fmt.Errorf("%s too large: %d items (max %d)", fieldName, size, maxSize)
+		return fmt.Errorf("%s: %w: %d items (max %d)", fieldName, ErrTooLarge, size, maxSize)
 	}
 
 	return nil
@@ -259,14 +303,14 @@ func ValidateArraySize(size int, fieldName string, maxSize int) error {
 // Example:
 //
 //	err := ValidateBinarySize(1024, "file", 10*1024*1024)  // nil - 1KB < 10MB
-//	err := ValidateBinarySize(11*1024*1024, "file", 10*1024*1024)  // error - 11MB > 10MB
+//	err := ValidateBinarySize(11*1024*1024, "file", 10*1024*1024)  // error with ErrTooLarge
 func ValidateBinarySize(size int64, fieldName string, maxSize int64) error {
 	if maxSize <= 0 {
 		return fmt.Errorf("maxSize must be > 0")
 	}
 
 	if size > maxSize {
-		return fmt.Errorf("%s too large: %d bytes (max %d)", fieldName, size, maxSize)
+		return fmt.Errorf("%s: %w: %d bytes (max %d)", fieldName, ErrTooLarge, size, maxSize)
 	}
 
 	return nil
@@ -284,20 +328,18 @@ func ValidateBinarySize(size int64, fieldName string, maxSize int64) error {
 //
 //	err := ValidateEventType("account.Created")      // nil
 //	err := ValidateEventType("user.ProfileUpdated")  // nil
-//	err := ValidateEventType("")                     // error
+//	err := ValidateEventType("")                     // error with ErrEmptyValue
 func ValidateEventType(eventType string) error {
 	if eventType == "" {
-		return fmt.Errorf("event_type cannot be empty")
+		return fmt.Errorf("event_type: %w", ErrEmptyValue)
 	}
 
 	if len(eventType) > 256 {
-		return fmt.Errorf("event_type too long: %d characters (max 256)", len(eventType))
+		return fmt.Errorf("event_type: %w: %d characters (max 256)", ErrTooLong, len(eventType))
 	}
 
-	// Allow alphanumeric, dots, and underscores
-	eventTypeRegex := regexp.MustCompile(`^[a-zA-Z0-9._]+$`)
 	if !eventTypeRegex.MatchString(eventType) {
-		return fmt.Errorf("invalid event_type: must contain only alphanumeric characters, dots, and underscores")
+		return fmt.Errorf("%w: must contain only alphanumeric characters, dots, and underscores", ErrInvalidEventType)
 	}
 
 	return nil
@@ -315,20 +357,18 @@ func ValidateEventType(eventType string) error {
 //
 //	err := ValidateAggregateType("BankAccount")    // nil
 //	err := ValidateAggregateType("user_profile")   // nil
-//	err := ValidateAggregateType("")               // error
+//	err := ValidateAggregateType("")               // error with ErrEmptyValue
 func ValidateAggregateType(aggregateType string) error {
 	if aggregateType == "" {
-		return fmt.Errorf("aggregate_type cannot be empty")
+		return fmt.Errorf("aggregate_type: %w", ErrEmptyValue)
 	}
 
 	if len(aggregateType) > 128 {
-		return fmt.Errorf("aggregate_type too long: %d characters (max 128)", len(aggregateType))
+		return fmt.Errorf("aggregate_type: %w: %d characters (max 128)", ErrTooLong, len(aggregateType))
 	}
 
-	// Allow alphanumeric and underscores
-	aggregateTypeRegex := regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
 	if !aggregateTypeRegex.MatchString(aggregateType) {
-		return fmt.Errorf("invalid aggregate_type: must contain only alphanumeric characters and underscores")
+		return fmt.Errorf("%w: must contain only alphanumeric characters and underscores", ErrInvalidAggregateType)
 	}
 
 	return nil
@@ -344,49 +384,11 @@ func ValidateAggregateType(aggregateType string) error {
 //
 //	err := ValidateVersion(0)   // nil
 //	err := ValidateVersion(1)   // nil
-//	err := ValidateVersion(-1)  // error
+//	err := ValidateVersion(-1)  // error with ErrInvalidVersion
 func ValidateVersion(version int64) error {
 	if version < 0 {
-		return fmt.Errorf("version must be >= 0, got %d", version)
+		return fmt.Errorf("%w: must be >= 0, got %d", ErrInvalidVersion, version)
 	}
 	return nil
 }
 
-// InputValidators provides a collection of validators for command inputs.
-//
-// Use this to validate command envelope metadata and payload data.
-type InputValidators struct {
-	// ValidateAggregateID validates aggregate IDs (UUIDv4)
-	ValidateAggregateID func(string) error
-
-	// ValidateCommandID validates command IDs (UUIDv4)
-	ValidateCommandID func(string) error
-
-	// ValidateEmail validates email addresses
-	ValidateEmail func(string) error
-
-	// ValidateTenantID validates tenant IDs
-	ValidateTenantID func(string) error
-
-	// ValidatePrincipalID validates principal IDs
-	ValidatePrincipalID func(string) error
-
-	// ValidateEventType validates event type strings
-	ValidateEventType func(string) error
-
-	// ValidateAggregateType validates aggregate type strings
-	ValidateAggregateType func(string) error
-}
-
-// DefaultInputValidators returns validators with default implementations.
-func DefaultInputValidators() *InputValidators {
-	return &InputValidators{
-		ValidateAggregateID:   ValidateAggregateID,
-		ValidateCommandID:     ValidateCommandID,
-		ValidateEmail:         ValidateEmail,
-		ValidateTenantID:      ValidateTenantID,
-		ValidatePrincipalID:   ValidatePrincipalID,
-		ValidateEventType:     ValidateEventType,
-		ValidateAggregateType: ValidateAggregateType,
-	}
-}

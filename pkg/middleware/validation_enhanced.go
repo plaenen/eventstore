@@ -54,19 +54,10 @@ type EnhancedValidationConfig struct {
 
 	// MaxStringLength is the maximum allowed string length
 	MaxStringLength int
-
-	// Validators allows custom validation functions
-	Validators *validation.InputValidators
 }
 
 // EnhancedValidationMiddlewareWithConfig creates validation middleware with custom configuration.
 func EnhancedValidationMiddlewareWithConfig(config EnhancedValidationConfig) eventsourcing.CommandMiddleware {
-	// Use default validators if not provided
-	validators := config.Validators
-	if validators == nil {
-		validators = validation.DefaultInputValidators()
-	}
-
 	return func(next eventsourcing.CommandHandler) eventsourcing.CommandHandler {
 		return eventsourcing.CommandHandlerFunc(func(ctx context.Context, cmd *eventsourcing.CommandEnvelope) ([]*eventsourcing.Event, error) {
 			// Validate command ID (required)
@@ -75,7 +66,7 @@ func EnhancedValidationMiddlewareWithConfig(config EnhancedValidationConfig) eve
 			}
 
 			if config.ValidateUUIDs {
-				if err := validators.ValidateCommandID(cmd.Metadata.CommandID); err != nil {
+				if err := validation.ValidateCommandID(cmd.Metadata.CommandID); err != nil {
 					return nil, fmt.Errorf("%w: %v", eventsourcing.ErrInvalidCommand, err)
 				}
 			}
@@ -86,7 +77,7 @@ func EnhancedValidationMiddlewareWithConfig(config EnhancedValidationConfig) eve
 					return nil, fmt.Errorf("%w: principal_id is required", eventsourcing.ErrInvalidCommand)
 				}
 
-				if err := validators.ValidatePrincipalID(cmd.Metadata.PrincipalID); err != nil {
+				if err := validation.ValidatePrincipalID(cmd.Metadata.PrincipalID); err != nil {
 					return nil, fmt.Errorf("%w: %v", eventsourcing.ErrInvalidCommand, err)
 				}
 			}
@@ -98,7 +89,7 @@ func EnhancedValidationMiddlewareWithConfig(config EnhancedValidationConfig) eve
 					return nil, fmt.Errorf("%w: tenant_id is required", eventsourcing.ErrInvalidCommand)
 				}
 
-				if err := validators.ValidateTenantID(tenantID); err != nil {
+				if err := validation.ValidateTenantID(tenantID); err != nil {
 					return nil, fmt.Errorf("%w: %v", eventsourcing.ErrInvalidCommand, err)
 				}
 			}
@@ -106,7 +97,7 @@ func EnhancedValidationMiddlewareWithConfig(config EnhancedValidationConfig) eve
 			// Validate aggregate ID (if present in metadata)
 			if aggregateID := cmd.Metadata.Custom["aggregate_id"]; aggregateID != "" {
 				if config.ValidateUUIDs {
-					if err := validators.ValidateAggregateID(aggregateID); err != nil {
+					if err := validation.ValidateAggregateID(aggregateID); err != nil {
 						return nil, fmt.Errorf("%w: %v", eventsourcing.ErrInvalidCommand, err)
 					}
 				}
