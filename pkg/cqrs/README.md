@@ -5,20 +5,20 @@ CQRS (Command Query Responsibility Segregation) transport implementations for co
 ## Architecture
 
 ```
-pkg/eventsourcing/          # CQRS interfaces (Server, Transport, CommandBus)
-        ↓ (implemented by)
-pkg/cqrs/
-  ├── nats/                 # NATS-based CQRS transport
-  ├── http/                 # Future: HTTP/REST transport
-  └── grpc/                 # Future: gRPC transport
+pkg/cqrs/                   # CQRS interfaces (Server, Transport, SubjectBuilder)
+  ├── transport.go          # Transport interface
+  ├── server.go             # Server interface
+  ├── client.go             # Client options and subject builders
+  └── nats/                 # NATS-based CQRS transport implementation
+
 ```
 
 ## Why This Structure?
 
 **Separation of Concerns:**
-- `pkg/eventsourcing` = Domain interfaces (what)
-- `pkg/cqrs/*` = Transport implementations (how)
-- `pkg/nats` = Pure NATS infrastructure (not domain-specific)
+- `pkg/cqrs` = CQRS transport interfaces and core types (what)
+- `pkg/cqrs/nats` = NATS transport implementation (how)
+- `pkg/eventsourcing` = Event Sourcing domain layer (NO TRANSPORT)
 
 **Benefits:**
 - ✅ CQRS implementations grouped by transport mechanism
@@ -60,7 +60,7 @@ import cqrsnats "github.com/plaenen/eventstore/pkg/cqrs/nats"
 
 // Create server
 server, err := cqrsnats.NewServer(&cqrsnats.ServerConfig{
-    ServerConfig: &eventsourcing.ServerConfig{
+    ServerConfig: &cqrs.ServerConfig{
         QueueGroup:     "my-service-handlers",
         MaxConcurrent:  10,
         HandlerTimeout: 5 * time.Second,
@@ -96,7 +96,7 @@ import cqrsnats "github.com/plaenen/eventstore/pkg/cqrs/nats"
 
 // Create transport
 transport, err := cqrsnats.NewTransport(&cqrsnats.TransportConfig{
-    TransportConfig: &eventsourcing.TransportConfig{
+    TransportConfig: &cqrs.TransportConfig{
         Timeout:              5 * time.Second,
         MaxReconnectAttempts: 3,
         ReconnectWait:        1 * time.Second,
@@ -181,7 +181,7 @@ if err != nil {
 
 ```go
 config := &cqrsnats.ServerConfig{
-    ServerConfig: &eventsourcing.ServerConfig{
+    ServerConfig: &cqrs.ServerConfig{
         QueueGroup:     "service-handlers",  // For load balancing
         MaxConcurrent:  10,                   // Max parallel requests
         HandlerTimeout: 5 * time.Second,     // Request timeout
@@ -198,7 +198,7 @@ config := &cqrsnats.ServerConfig{
 
 ```go
 config := &cqrsnats.TransportConfig{
-    TransportConfig: &eventsourcing.TransportConfig{
+    TransportConfig: &cqrs.TransportConfig{
         Timeout:              5 * time.Second,  // Request timeout
         MaxReconnectAttempts: 3,                // Retry attempts
         ReconnectWait:        1 * time.Second,  // Retry delay
@@ -279,12 +279,12 @@ server, err := grpc.NewServer(&grpc.ServerConfig{
 
 ```
 pkg/cqrs/nats
-    → pkg/eventsourcing        (Server, Transport interfaces)
+    → pkg/cqrs                 (Server, Transport interfaces)
     → pkg/observability        (OpenTelemetry)
     → github.com/nats-io/nats.go  (NATS client)
 ```
 
-No dependencies on `pkg/nats` infrastructure or `pkg/eventbus`.
+No dependencies on `pkg/eventsourcing` or `pkg/eventbus` - strict separation between CQRS and event sourcing.
 
 ## Testing
 
@@ -303,7 +303,7 @@ go test github.com/plaenen/eventstore/pkg/cqrs/...
 
 ## CQRS Interfaces
 
-All implementations satisfy interfaces from `pkg/eventsourcing`:
+All implementations satisfy interfaces from `pkg/cqrs`:
 
 ```go
 // Server handles incoming commands and queries
@@ -319,11 +319,9 @@ type Transport interface {
     Close() error
 }
 
-// CommandBus for distributed command processing
-type CommandBus interface {
-    RegisterHandler(commandType string, handler CommandHandler) error
-    Send(ctx context.Context, command proto.Message) (proto.Message, error)
-    Close() error
+// SubjectBuilder builds NATS subjects for routing
+type SubjectBuilder interface {
+    BuildSubject(ctx context.Context, packageName, serviceName, methodName string) string
 }
 ```
 
@@ -354,10 +352,10 @@ transport, err := cqrsnats.NewTransport(config)
 
 ## See Also
 
-- `pkg/eventsourcing` - Core interfaces
+- `pkg/cqrs` - CQRS transport interfaces (this package)
+- `pkg/eventsourcing` - Event sourcing domain layer (aggregates, events, repositories)
 - `pkg/eventbus` - Event publishing/subscription (different pattern)
 - `pkg/observability` - OpenTelemetry integration
-- `pkg/nats` - NATS infrastructure utilities
 
 ## License
 

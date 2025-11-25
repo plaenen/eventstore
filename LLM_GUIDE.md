@@ -843,7 +843,7 @@ myproject/
 │   └── account/
 │       ├── appliers.go               # Event appliers implementation
 │       ├── factory.go                # Aggregate factory
-│       └── validators.go             # Business validation
+│       └── validation.go             # Business validation (uses pkg/validation)
 │
 ├── handlers/                   # CQRS handlers (application layer)
 │   └── account/
@@ -1326,9 +1326,27 @@ When you encounter an error, ask:
 
 ### Package: `pkg/validation`
 
-The validation package provides Go-idiomatic validators with sentinel errors.
+The validation package provides both **simple validators** (returning `error`) and **rich validators** (returning `*ValidationResult`) for different architectural layers.
 
-### Validation Sentinel Errors
+### Two Types of Validators
+
+#### 1. Simple Validators (Infrastructure Layer)
+
+Simple validators return standard Go errors and are used for security-critical validations and infrastructure concerns where you need fast, binary validation (valid/invalid).
+
+**Function Naming**: `ValidateXxx` (e.g., `ValidateEmail`, `ValidateUUIDv4`)
+**Return Type**: `error`
+**Usage**: Infrastructure layer, security checks, command validation
+
+#### 2. Rich Validators (Domain/Service Layer)
+
+Rich validators return `*ValidationResult` objects with user-friendly messages, suggested actions, validation codes, and metadata. They are designed for service handlers where you need transport-agnostic feedback.
+
+**Function Naming**: `ValidateXxxField` (e.g., `ValidateEmailField`, `ValidatePasswordField`)
+**Return Type**: `*ValidationResult`
+**Usage**: Service handlers, domain validation, API input validation
+
+### Validation Sentinel Errors (Simple Validators)
 
 ```go
 import "github.com/plaenen/eventstore/pkg/validation"
@@ -1345,7 +1363,7 @@ var (
 )
 ```
 
-### ✅ CORRECT: Use Package Functions Directly
+### ✅ CORRECT: Using Simple Validators (Infrastructure Layer)
 
 ```go
 import "github.com/plaenen/eventstore/pkg/validation"
@@ -1372,6 +1390,36 @@ func (h *Handler) OpenAccount(ctx context.Context, cmd *OpenAccountCommand) erro
 }
 ```
 
+### ✅ CORRECT: Using Rich Validators (Service Layer)
+
+```go
+import "github.com/plaenen/eventstore/pkg/validation"
+
+func (h *AccountService) RegisterUser(ctx context.Context, req *RegisterRequest) (*RegisterResponse, error) {
+    // ✅ CORRECT: Use rich validators for user-facing validation
+    builder := validation.NewValidationBuilder()
+
+    // Add field validations
+    builder.Add(validation.ValidateEmailField("email", req.Email))
+    builder.Add(validation.ValidatePasswordField("password", req.Password))
+    builder.Add(validation.ValidateStringLengthField(req.Name, "name", 1, 100))
+
+    // Build results
+    results := builder.Build()
+    if results.HasErrors() {
+        // Service handler returns transport-agnostic results
+        // BFF layer converts this to transport-specific format (HTTP, SSE, etc.)
+        return nil, &validation.ValidationError{
+            Code:    "VALIDATION_FAILED",
+            Message: "Registration validation failed",
+            Details: results.ToMap(),
+        }
+    }
+
+    // Continue with business logic...
+}
+```
+
 ### ❌ WRONG: Don't Use InputValidators Struct (Removed)
 
 ```go
@@ -1380,7 +1428,7 @@ validators := validation.DefaultInputValidators()
 err := validators.ValidateAggregateID(id)  // ❌ Don't do this
 ```
 
-### Available Validators
+### Available Simple Validators
 
 ```go
 // Identity validation
@@ -1405,11 +1453,121 @@ validation.ValidateBinarySize(size int64, fieldName string, maxSize int64) error
 validation.ValidateVersion(version int64) error
 ```
 
+### Available Rich Validators
+
+```go
+// Email validation with user feedback
+validation.ValidateEmailField(fieldName string, value string) *ValidationResult
+
+// Password validation with strength checking
+validation.ValidatePasswordField(fieldName string, value string) *ValidationResult
+
+// Boolean validation
+validation.ValidateBoolField(value bool, fieldName string) *ValidationResult
+
+// String validations with user feedback
+validation.ValidateStringEmptyField(value string, fieldName string) *ValidationResult
+validation.ValidateStringLengthField(value string, fieldName string, minLength, maxLength int) *ValidationResult
+validation.ValidateStringPatternField(value string, fieldName string, pattern string, patternName string) *ValidationResult
+```
+
+### ValidationResult Type
+
+```go
+type ValidationResult struct {
+    IsValid         bool
+    FieldName       string
+    Value           string
+    Message         string          // User-friendly error message
+    SuggestedAction string          // Actionable suggestion for user
+    ValidationCode  ValidationCode  // Machine-readable code
+    Metadata        map[string]interface{}
+}
+
+type ValidationCode int
+
+const (
+    ValidationCodeSuccess ValidationCode = iota
+    ValidationCodeRequired    // Required field is missing
+    ValidationCodeInvalid     // Field value is invalid
+    ValidationCodeUnspecified // Warning or informational
+)
+```
+
+### ValidationBuilder Pattern
+
+For complex validations involving multiple fields:
+
+```go
+import "github.com/plaenen/eventstore/pkg/validation"
+
+func ValidateRegistration(req *RegisterRequest) (validation.FieldValidationResults, error) {
+    builder := validation.NewValidationBuilder()
+
+    // Add multiple validations
+    builder.Add(validation.ValidateEmailField("email", req.Email))
+    builder.Add(validation.ValidatePasswordField("password", req.Password))
+    builder.Add(validation.ValidateStringLengthField(req.Username, "username", 3, 20))
+    builder.Add(validation.ValidateBoolField(req.AcceptedTerms, "accepted_terms"))
+
+    // Build results
+    results := builder.Build()
+    return results, nil
+}
+
+// In handler
+func (h *Handler) Register(ctx context.Context, req *RegisterRequest) (*RegisterResponse, error) {
+    results, _ := ValidateRegistration(req)
+
+    if results.HasErrors() {
+        // Convert to transport-specific format
+        // e.g., HTTP JSON, SSE events, gRPC errors, etc.
+        return nil, fmt.Errorf("validation failed")
+    }
+
+    // Continue...
+}
+```
+
+### Architectural Separation
+
+The validation package supports layered architecture:
+
+```
+┌─────────────────────────────────────────┐
+│ Frontend (Browser, CLI, etc.)           │
+└─────────────────┬───────────────────────┘
+                  │
+┌─────────────────▼───────────────────────┐
+│ BFF Layer (datastarx, HTTP handlers)    │
+│ - Converts ValidationResult → SSE/HTTP  │
+│ - Uses pkg/datastarx.ToUserFeedback()   │
+└─────────────────┬───────────────────────┘
+                  │
+┌─────────────────▼───────────────────────┐
+│ Service Handlers (Domain Layer)         │
+│ - Uses rich validators (ValidateXxxField)│
+│ - Returns transport-agnostic results    │
+└─────────────────┬───────────────────────┘
+                  │
+┌─────────────────▼───────────────────────┐
+│ Infrastructure Layer                    │
+│ - Uses simple validators (ValidateXxx)  │
+│ - Security checks, command validation   │
+└─────────────────────────────────────────┘
+```
+
+**Key Points**:
+- Service handlers remain **transport-agnostic** (no HTTP, SSE, gRPC knowledge)
+- `ValidationResult` can be converted to any transport format
+- Infrastructure layer has fast, lightweight validation
+- BFF layer handles transport-specific conversions
+
 ### Validation Pattern in Handlers
 
 ```go
 func (h *Handler) CreateAccount(ctx context.Context, cmd *CreateAccountCommand) error {
-    // ✅ CORRECT: Validate all inputs
+    // ✅ CORRECT: Validate all inputs with simple validators
     if err := validation.ValidateAggregateID(cmd.AccountId); err != nil {
         return err  // Already includes ErrInvalidArgument in chain
     }
@@ -1431,6 +1589,17 @@ func (h *Handler) CreateAccount(ctx context.Context, cmd *CreateAccountCommand) 
     // Continue with business logic...
 }
 ```
+
+### User-Friendly Field Names
+
+Rich validators automatically convert snake_case field names to readable names:
+
+```go
+validation.ToUserFriendlyName("first_name")    // returns "First name"
+validation.ToUserFriendlyName("email_address") // returns "Email address"
+```
+
+This is used internally by all rich validators to generate user-friendly error messages.
 
 ### Default Validation Limits
 

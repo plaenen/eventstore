@@ -1,4 +1,4 @@
-package validators
+package validation
 
 import (
 	"fmt"
@@ -23,7 +23,7 @@ func ToUserFriendlyName(fieldName string) string {
 	return strings.Join(parts, " ")
 }
 
-func ValidateStringEmpty(value string, fieldName string) *ValidationResult {
+func ValidateStringEmptyField(value string, fieldName string) *ValidationResult {
 	if len(value) == 0 {
 		userFriendlyName := ToUserFriendlyName(fieldName)
 		defaultOptions := []ValidationOption{
@@ -42,7 +42,7 @@ func ValidateStringEmpty(value string, fieldName string) *ValidationResult {
 }
 
 // ValidateStringLength validates that a string meets minimum and maximum length requirements
-func ValidateStringLength(value string, fieldName string, minLength, maxLength int) *ValidationResult {
+func ValidateStringLengthField(value string, fieldName string, minLength, maxLength int) *ValidationResult {
 	userFriendlyName := ToUserFriendlyName(fieldName)
 
 	if len(value) < minLength {
@@ -73,7 +73,7 @@ func ValidateStringLength(value string, fieldName string, minLength, maxLength i
 }
 
 // ValidateStringPattern validates that a string matches a regular expression pattern
-func ValidateStringPattern(value string, fieldName string, pattern string, patternName string) *ValidationResult {
+func ValidateStringPatternField(value string, fieldName string, pattern string, patternName string) *ValidationResult {
 	userFriendlyName := ToUserFriendlyName(fieldName)
 
 	if len(value) == 0 {

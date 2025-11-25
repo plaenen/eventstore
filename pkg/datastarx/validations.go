@@ -3,10 +3,10 @@ package datastarx
 import (
 	"fmt"
 
-	"github.com/plaenen/eventstore/pkg/validators"
+	"github.com/plaenen/eventstore/pkg/validation"
 )
 
-func ToUserFeedback(v []validators.FieldValidations) *UserFeedback {
+func ToUserFeedback(v []validation.FieldValidations) *UserFeedback {
 	// Count total fields and determine overall message type
 	totalFields := len(v)
 	hasErrors := false
@@ -14,11 +14,11 @@ func ToUserFeedback(v []validators.FieldValidations) *UserFeedback {
 
 	// First pass: determine overall message type and count issues
 	for _, f := range v {
-		for _, validation := range f.Validations {
-			switch validation.ValidationCode {
-			case validators.ValidationCodeRequired, validators.ValidationCodeInvalid:
+		for _, val := range f.Validations {
+			switch val.ValidationCode {
+			case validation.ValidationCodeRequired, validation.ValidationCodeInvalid:
 				hasErrors = true
-			case validators.ValidationCodeUnspecified:
+			case validation.ValidationCodeUnspecified:
 				hasWarnings = true
 			}
 		}
@@ -51,12 +51,12 @@ func ToUserFeedback(v []validators.FieldValidations) *UserFeedback {
 
 	// Second pass: add all feedbacks
 	for _, f := range v {
-		for _, validation := range f.Validations {
+		for _, val := range f.Validations {
 			// Determine if this specific validation needs user action
-			needsUserAction := validation.ValidationCode == validators.ValidationCodeRequired ||
-				validation.ValidationCode == validators.ValidationCodeInvalid
+			needsUserAction := val.ValidationCode == validation.ValidationCodeRequired ||
+				val.ValidationCode == validation.ValidationCodeInvalid
 
-			userFeedback.SetFeedback(f.FieldName, validation.Value, validation.Message, needsUserAction, validation.SuggestedAction)
+			userFeedback.SetFeedback(f.FieldName, val.Value, val.Message, needsUserAction, val.SuggestedAction)
 		}
 	}
 

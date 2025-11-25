@@ -1,4 +1,4 @@
-package validators
+package validation
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 	"github.com/asaskevich/govalidator"
 )
 
-func ValidateEmail(fieldName string, value string) *ValidationResult {
+func ValidateEmailField(fieldName string, value string) *ValidationResult {
 	userFriendlyName := ToUserFriendlyName(fieldName)
 
 	if len(value) == 0 {

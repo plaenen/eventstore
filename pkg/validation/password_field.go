@@ -1,4 +1,4 @@
-package validators
+package validation
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 	"github.com/plaenen/eventstore/pkg/password"
 )
 
-func ValidatePassword(fieldName string, value string) *ValidationResult {
+func ValidatePasswordField(fieldName string, value string) *ValidationResult {
 	userFriendlyName := ToUserFriendlyName(fieldName)
 
 	if len(value) == 0 {

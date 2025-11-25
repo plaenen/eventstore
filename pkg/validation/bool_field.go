@@ -1,8 +1,8 @@
-package validators
+package validation
 
 import "fmt"
 
-func ValidateBool(value bool, fieldName string) *ValidationResult {
+func ValidateBoolField(value bool, fieldName string) *ValidationResult {
 	userFriendlyName := ToUserFriendlyName(fieldName)
 
 	if !value {

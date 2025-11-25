@@ -3,23 +3,23 @@ package datastarx
 import (
 	"testing"
 
-	"github.com/plaenen/eventstore/pkg/validators"
+	"github.com/plaenen/eventstore/pkg/validation"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestToUserFeedback_SingleFieldMultipleFeedbacks(t *testing.T) {
 	// Test case: Single field with multiple validation messages
-	fieldValidations := []validators.FieldValidations{
+	fieldValidations := []validation.FieldValidations{
 		{
 			FieldName: "email",
-			Validations: []*validators.ValidationResult{
+			Validations: []*validation.ValidationResult{
 				{
 					IsValid:         false,
 					FieldName:       "email",
 					Value:           "",
 					Message:         "Email is required",
 					SuggestedAction: "Please enter your email address",
-					ValidationCode:  validators.ValidationCodeRequired,
+					ValidationCode:  validation.ValidationCodeRequired,
 				},
 				{
 					IsValid:         false,
@@ -27,7 +27,7 @@ func TestToUserFeedback_SingleFieldMultipleFeedbacks(t *testing.T) {
 					Value:           "invalid-email",
 					Message:         "Email format is invalid",
 					SuggestedAction: "Please enter a valid email address",
-					ValidationCode:  validators.ValidationCodeInvalid,
+					ValidationCode:  validation.ValidationCodeInvalid,
 				},
 			},
 		},
@@ -60,30 +60,30 @@ func TestToUserFeedback_SingleFieldMultipleFeedbacks(t *testing.T) {
 
 func TestToUserFeedback_MultipleFields(t *testing.T) {
 	// Test case: Multiple fields with validation issues
-	fieldValidations := []validators.FieldValidations{
+	fieldValidations := []validation.FieldValidations{
 		{
 			FieldName: "email",
-			Validations: []*validators.ValidationResult{
+			Validations: []*validation.ValidationResult{
 				{
 					IsValid:         false,
 					FieldName:       "email",
 					Value:           "",
 					Message:         "Email is required",
 					SuggestedAction: "Please enter your email address",
-					ValidationCode:  validators.ValidationCodeRequired,
+					ValidationCode:  validation.ValidationCodeRequired,
 				},
 			},
 		},
 		{
 			FieldName: "password",
-			Validations: []*validators.ValidationResult{
+			Validations: []*validation.ValidationResult{
 				{
 					IsValid:         false,
 					FieldName:       "password",
 					Value:           "123",
 					Message:         "Password is too short",
 					SuggestedAction: "Please enter a password with at least 8 characters",
-					ValidationCode:  validators.ValidationCodeInvalid,
+					ValidationCode:  validation.ValidationCodeInvalid,
 				},
 			},
 		},
@@ -112,30 +112,30 @@ func TestToUserFeedback_MultipleFields(t *testing.T) {
 
 func TestToUserFeedback_MixedValidationTypes(t *testing.T) {
 	// Test case: Mixed validation types (errors and warnings)
-	fieldValidations := []validators.FieldValidations{
+	fieldValidations := []validation.FieldValidations{
 		{
 			FieldName: "email",
-			Validations: []*validators.ValidationResult{
+			Validations: []*validation.ValidationResult{
 				{
 					IsValid:         false,
 					FieldName:       "email",
 					Value:           "",
 					Message:         "Email is required",
 					SuggestedAction: "Please enter your email address",
-					ValidationCode:  validators.ValidationCodeRequired,
+					ValidationCode:  validation.ValidationCodeRequired,
 				},
 			},
 		},
 		{
 			FieldName: "username",
-			Validations: []*validators.ValidationResult{
+			Validations: []*validation.ValidationResult{
 				{
 					IsValid:         true,
 					FieldName:       "username",
 					Value:           "john_doe",
 					Message:         "Username is acceptable but could be improved",
 					SuggestedAction: "Consider using a more professional username",
-					ValidationCode:  validators.ValidationCodeUnspecified,
+					ValidationCode:  validation.ValidationCodeUnspecified,
 				},
 			},
 		},
@@ -160,17 +160,17 @@ func TestToUserFeedback_MixedValidationTypes(t *testing.T) {
 
 func TestToUserFeedback_WarningsOnly(t *testing.T) {
 	// Test case: Only warnings, no errors
-	fieldValidations := []validators.FieldValidations{
+	fieldValidations := []validation.FieldValidations{
 		{
 			FieldName: "username",
-			Validations: []*validators.ValidationResult{
+			Validations: []*validation.ValidationResult{
 				{
 					IsValid:         true,
 					FieldName:       "username",
 					Value:           "john_doe",
 					Message:         "Username is acceptable but could be improved",
 					SuggestedAction: "Consider using a more professional username",
-					ValidationCode:  validators.ValidationCodeUnspecified,
+					ValidationCode:  validation.ValidationCodeUnspecified,
 				},
 			},
 		},
@@ -190,17 +190,17 @@ func TestToUserFeedback_WarningsOnly(t *testing.T) {
 
 func TestToUserFeedback_SuccessOnly(t *testing.T) {
 	// Test case: Only success validations
-	fieldValidations := []validators.FieldValidations{
+	fieldValidations := []validation.FieldValidations{
 		{
 			FieldName: "email",
-			Validations: []*validators.ValidationResult{
+			Validations: []*validation.ValidationResult{
 				{
 					IsValid:         true,
 					FieldName:       "email",
 					Value:           "user@example.com",
 					Message:         "Email is valid",
 					SuggestedAction: "",
-					ValidationCode:  validators.ValidationCodeSuccess,
+					ValidationCode:  validation.ValidationCodeSuccess,
 				},
 			},
 		},
@@ -220,7 +220,7 @@ func TestToUserFeedback_SuccessOnly(t *testing.T) {
 
 func TestToUserFeedback_EmptyInput(t *testing.T) {
 	// Test case: Empty validation input
-	fieldValidations := []validators.FieldValidations{}
+	fieldValidations := []validation.FieldValidations{}
 
 	userFeedback := ToUserFeedback(fieldValidations)
 
@@ -232,17 +232,17 @@ func TestToUserFeedback_EmptyInput(t *testing.T) {
 
 func TestToUserFeedback_ComplexMultipleFeedbacks(t *testing.T) {
 	// Test case: Complex scenario with multiple fields and multiple feedbacks per field
-	fieldValidations := []validators.FieldValidations{
+	fieldValidations := []validation.FieldValidations{
 		{
 			FieldName: "email",
-			Validations: []*validators.ValidationResult{
+			Validations: []*validation.ValidationResult{
 				{
 					IsValid:         false,
 					FieldName:       "email",
 					Value:           "",
 					Message:         "Email is required",
 					SuggestedAction: "Please enter your email address",
-					ValidationCode:  validators.ValidationCodeRequired,
+					ValidationCode:  validation.ValidationCodeRequired,
 				},
 				{
 					IsValid:         false,
@@ -250,7 +250,7 @@ func TestToUserFeedback_ComplexMultipleFeedbacks(t *testing.T) {
 					Value:           "invalid-email",
 					Message:         "Email format is invalid",
 					SuggestedAction: "Please enter a valid email address",
-					ValidationCode:  validators.ValidationCodeInvalid,
+					ValidationCode:  validation.ValidationCodeInvalid,
 				},
 				{
 					IsValid:         true,
@@ -258,20 +258,20 @@ func TestToUserFeedback_ComplexMultipleFeedbacks(t *testing.T) {
 					Value:           "user@example.com",
 					Message:         "Email domain is trusted",
 					SuggestedAction: "",
-					ValidationCode:  validators.ValidationCodeSuccess,
+					ValidationCode:  validation.ValidationCodeSuccess,
 				},
 			},
 		},
 		{
 			FieldName: "password",
-			Validations: []*validators.ValidationResult{
+			Validations: []*validation.ValidationResult{
 				{
 					IsValid:         false,
 					FieldName:       "password",
 					Value:           "123",
 					Message:         "Password is too short",
 					SuggestedAction: "Please enter a password with at least 8 characters",
-					ValidationCode:  validators.ValidationCodeInvalid,
+					ValidationCode:  validation.ValidationCodeInvalid,
 				},
 				{
 					IsValid:         false,
@@ -279,7 +279,7 @@ func TestToUserFeedback_ComplexMultipleFeedbacks(t *testing.T) {
 					Value:           "123",
 					Message:         "Password must contain special characters",
 					SuggestedAction: "Please include at least one special character",
-					ValidationCode:  validators.ValidationCodeInvalid,
+					ValidationCode:  validation.ValidationCodeInvalid,
 				},
 			},
 		},
