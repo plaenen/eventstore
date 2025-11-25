@@ -8,8 +8,8 @@ import (
 	"log"
 
 	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
-	"github.com/plaenen/eventstore/pkg/domain"
-	"github.com/plaenen/eventstore/pkg/store/sqlite"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
+	"github.com/plaenen/eventstore/pkg/eventsourcing/store/sqlite"
 	"google.golang.org/protobuf/proto"
 	_ "modernc.org/sqlite"
 )
@@ -72,7 +72,7 @@ func main() {
 		// Migrations are automatically run during Build()
 		WithMigrations(migrationsFS, "projections/account_balance/migrations").
 		// Register event handlers
-		On(accountv1.OnAccountOpened(func(ctx context.Context, event *accountv1.AccountOpenedEvent, envelope *domain.EventEnvelope) error {
+		On(accountv1.OnAccountOpened(func(ctx context.Context, event *accountv1.AccountOpenedEvent, envelope *eventsourcing.EventEnvelope) error {
 			fmt.Printf("   ✨ AccountOpened: %s (Owner: %s)\n", event.AccountId, event.OwnerName)
 
 			tx, _ := sqlite.TxFromContext(ctx)
@@ -88,7 +88,7 @@ func main() {
 
 			return err
 		})).
-		On(accountv1.OnMoneyDeposited(func(ctx context.Context, event *accountv1.MoneyDepositedEvent, envelope *domain.EventEnvelope) error {
+		On(accountv1.OnMoneyDeposited(func(ctx context.Context, event *accountv1.MoneyDepositedEvent, envelope *eventsourcing.EventEnvelope) error {
 			fmt.Printf("   💵 MoneyDeposited: Amount %s\n", event.Amount)
 
 			tx, _ := sqlite.TxFromContext(ctx)
@@ -100,7 +100,7 @@ func main() {
 
 			return err
 		})).
-		On(accountv1.OnMoneyWithdrawn(func(ctx context.Context, event *accountv1.MoneyWithdrawnEvent, envelope *domain.EventEnvelope) error {
+		On(accountv1.OnMoneyWithdrawn(func(ctx context.Context, event *accountv1.MoneyWithdrawnEvent, envelope *eventsourcing.EventEnvelope) error {
 			fmt.Printf("   💸 MoneyWithdrawn: Amount %s\n", event.Amount)
 
 			tx, _ := sqlite.TxFromContext(ctx)
@@ -156,9 +156,9 @@ func main() {
 	// 4. Process events
 	fmt.Println("4️⃣  Processing events...")
 
-	testEvents := []*domain.EventEnvelope{
+	testEvents := []*eventsourcing.EventEnvelope{
 		{
-			Event: domain.Event{
+			Event: eventsourcing.Event{
 				ID:          "evt-1",
 				AggregateID: "acc-diana-001",
 				EventType:   accountv1.AccountOpenedEventType,
@@ -172,7 +172,7 @@ func main() {
 			},
 		},
 		{
-			Event: domain.Event{
+			Event: eventsourcing.Event{
 				ID:          "evt-2",
 				AggregateID: "acc-diana-001",
 				EventType:   accountv1.MoneyDepositedEventType,
@@ -186,7 +186,7 @@ func main() {
 			},
 		},
 		{
-			Event: domain.Event{
+			Event: eventsourcing.Event{
 				ID:          "evt-3",
 				AggregateID: "acc-diana-001",
 				EventType:   accountv1.MoneyWithdrawnEventType,

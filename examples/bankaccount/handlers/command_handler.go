@@ -7,7 +7,7 @@ import (
 
 	exampledomain "github.com/plaenen/eventstore/examples/bankaccount/domain"
 	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
-	"github.com/plaenen/eventstore/pkg/domain"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"github.com/plaenen/eventstore/pkg/protocol"
 	"github.com/shopspring/decimal"
 )
@@ -54,10 +54,10 @@ func (h *AccountCommandHandler) OpenAccount(ctx context.Context, cmd *accountv1.
 
 	// Use generated type-safe Apply method with unique constraint
 	if err := agg.ApplyAccountOpenedEvent(event,
-		accountv1.WithUniqueConstraints(domain.UniqueConstraint{
+		accountv1.WithUniqueConstraints(eventsourcing.UniqueConstraint{
 			IndexName: "account_id",
 			Value:     cmd.AccountId,
-			Operation: domain.ConstraintClaim,
+			Operation: eventsourcing.ConstraintClaim,
 		}),
 	); err != nil {
 		return nil, fmt.Errorf("failed to emit event: %w", err)
@@ -224,10 +224,10 @@ func (h *AccountCommandHandler) CloseAccount(ctx context.Context, cmd *accountv1
 
 	// Use generated type-safe Apply method with constraint release
 	if err := agg.ApplyAccountClosedEvent(event,
-		accountv1.WithUniqueConstraints(domain.UniqueConstraint{
+		accountv1.WithUniqueConstraints(eventsourcing.UniqueConstraint{
 			IndexName: "account_id",
 			Value:     cmd.AccountId,
-			Operation: domain.ConstraintRelease,
+			Operation: eventsourcing.ConstraintRelease,
 		}),
 	); err != nil {
 		return nil, fmt.Errorf("failed to emit event: %w", err)

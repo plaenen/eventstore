@@ -44,21 +44,6 @@ type TransportConfig struct {
 	// Set ClientAuth to true for mutual TLS (mTLS)
 	TLSConfig *tls.Config
 
-	// Deprecated: Use CredentialProvider instead
-	// Token is a bearer token for authentication (INSECURE - plaintext)
-	// This field will be removed in v1.0.0
-	Token string
-
-	// Deprecated: Use CredentialProvider instead
-	// User is the username for authentication (INSECURE - plaintext)
-	// This field will be removed in v1.0.0
-	User  string
-
-	// Deprecated: Use CredentialProvider instead
-	// Pass is the password for authentication (INSECURE - plaintext)
-	// This field will be removed in v1.0.0
-	Pass  string
-
 	// Telemetry for observability (optional)
 	Telemetry *observability.Telemetry
 }
@@ -134,18 +119,9 @@ func NewTransport(config *TransportConfig) (*Transport, error) {
 		default:
 			return nil, fmt.Errorf("unsupported credential type: %s", creds.Type)
 		}
-
-	} else {
-		// Fall back to deprecated fields for backward compatibility
-		// Warn user about insecure usage
-		if config.Token != "" {
-			fmt.Printf("WARNING: Using deprecated Token field. Please migrate to CredentialProvider for secure credential management.\n")
-			opts = append(opts, nats.Token(config.Token))
-		} else if config.User != "" && config.Pass != "" {
-			fmt.Printf("WARNING: Using deprecated User/Pass fields. Please migrate to CredentialProvider for secure credential management.\n")
-			opts = append(opts, nats.UserInfo(config.User, config.Pass))
-		}
 	}
+	// NOTE: Deprecated Token/User/Pass fields have been removed.
+	// Use CredentialProvider for authentication.
 
 	// Add TLS configuration if provided
 	if config.TLSConfig != nil && config.TLSConfig.Enabled {

@@ -58,7 +58,7 @@ projection := eventsourcing.NewProjectionBuilder("account-summary").
 **Option B: SQLite Projection Builder (Recommended)**
 ```go
 import (
-    "github.com/plaenen/eventstore/pkg/store/sqlite"
+    "github.com/plaenen/eventstore/pkg/eventsourcing/store/sqlite"
 )
 
 projection, err := sqlite.NewSQLiteProjectionBuilder(

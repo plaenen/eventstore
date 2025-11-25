@@ -11,12 +11,9 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
-	"github.com/plaenen/eventstore/pkg/domain"
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
-	"github.com/plaenen/eventstore/pkg/messaging"
+	"github.com/plaenen/eventstore/pkg/eventsourcing/store/sqlite"
 	natseventbus "github.com/plaenen/eventstore/pkg/messaging/nats"
-	"github.com/plaenen/eventstore/pkg/store"
-	"github.com/plaenen/eventstore/pkg/store/sqlite"
 )
 
 // This example demonstrates advanced projection features including:
@@ -276,7 +273,7 @@ func runInterruptedRebuildDemo() {
 
 	// Simulate interrupted rebuild by manually setting flag
 	log.Println("🔧 Simulating interrupted rebuild...")
-	checkpointStore.Save(&store.ProjectionCheckpoint{
+	checkpointStore.Save(&eventsourcing.ProjectionCheckpoint{
 		ProjectionName: "account-balance",
 		Position:       500,
 		NATSSequence:   nil,
@@ -579,10 +576,10 @@ func createStores() (*sqlite.EventStore, *sqlite.EventStore, *natseventbus.Event
 	}
 
 	// Start outbox forwarder
-	outboxForwarder := messaging.NewOutboxForwarder(
+	outboxForwarder := eventsourcing.NewOutboxForwarder(
 		eventStore,
 		eventBus,
-		messaging.DefaultOutboxForwarderConfig(),
+		eventsourcing.DefaultOutboxForwarderConfig(),
 	)
 	outboxForwarder.Start(context.Background())
 
@@ -596,16 +593,16 @@ func createAccountEvents(eventStore *sqlite.EventStore, eventBus *natseventbus.E
 	for i := 0; i < count; i++ {
 		accountID := fmt.Sprintf("account-%d", time.Now().UnixNano()%1000)
 
-		event := &domain.Event{
-			ID:            domain.GenerateID(),
+		event := &eventsourcing.Event{
+			ID:            eventsourcing.GenerateID(),
 			AggregateID:   accountID,
 			AggregateType: "BankAccount",
 			EventType:     "MoneyDeposited",
 			Version:       1,
-			Timestamp:     domain.Now(),
+			Timestamp:     time.Now(),
 			Data:          []byte(fmt.Sprintf(`{"amount": %d}`, (i+1)*100)),
-			Metadata: domain.EventMetadata{
-				CorrelationID: domain.GenerateID(),
+			Metadata: eventsourcing.EventMetadata{
+				CorrelationID: eventsourcing.GenerateID(),
 			},
 		}
 
@@ -617,7 +614,7 @@ func createAccountEvents(eventStore *sqlite.EventStore, eventBus *natseventbus.E
 	}
 }
 
-func showCheckpointState(store store.CheckpointStore, projectionName string) {
+func showCheckpointState(store eventsourcing.CheckpointStore, projectionName string) {
 	checkpoint, err := store.Load(projectionName)
 	if err != nil {
 		log.Printf("No checkpoint found: %v", err)
@@ -713,7 +710,7 @@ func (p *AccountBalanceProjection) Name() string {
 	return "account-balance"
 }
 
-func (p *AccountBalanceProjection) Handle(ctx context.Context, event *domain.EventEnvelope) error {
+func (p *AccountBalanceProjection) Handle(ctx context.Context, event *eventsourcing.EventEnvelope) error {
 	// Log event source for debugging
 	source := "EventStore"
 	if event.NATSMetadata != nil {

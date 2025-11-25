@@ -14,7 +14,7 @@ import (
 	"github.com/plaenen/eventstore/pkg/cqrs"
 	cqrsnats "github.com/plaenen/eventstore/pkg/cqrs/nats"
 	"github.com/plaenen/eventstore/pkg/observability"
-	"github.com/plaenen/eventstore/pkg/store/sqlite"
+	"github.com/plaenen/eventstore/pkg/eventsourcing/store/sqlite"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	_ "modernc.org/sqlite" // SQLite driver
 )
@@ -170,7 +170,8 @@ func main() {
 
 	// 4. Create Repository and Handler
 	fmt.Println("4️⃣  Creating repository and handler...")
-	repo := accountv1.NewAccountRepository(eventStore, domain.NewAccount)
+	appliers := domain.NewAccountAppliers()
+	repo := accountv1.NewAccountRepository(eventStore, nil, appliers) // nil snapshot store for now
 	handler := handlers.NewAccountHandler(repo)
 	fmt.Println("   ✅ Ready")
 	fmt.Println()

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/plaenen/eventstore/pkg/domain"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
 )
 
 // EventEncryptor provides encryption for event data
@@ -49,13 +49,13 @@ func NewEventEncryptor(service *Service, config *EventEncryptionConfig) *EventEn
 
 // EncryptEvent encrypts event data based on configuration
 // Returns a new event with encrypted data
-func (ee *EventEncryptor) EncryptEvent(event *domain.Event) (*domain.Event, error) {
+func (ee *EventEncryptor) EncryptEvent(event *eventsourcing.Event) (*eventsourcing.Event, error) {
 	if !ee.config.EncryptData || len(event.Data) == 0 {
 		return event, nil
 	}
 
 	// Create a copy to avoid modifying the original
-	encrypted := &domain.Event{
+	encrypted := &eventsourcing.Event{
 		ID:            event.ID,
 		AggregateID:   event.AggregateID,
 		AggregateType: event.AggregateType,
@@ -88,13 +88,13 @@ func (ee *EventEncryptor) EncryptEvent(event *domain.Event) (*domain.Event, erro
 
 // DecryptEvent decrypts event data
 // Returns a new event with decrypted data
-func (ee *EventEncryptor) DecryptEvent(event *domain.Event) (*domain.Event, error) {
+func (ee *EventEncryptor) DecryptEvent(event *eventsourcing.Event) (*eventsourcing.Event, error) {
 	if !ee.config.EncryptData || len(event.Data) == 0 {
 		return event, nil
 	}
 
 	// Create a copy
-	decrypted := &domain.Event{
+	decrypted := &eventsourcing.Event{
 		ID:            event.ID,
 		AggregateID:   event.AggregateID,
 		AggregateType: event.AggregateType,
@@ -129,8 +129,8 @@ func (ee *EventEncryptor) DecryptEvent(event *domain.Event) (*domain.Event, erro
 }
 
 // EncryptEvents encrypts multiple events
-func (ee *EventEncryptor) EncryptEvents(events []*domain.Event) ([]*domain.Event, error) {
-	encrypted := make([]*domain.Event, len(events))
+func (ee *EventEncryptor) EncryptEvents(events []*eventsourcing.Event) ([]*eventsourcing.Event, error) {
+	encrypted := make([]*eventsourcing.Event, len(events))
 	for i, event := range events {
 		enc, err := ee.EncryptEvent(event)
 		if err != nil {
@@ -142,8 +142,8 @@ func (ee *EventEncryptor) EncryptEvents(events []*domain.Event) ([]*domain.Event
 }
 
 // DecryptEvents decrypts multiple events
-func (ee *EventEncryptor) DecryptEvents(events []*domain.Event) ([]*domain.Event, error) {
-	decrypted := make([]*domain.Event, len(events))
+func (ee *EventEncryptor) DecryptEvents(events []*eventsourcing.Event) ([]*eventsourcing.Event, error) {
+	decrypted := make([]*eventsourcing.Event, len(events))
 	for i, event := range events {
 		dec, err := ee.DecryptEvent(event)
 		if err != nil {

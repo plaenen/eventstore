@@ -30,6 +30,14 @@ type Event struct {
 	// Timestamp is when the event was created
 	Timestamp time.Time
 
+	// Position is the global sequence number in the event store.
+	// This is assigned atomically during event persistence and is used for:
+	// - Global event ordering across all aggregates
+	// - Projection checkpointing and resume
+	// - Event replay from a specific point in time
+	// Position is guaranteed to be unique, sequential, and never null.
+	Position int64
+
 	// Data is the serialized protobuf payload of the event
 	Data []byte
 
@@ -82,10 +90,50 @@ const (
 	ConstraintRelease ConstraintOperation = "release"
 )
 
-// EventEnvelope wraps an event with its deserialized payload.
+// NATSMetadata contains NATS JetStream metadata attached to events.
+// This is populated when events are consumed from NATS subscriptions.
+type NATSMetadata struct {
+	// StreamSequence is the sequence number in the NATS stream
+	StreamSequence uint64
+
+	// ConsumerSequence is the sequence number for the consumer
+	ConsumerSequence uint64
+
+	// Timestamp is when NATS received the message
+	Timestamp time.Time
+
+	// NumDelivered is how many times this message has been delivered
+	NumDelivered uint64
+}
+
+// EventEnvelope wraps an event with its deserialized payload and optional NATS metadata.
 type EventEnvelope struct {
 	Event
 	Payload proto.Message
+
+	// NATSMetadata is populated when event comes from NATS subscription.
+	// It is nil when event comes from EventStore during rebuild.
+	NATSMetadata *NATSMetadata
+}
+
+// GenerateDeterministicEventID generates a deterministic event ID from command context.
+// This ensures the same command always produces the same event IDs (idempotency).
+func GenerateDeterministicEventID(commandID, aggregateID string, sequence int) string {
+	h := sha256.New()
+	h.Write([]byte(fmt.Sprintf("%s:%s:%d", commandID, aggregateID, sequence)))
+	return hex.EncodeToString(h.Sum(nil))[:32] // Use first 32 chars (128 bits)
+}
+
+// DefaultCommandTTL is the default time to remember processed commands.
+const DefaultCommandTTL = 7 * 24 * time.Hour // 7 days
+
+// CommandResult represents the result of processing a command idempotently.
+// Used by AppendEventsIdempotent to track whether a command was already processed.
+type CommandResult struct {
+	CommandID        string
+	Events           []*Event
+	AlreadyProcessed bool
+	ProcessedAt      time.Time
 }
 
 // EventStore defines the interface for persisting and retrieving events.
@@ -135,6 +183,22 @@ type EventStore interface {
 	// This is used for recovery or migration scenarios.
 	RebuildConstraints() error
 
+	// SeedEvents seeds events with special idempotency and versioning semantics.
+	// Used for database migrations and bootstrap data. See SeedOptions for configuration.
+	SeedEvents(aggregateID string, expectedVersion int64, events []*Event, opts *SeedOptions) (*SeedResult, error)
+
+	// LoadUnpublishedEvents loads events that haven't been published to the event bus yet.
+	// Used by the outbox pattern forwarder.
+	LoadUnpublishedEvents(limit int) ([]*EventEnvelope, error)
+
+	// MarkEventsPublished marks events as published after successful delivery.
+	// Used by the outbox pattern forwarder.
+	MarkEventsPublished(eventIDs []string) error
+
+	// RecordPublishFailure records a failed publish attempt for an event.
+	// Used by the outbox pattern forwarder for retry logic.
+	RecordPublishFailure(eventID string, err error) error
+
 	// Close closes the event store and releases resources.
 	Close() error
 }
@@ -144,9 +208,10 @@ type EventBus interface {
 	// Publish publishes events to all subscribers.
 	Publish(events []*Event) error
 
-	// Subscribe subscribes to events matching the filter.
+	// Subscribe subscribes to events matching the filter with optional configuration.
 	// The handler is called for each event.
-	Subscribe(filter EventFilter, handler EventHandler) (Subscription, error)
+	// Variadic opts parameter is backward compatible (existing code can pass zero options).
+	Subscribe(filter EventFilter, handler EventHandler, opts ...SubscribeOption) (Subscription, error)
 
 	// Close closes the event bus and releases resources.
 	Close() error
@@ -159,9 +224,6 @@ type EventFilter struct {
 
 	// EventTypes filters by event type (empty = all types)
 	EventTypes []string
-
-	// FromPosition starts consuming from this position (0 = from beginning)
-	FromPosition int64
 }
 
 // EventHandler processes an event.
@@ -174,13 +236,44 @@ type Subscription interface {
 	Unsubscribe() error
 }
 
-// GenerateDeterministicEventID generates a deterministic event ID from command context.
-// This ensures the same command always produces the same event IDs (idempotency).
-func GenerateDeterministicEventID(commandID, aggregateID string, sequence int) string {
-	h := sha256.New()
-	h.Write([]byte(fmt.Sprintf("%s:%s:%d", commandID, aggregateID, sequence)))
-	return hex.EncodeToString(h.Sum(nil))[:32] // Use first 32 chars (128 bits)
+// SubscribeOption configures subscription behavior.
+type SubscribeOption func(*SubscribeConfig)
+
+// SubscribeConfig holds subscription configuration.
+type SubscribeConfig struct {
+	// ConsumerName is the durable consumer name (if empty, generates random name)
+	ConsumerName string
+
+	// StartSequence is the NATS stream sequence to start from (0 = deliver all from beginning)
+	// This is INCLUSIVE (starts at this sequence, not after)
+	StartSequence uint64
+
+	// DeliverAll overrides StartSequence and delivers all messages from beginning
+	DeliverAll bool
 }
 
-// DefaultCommandTTL is the default time to remember processed commands.
-const DefaultCommandTTL = 7 * 24 * time.Hour // 7 days
+// WithConsumerName sets a deterministic consumer name for durable subscriptions.
+// This is critical for maintaining subscription state across restarts.
+func WithConsumerName(name string) SubscribeOption {
+	return func(c *SubscribeConfig) {
+		c.ConsumerName = name
+	}
+}
+
+// WithStartSequence sets the stream sequence to start from (inclusive).
+// Use this when resuming from a checkpoint.
+// The sequence is INCLUSIVE, meaning it will start AT this sequence, not after it.
+func WithStartSequence(sequence uint64) SubscribeOption {
+	return func(c *SubscribeConfig) {
+		c.StartSequence = sequence
+		c.DeliverAll = false
+	}
+}
+
+// WithDeliverAll sets the subscription to deliver all messages from the beginning,
+// ignoring any start sequence. This is the default behavior when no options are provided.
+func WithDeliverAll() SubscribeOption {
+	return func(c *SubscribeConfig) {
+		c.DeliverAll = true
+	}
+}

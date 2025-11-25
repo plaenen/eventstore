@@ -8,10 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/plaenen/eventstore/pkg/domain"
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"github.com/plaenen/eventstore/pkg/messaging"
-	"github.com/plaenen/eventstore/pkg/store"
 )
 
 var ErrCheckpointNotFound = errors.New("checkpoint not found")
@@ -20,7 +18,7 @@ var ErrCheckpointNotFound = errors.New("checkpoint not found")
 
 type mockProjection struct {
 	name           string
-	handleFunc     func(ctx context.Context, event *domain.EventEnvelope) error
+	handleFunc     func(ctx context.Context, event *eventsourcing.EventEnvelope) error
 	resetFunc      func(ctx context.Context) error
 	processedCount int
 	mu             sync.Mutex
@@ -30,7 +28,7 @@ func (m *mockProjection) Name() string {
 	return m.name
 }
 
-func (m *mockProjection) Handle(ctx context.Context, event *domain.EventEnvelope) error {
+func (m *mockProjection) Handle(ctx context.Context, event *eventsourcing.EventEnvelope) error {
 	m.mu.Lock()
 	m.processedCount++
 	m.mu.Unlock()
@@ -59,17 +57,17 @@ func (m *mockProjection) GetProcessedCount() int {
 }
 
 type mockCheckpointStore struct {
-	checkpoints map[string]*store.ProjectionCheckpoint
+	checkpoints map[string]*eventsourcing.ProjectionCheckpoint
 	mu          sync.RWMutex
 }
 
 func newMockCheckpointStore() *mockCheckpointStore {
 	return &mockCheckpointStore{
-		checkpoints: make(map[string]*store.ProjectionCheckpoint),
+		checkpoints: make(map[string]*eventsourcing.ProjectionCheckpoint),
 	}
 }
 
-func (m *mockCheckpointStore) Save(checkpoint *store.ProjectionCheckpoint) error {
+func (m *mockCheckpointStore) Save(checkpoint *eventsourcing.ProjectionCheckpoint) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -79,7 +77,7 @@ func (m *mockCheckpointStore) Save(checkpoint *store.ProjectionCheckpoint) error
 	return nil
 }
 
-func (m *mockCheckpointStore) Load(projectionName string) (*store.ProjectionCheckpoint, error) {
+func (m *mockCheckpointStore) Load(projectionName string) (*eventsourcing.ProjectionCheckpoint, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -101,21 +99,21 @@ func (m *mockCheckpointStore) Delete(projectionName string) error {
 }
 
 type mockEventStore struct {
-	events []*domain.Event
+	events []*eventsourcing.Event
 	mu     sync.RWMutex
 }
 
-func newMockEventStore(events []*domain.Event) *mockEventStore {
+func newMockEventStore(events []*eventsourcing.Event) *mockEventStore {
 	return &mockEventStore{
 		events: events,
 	}
 }
 
-func (m *mockEventStore) LoadAllEvents(afterPosition int64, limit int) ([]*domain.Event, error) {
+func (m *mockEventStore) LoadAllEvents(afterPosition int64, limit int) ([]*eventsourcing.Event, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	var result []*domain.Event
+	var result []*eventsourcing.Event
 	for _, event := range m.events {
 		if event.Position > afterPosition {
 			result = append(result, event)
@@ -127,19 +125,19 @@ func (m *mockEventStore) LoadAllEvents(afterPosition int64, limit int) ([]*domai
 	return result, nil
 }
 
-func (m *mockEventStore) AppendEvents(aggregateID string, expectedVersion int64, events []*domain.Event) error {
+func (m *mockEventStore) AppendEvents(aggregateID string, expectedVersion int64, events []*eventsourcing.Event) error {
 	return nil
 }
 
-func (m *mockEventStore) AppendEventsIdempotent(aggregateID string, expectedVersion int64, events []*domain.Event, commandID string, ttl time.Duration) (*domain.CommandResult, error) {
-	return &domain.CommandResult{}, nil
+func (m *mockEventStore) AppendEventsIdempotent(aggregateID string, expectedVersion int64, events []*eventsourcing.Event, commandID string, ttl time.Duration) (*eventsourcing.CommandResult, error) {
+	return &eventsourcing.CommandResult{}, nil
 }
 
-func (m *mockEventStore) GetCommandResult(commandID string) (*domain.CommandResult, error) {
+func (m *mockEventStore) GetCommandResult(commandID string) (*eventsourcing.CommandResult, error) {
 	return nil, nil
 }
 
-func (m *mockEventStore) LoadEvents(aggregateID string, afterVersion int64) ([]*domain.Event, error) {
+func (m *mockEventStore) LoadEvents(aggregateID string, afterVersion int64) ([]*eventsourcing.Event, error) {
 	return nil, nil
 }
 
@@ -159,15 +157,15 @@ func (m *mockEventStore) RebuildConstraints() error {
 	return nil
 }
 
-func (m *mockEventStore) SeedEvents(aggregateID string, expectedVersion int64, events []*domain.Event, opts *domain.SeedOptions) (*domain.SeedResult, error) {
-	return &domain.SeedResult{}, nil
+func (m *mockEventStore) SeedEvents(aggregateID string, expectedVersion int64, events []*eventsourcing.Event, opts *eventsourcing.SeedOptions) (*eventsourcing.SeedResult, error) {
+	return &eventsourcing.SeedResult{}, nil
 }
 
 func (m *mockEventStore) Close() error {
 	return nil
 }
 
-func (m *mockEventStore) LoadUnpublishedEvents(limit int) ([]*domain.EventEnvelope, error) {
+func (m *mockEventStore) LoadUnpublishedEvents(limit int) ([]*eventsourcing.EventEnvelope, error) {
 	return nil, nil
 }
 
@@ -190,7 +188,7 @@ func (m *mockEventBus) Subscribe(filter messaging.EventFilter, handler messaging
 	return &mockSubscription{}, nil
 }
 
-func (m *mockEventBus) Publish(events []*domain.Event) error {
+func (m *mockEventBus) Publish(events []*eventsourcing.Event) error {
 	return nil
 }
 
@@ -211,10 +209,10 @@ func (m *mockSubscription) Unsubscribe() error {
 }
 
 // Helper function to create test events
-func createTestEvents(count int) []*domain.Event {
-	events := make([]*domain.Event, count)
+func createTestEvents(count int) []*eventsourcing.Event {
+	events := make([]*eventsourcing.Event, count)
 	for i := 0; i < count; i++ {
-		events[i] = &domain.Event{
+		events[i] = &eventsourcing.Event{
 			ID:            fmt.Sprintf("event-%d", i+1),
 			AggregateID:   "test-aggregate",
 			AggregateType: "TestAggregate",
@@ -274,14 +272,14 @@ func TestProjectionCheckpoint_ResumeAfterRebuild(t *testing.T) {
 	checkpointStore := newMockCheckpointStore()
 
 	// Mock event bus that simulates delivering all 4 events + new event 5
-	deliveredEvents := make([]*domain.EventEnvelope, 0)
+	deliveredEvents := make([]*eventsourcing.EventEnvelope, 0)
 	eventBus := &mockEventBus{
 		subscribeFunc: func(filter messaging.EventFilter, handler messaging.EventHandler, opts ...messaging.SubscribeOption) (messaging.Subscription, error) {
 			// Deliver events 1-4 (already processed during rebuild)
 			for i := 0; i < 4; i++ {
-				envelope := &domain.EventEnvelope{
+				envelope := &eventsourcing.EventEnvelope{
 					Event: *events[i],
-					NATSMetadata: &domain.NATSMetadata{
+					NATSMetadata: &eventsourcing.NATSMetadata{
 						StreamSequence: uint64(i + 1),
 					},
 				}
@@ -290,7 +288,7 @@ func TestProjectionCheckpoint_ResumeAfterRebuild(t *testing.T) {
 			}
 
 			// Deliver new event 5
-			newEvent := &domain.Event{
+			newEvent := &eventsourcing.Event{
 				ID:            "event-5",
 				AggregateID:   "test-aggregate",
 				AggregateType: "TestAggregate",
@@ -300,9 +298,9 @@ func TestProjectionCheckpoint_ResumeAfterRebuild(t *testing.T) {
 				Timestamp:     time.Now(),
 				Data:          []byte("test"),
 			}
-			envelope := &domain.EventEnvelope{
+			envelope := &eventsourcing.EventEnvelope{
 				Event: *newEvent,
-				NATSMetadata: &domain.NATSMetadata{
+				NATSMetadata: &eventsourcing.NATSMetadata{
 					StreamSequence: 5,
 				},
 			}
@@ -417,9 +415,9 @@ func TestProjectionCheckpoint_OutOfOrderEvents(t *testing.T) {
 		subscribeFunc: func(filter messaging.EventFilter, handler messaging.EventHandler, opts ...messaging.SubscribeOption) (messaging.Subscription, error) {
 			// Deliver events in order: 1, 2, 3, 4, 5
 			for i := 0; i < 5; i++ {
-				envelope := &domain.EventEnvelope{
+				envelope := &eventsourcing.EventEnvelope{
 					Event: *events[i],
-					NATSMetadata: &domain.NATSMetadata{
+					NATSMetadata: &eventsourcing.NATSMetadata{
 						StreamSequence: uint64(i + 1),
 					},
 				}
@@ -427,9 +425,9 @@ func TestProjectionCheckpoint_OutOfOrderEvents(t *testing.T) {
 			}
 
 			// Now deliver old event 3 again (out of order)
-			oldEnvelope := &domain.EventEnvelope{
+			oldEnvelope := &eventsourcing.EventEnvelope{
 				Event: *events[2], // Event with position 3
-				NATSMetadata: &domain.NATSMetadata{
+				NATSMetadata: &eventsourcing.NATSMetadata{
 					StreamSequence: 6, // New NATS sequence
 				},
 			}

@@ -10,17 +10,14 @@ import (
 
 	"github.com/google/uuid"
 	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
-	"github.com/plaenen/eventstore/pkg/domain"
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
-	"github.com/plaenen/eventstore/pkg/messaging"
+	"github.com/plaenen/eventstore/pkg/eventsourcing/store/sqlite"
+	infranats "github.com/plaenen/eventstore/pkg/infrastructure/nats"
 	natseventbus "github.com/plaenen/eventstore/pkg/messaging/nats"
-	"github.com/plaenen/eventstore/pkg/store/sqlite"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
-	infranatsnats "github.com/plaenen/eventstore/pkg/infrastructure/nats"
 	"github.com/plaenen/eventstore/pkg/runner"
 	"github.com/plaenen/eventstore/pkg/runtime/embeddednats"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	_ "modernc.org/sqlite"
 )
 
@@ -93,8 +90,8 @@ func main() {
 	natsService := embeddednats.New(
 		embeddednats.WithLogger(logger),
 		embeddednats.WithNATSOptions(
-			infranatsnats.WithPort(4225),
-			infranatsnats.WithJetStream(true),
+			infranats.WithPort(4225),
+			infranats.WithJetStream(true),
 		),
 	)
 
@@ -178,7 +175,7 @@ func main() {
 			`)
 			return err
 		}).
-		On(accountv1.OnAccountOpened(func(ctx context.Context, event *accountv1.AccountOpenedEvent, envelope *domain.EventEnvelope) error {
+		On(accountv1.OnAccountOpened(func(ctx context.Context, event *accountv1.AccountOpenedEvent, envelope *eventsourcing.EventEnvelope) error {
 			projectionEventCount.Add(1)
 			fmt.Printf("   📊 Projection: AccountOpened - %s (%s) = %s\n",
 				event.OwnerName, event.AccountId, event.InitialBalance)
@@ -190,7 +187,7 @@ func main() {
 			`, event.AccountId, event.OwnerName, event.InitialBalance, envelope.Version, event.Timestamp)
 			return err
 		})).
-		On(accountv1.OnMoneyDeposited(func(ctx context.Context, event *accountv1.MoneyDepositedEvent, envelope *domain.EventEnvelope) error {
+		On(accountv1.OnMoneyDeposited(func(ctx context.Context, event *accountv1.MoneyDepositedEvent, envelope *eventsourcing.EventEnvelope) error {
 			projectionEventCount.Add(1)
 			fmt.Printf("   📊 Projection: MoneyDeposited - %s + %s = %s\n",
 				event.AccountId, event.Amount, event.NewBalance)
@@ -203,7 +200,7 @@ func main() {
 			`, event.NewBalance, envelope.Version, event.Timestamp, event.AccountId)
 			return err
 		})).
-		On(accountv1.OnMoneyWithdrawn(func(ctx context.Context, event *accountv1.MoneyWithdrawnEvent, envelope *domain.EventEnvelope) error {
+		On(accountv1.OnMoneyWithdrawn(func(ctx context.Context, event *accountv1.MoneyWithdrawnEvent, envelope *eventsourcing.EventEnvelope) error {
 			projectionEventCount.Add(1)
 			fmt.Printf("   📊 Projection: MoneyWithdrawn - %s - %s = %s\n",
 				event.AccountId, event.Amount, event.NewBalance)
@@ -253,10 +250,10 @@ func main() {
 	// 6. Start Outbox Forwarder
 	fmt.Println("6️⃣  Starting outbox forwarder...")
 
-	forwarder := messaging.NewOutboxForwarder(
+	forwarder := eventsourcing.NewOutboxForwarder(
 		eventStore,
 		eventBus,
-		messaging.OutboxForwarderConfig{
+		eventsourcing.OutboxForwarderConfig{
 			PollRate:   200 * time.Millisecond,
 			BatchSize:  10,
 			MaxRetries: 5,
@@ -279,7 +276,7 @@ func main() {
 
 	// Command 1: Open Account
 	event1 := createAccountOpenedEvent(accountID, "Bob", "2000.00")
-	if err := eventStore.AppendEvents(accountID, 0, []*domain.Event{event1}); err != nil {
+	if err := eventStore.AppendEvents(accountID, 0, []*eventsourcing.Event{event1}); err != nil {
 		log.Fatalf("Failed to append event: %v", err)
 	}
 	fmt.Println("   💾 Event stored: AccountOpened")
@@ -288,7 +285,7 @@ func main() {
 
 	// Command 2: Deposit Money
 	event2 := createMoneyDepositedEvent(accountID, "800.00", "2800.00", 2)
-	if err := eventStore.AppendEvents(accountID, 1, []*domain.Event{event2}); err != nil {
+	if err := eventStore.AppendEvents(accountID, 1, []*eventsourcing.Event{event2}); err != nil {
 		log.Fatalf("Failed to append event: %v", err)
 	}
 	fmt.Println("   💾 Event stored: MoneyDeposited")
@@ -297,7 +294,7 @@ func main() {
 
 	// Command 3: Withdraw Money
 	event3 := createMoneyWithdrawnEvent(accountID, "300.00", "2500.00", 3)
-	if err := eventStore.AppendEvents(accountID, 2, []*domain.Event{event3}); err != nil {
+	if err := eventStore.AppendEvents(accountID, 2, []*eventsourcing.Event{event3}); err != nil {
 		log.Fatalf("Failed to append event: %v", err)
 	}
 	fmt.Println("   💾 Event stored: MoneyWithdrawn")
@@ -410,7 +407,7 @@ func main() {
 
 // Helper functions to create events
 
-func createAccountOpenedEvent(accountID, ownerName, initialBalance string) *domain.Event {
+func createAccountOpenedEvent(accountID, ownerName, initialBalance string) *eventsourcing.Event {
 	payload := &accountv1.AccountOpenedEvent{
 		AccountId:      accountID,
 		OwnerName:      ownerName,
@@ -420,7 +417,7 @@ func createAccountOpenedEvent(accountID, ownerName, initialBalance string) *doma
 
 	data, _ := proto.Marshal(payload)
 
-	return &domain.Event{
+	return &eventsourcing.Event{
 		ID:            uuid.New().String(),
 		AggregateID:   accountID,
 		AggregateType: "Account",
@@ -428,11 +425,11 @@ func createAccountOpenedEvent(accountID, ownerName, initialBalance string) *doma
 		Version:       1,
 		Timestamp:     time.Now(),
 		Data:          data,
-		Metadata:      domain.EventMetadata{},
+		Metadata:      eventsourcing.EventMetadata{},
 	}
 }
 
-func createMoneyDepositedEvent(accountID, amount, newBalance string, version int64) *domain.Event {
+func createMoneyDepositedEvent(accountID, amount, newBalance string, version int64) *eventsourcing.Event {
 	payload := &accountv1.MoneyDepositedEvent{
 		AccountId:  accountID,
 		Amount:     amount,
@@ -442,7 +439,7 @@ func createMoneyDepositedEvent(accountID, amount, newBalance string, version int
 
 	data, _ := proto.Marshal(payload)
 
-	return &domain.Event{
+	return &eventsourcing.Event{
 		ID:            uuid.New().String(),
 		AggregateID:   accountID,
 		AggregateType: "Account",
@@ -450,11 +447,11 @@ func createMoneyDepositedEvent(accountID, amount, newBalance string, version int
 		Version:       version,
 		Timestamp:     time.Now(),
 		Data:          data,
-		Metadata:      domain.EventMetadata{},
+		Metadata:      eventsourcing.EventMetadata{},
 	}
 }
 
-func createMoneyWithdrawnEvent(accountID, amount, newBalance string, version int64) *domain.Event {
+func createMoneyWithdrawnEvent(accountID, amount, newBalance string, version int64) *eventsourcing.Event {
 	payload := &accountv1.MoneyWithdrawnEvent{
 		AccountId:  accountID,
 		Amount:     amount,
@@ -464,7 +461,7 @@ func createMoneyWithdrawnEvent(accountID, amount, newBalance string, version int
 
 	data, _ := proto.Marshal(payload)
 
-	return &domain.Event{
+	return &eventsourcing.Event{
 		ID:            uuid.New().String(),
 		AggregateID:   accountID,
 		AggregateType: "Account",
@@ -472,6 +469,6 @@ func createMoneyWithdrawnEvent(accountID, amount, newBalance string, version int
 		Version:       version,
 		Timestamp:     time.Now(),
 		Data:          data,
-		Metadata:      domain.EventMetadata{},
+		Metadata:      eventsourcing.EventMetadata{},
 	}
 }

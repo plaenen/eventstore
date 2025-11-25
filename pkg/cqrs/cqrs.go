@@ -1,10 +1,7 @@
 package cqrs
 
 import (
-	"context"
 	"time"
-
-	"github.com/plaenen/eventstore/pkg/domain"
 )
 
 // TransportConfig holds common transport configuration
@@ -53,31 +50,6 @@ func DefaultServerConfig() *ServerConfig {
 	}
 }
 
-// CommandHandler processes a command and returns produced events.
-type CommandHandler interface {
-	// Handle processes the command and returns events produced.
-	Handle(ctx context.Context, cmd *domain.CommandEnvelope) ([]*domain.Event, error)
-}
-
-// CommandHandlerFunc is a function adapter for CommandHandler.
-type CommandHandlerFunc func(ctx context.Context, cmd *domain.CommandEnvelope) ([]*domain.Event, error)
-
-// Handle implements CommandHandler.
-func (f CommandHandlerFunc) Handle(ctx context.Context, cmd *domain.CommandEnvelope) ([]*domain.Event, error) {
-	return f(ctx, cmd)
-}
-
-// CommandBus routes commands to their handlers.
-type CommandBus interface {
-	// Send sends a command to its handler.
-	Send(ctx context.Context, cmd *domain.CommandEnvelope) error
-
-	// Register registers a handler for a command type.
-	Register(commandType string, handler CommandHandler)
-
-	// Use adds middleware to the command processing pipeline.
-	Use(middleware CommandMiddleware)
-}
-
-// CommandMiddleware wraps command handlers with cross-cutting concerns.
-type CommandMiddleware func(CommandHandler) CommandHandler
+// Commands are now sent via the generic Transport layer.
+// The CommandBus abstraction has been removed in favor of using Transport directly.
+// See transport.go for the Transport, Server, and HandlerFunc interfaces.

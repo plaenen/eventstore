@@ -6,9 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/plaenen/eventstore/pkg/domain"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	natsserver "github.com/plaenen/eventstore/pkg/infrastructure/nats"
-	"github.com/plaenen/eventstore/pkg/messaging"
 	natspkg "github.com/plaenen/eventstore/pkg/messaging/nats"
 )
 
@@ -30,12 +29,12 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 	defer bus.Close()
 
 	t.Run("PublishAndSubscribe", func(t *testing.T) {
-		received := make(chan *domain.Event, 1)
+		received := make(chan *eventsourcing.Event, 1)
 
 		// Subscribe to events
-		sub, err := bus.Subscribe(messaging.EventFilter{
+		sub, err := bus.Subscribe(eventsourcing.EventFilter{
 			AggregateTypes: []string{"TestAggregate"},
-		}, func(envelope *domain.EventEnvelope) error {
+		}, func(envelope *eventsourcing.EventEnvelope) error {
 			received <- &envelope.Event
 			return nil
 		})
@@ -48,7 +47,7 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 
 		// Publish event
-		event := &domain.Event{
+		event := &eventsourcing.Event{
 			ID:            "test-event-1",
 			AggregateID:   "agg-1",
 			AggregateType: "TestAggregate",
@@ -56,12 +55,12 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 			Version:       1,
 			Timestamp:     time.Now(),
 			Data:          []byte("test data"),
-			Metadata: domain.EventMetadata{
+			Metadata: eventsourcing.EventMetadata{
 				PrincipalID: "test-user",
 			},
 		}
 
-		err = bus.Publish([]*domain.Event{event})
+		err = bus.Publish([]*eventsourcing.Event{event})
 		if err != nil {
 			t.Fatalf("failed to publish event: %v", err)
 		}
@@ -91,15 +90,15 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 			t.Fatal("Stream does not have Duplicates window configured!")
 		}
 
-		received := make(chan *domain.Event, 10)
+		received := make(chan *eventsourcing.Event, 10)
 
 		// Use a unique aggregate type and event ID to avoid collision with other tests
 		uniqueID := fmt.Sprintf("idempotent-event-%d", time.Now().UnixNano())
 
 		// Subscribe - ONLY accept events with our unique ID
-		sub, err := bus.Subscribe(messaging.EventFilter{
+		sub, err := bus.Subscribe(eventsourcing.EventFilter{
 			AggregateTypes: []string{"IdempotentAggregate"},
-		}, func(envelope *domain.EventEnvelope) error {
+		}, func(envelope *eventsourcing.EventEnvelope) error {
 			t.Logf("Received event ID: %s", envelope.Event.ID)
 			// Only forward events with our unique ID
 			if envelope.Event.ID == uniqueID {
@@ -115,7 +114,7 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 		time.Sleep(200 * time.Millisecond)
 
 		// Publish same event twice (same ID = deduplication)
-		event := &domain.Event{
+		event := &eventsourcing.Event{
 			ID:            uniqueID,
 			AggregateID:   "agg-2",
 			AggregateType: "IdempotentAggregate",
@@ -123,11 +122,11 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 			Version:       1,
 			Timestamp:     time.Now(),
 			Data:          []byte("test"),
-			Metadata:      domain.EventMetadata{},
+			Metadata:      eventsourcing.EventMetadata{},
 		}
 
 		// Publish twice
-		err = bus.Publish([]*domain.Event{event})
+		err = bus.Publish([]*eventsourcing.Event{event})
 		if err != nil {
 			t.Fatalf("first publish failed: %v", err)
 		}
@@ -136,7 +135,7 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 
 		time.Sleep(50 * time.Millisecond) // Small delay between publishes
 
-		err = bus.Publish([]*domain.Event{event})
+		err = bus.Publish([]*eventsourcing.Event{event})
 		if err != nil {
 			t.Fatalf("second publish failed: %v", err)
 		}
@@ -170,13 +169,13 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 	})
 
 	t.Run("MultipleSubscribers", func(t *testing.T) {
-		received1 := make(chan *domain.Event, 1)
-		received2 := make(chan *domain.Event, 1)
+		received1 := make(chan *eventsourcing.Event, 1)
+		received2 := make(chan *eventsourcing.Event, 1)
 
 		// First subscriber
-		sub1, err := bus.Subscribe(messaging.EventFilter{
+		sub1, err := bus.Subscribe(eventsourcing.EventFilter{
 			AggregateTypes: []string{"MultiSubAggregate"},
-		}, func(envelope *domain.EventEnvelope) error {
+		}, func(envelope *eventsourcing.EventEnvelope) error {
 			received1 <- &envelope.Event
 			return nil
 		})
@@ -186,9 +185,9 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 		defer sub1.Unsubscribe()
 
 		// Second subscriber
-		sub2, err := bus.Subscribe(messaging.EventFilter{
+		sub2, err := bus.Subscribe(eventsourcing.EventFilter{
 			AggregateTypes: []string{"MultiSubAggregate"},
-		}, func(envelope *domain.EventEnvelope) error {
+		}, func(envelope *eventsourcing.EventEnvelope) error {
 			received2 <- &envelope.Event
 			return nil
 		})
@@ -200,7 +199,7 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 
 		// Publish event
-		event := &domain.Event{
+		event := &eventsourcing.Event{
 			ID:            "multi-sub-event-1",
 			AggregateID:   "agg-3",
 			AggregateType: "MultiSubAggregate",
@@ -208,10 +207,10 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 			Version:       1,
 			Timestamp:     time.Now(),
 			Data:          []byte("test"),
-			Metadata:      domain.EventMetadata{},
+			Metadata:      eventsourcing.EventMetadata{},
 		}
 
-		err = bus.Publish([]*domain.Event{event})
+		err = bus.Publish([]*eventsourcing.Event{event})
 		if err != nil {
 			t.Fatalf("failed to publish: %v", err)
 		}
@@ -239,18 +238,18 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 		// are push-based (have DeliverSubject set), preventing the error:
 		// "nats: must use pull subscribe to bind to pull based consumer"
 
-		received := make(chan *domain.Event, 1)
+		received := make(chan *eventsourcing.Event, 1)
 
 		// Subscribe with a deterministic consumer name (like projections do)
 		sub, err := bus.Subscribe(
-			messaging.EventFilter{
+			eventsourcing.EventFilter{
 				AggregateTypes: []string{"DurableTestAggregate"},
 			},
-			func(envelope *domain.EventEnvelope) error {
+			func(envelope *eventsourcing.EventEnvelope) error {
 				received <- &envelope.Event
 				return nil
 			},
-			messaging.WithConsumerName("test_projection_consumer"),
+			eventsourcing.WithConsumerName("test_projection_consumer"),
 		)
 		if err != nil {
 			t.Fatalf("failed to create durable consumer: %v", err)
@@ -260,7 +259,7 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 
 		// Publish an event
-		event := &domain.Event{
+		event := &eventsourcing.Event{
 			ID:            "durable-test-1",
 			AggregateID:   "agg-durable",
 			AggregateType: "DurableTestAggregate",
@@ -268,10 +267,10 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 			Version:       1,
 			Timestamp:     time.Now(),
 			Data:          []byte("test"),
-			Metadata:      domain.EventMetadata{},
+			Metadata:      eventsourcing.EventMetadata{},
 		}
 
-		err = bus.Publish([]*domain.Event{event})
+		err = bus.Publish([]*eventsourcing.Event{event})
 		if err != nil {
 			t.Fatalf("failed to publish: %v", err)
 		}
@@ -295,19 +294,19 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 		// 2. Second start: Has checkpoint with nats_sequence → DeliverByStartSequence policy
 		// The consumer must be recreated since DeliverPolicy is immutable
 
-		received := make(chan *domain.Event, 10)
+		received := make(chan *eventsourcing.Event, 10)
 
 		// First subscription: DeliverAll (like first projection start)
 		sub1, err := bus.Subscribe(
-			messaging.EventFilter{
+			eventsourcing.EventFilter{
 				AggregateTypes: []string{"PolicyChangeAggregate"},
 			},
-			func(envelope *domain.EventEnvelope) error {
+			func(envelope *eventsourcing.EventEnvelope) error {
 				received <- &envelope.Event
 				return nil
 			},
-			messaging.WithConsumerName("test_policy_change_consumer"),
-			messaging.WithDeliverAll(),
+			eventsourcing.WithConsumerName("test_policy_change_consumer"),
+			eventsourcing.WithDeliverAll(),
 		)
 		if err != nil {
 			t.Fatalf("failed to create first subscription: %v", err)
@@ -317,7 +316,7 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 
 		// Publish some events
 		for i := 1; i <= 3; i++ {
-			event := &domain.Event{
+			event := &eventsourcing.Event{
 				ID:            fmt.Sprintf("policy-change-%d", i),
 				AggregateID:   "agg-policy",
 				AggregateType: "PolicyChangeAggregate",
@@ -325,9 +324,9 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 				Version:       int64(i),
 				Timestamp:     time.Now(),
 				Data:          []byte(fmt.Sprintf("event %d", i)),
-				Metadata:      domain.EventMetadata{},
+				Metadata:      eventsourcing.EventMetadata{},
 			}
-			if err := bus.Publish([]*domain.Event{event}); err != nil {
+			if err := bus.Publish([]*eventsourcing.Event{event}); err != nil {
 				t.Fatalf("failed to publish event %d: %v", i, err)
 			}
 		}
@@ -351,14 +350,14 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 		// In real scenario, this would be DeliverByStartSequence, but that requires knowing
 		// the actual stream sequence, so we use DeliverNew to just test policy change
 		sub2, err := bus.Subscribe(
-			messaging.EventFilter{
+			eventsourcing.EventFilter{
 				AggregateTypes: []string{"PolicyChangeAggregate"},
 			},
-			func(envelope *domain.EventEnvelope) error {
+			func(envelope *eventsourcing.EventEnvelope) error {
 				received <- &envelope.Event
 				return nil
 			},
-			messaging.WithConsumerName("test_policy_change_consumer"), // Same name!
+			eventsourcing.WithConsumerName("test_policy_change_consumer"), // Same name!
 			// No options = DeliverNew policy (different from DeliverAll)
 		)
 		if err != nil {
@@ -373,7 +372,7 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 
 		// Publish another event
-		event := &domain.Event{
+		event := &eventsourcing.Event{
 			ID:            "policy-change-4",
 			AggregateID:   "agg-policy",
 			AggregateType: "PolicyChangeAggregate",
@@ -381,9 +380,9 @@ func TestEmbeddedNATSEventBus(t *testing.T) {
 			Version:       4,
 			Timestamp:     time.Now(),
 			Data:          []byte("event 4"),
-			Metadata:      domain.EventMetadata{},
+			Metadata:      eventsourcing.EventMetadata{},
 		}
-		if err := bus.Publish([]*domain.Event{event}); err != nil {
+		if err := bus.Publish([]*eventsourcing.Event{event}); err != nil {
 			t.Fatalf("failed to publish event after recreation: %v", err)
 		}
 

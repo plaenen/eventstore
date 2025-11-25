@@ -8,14 +8,13 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
-	"github.com/plaenen/eventstore/pkg/domain"
-	"github.com/plaenen/eventstore/pkg/messaging"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
-// EventBus is a NATS-based implementation of domain.EventBus.
+// EventBus is a NATS-based implementation of eventsourcing.EventBus.
 // Uses JetStream for durable event streaming with at-least-once delivery.
 type EventBus struct {
 	nc         *nats.Conn
@@ -133,7 +132,7 @@ func (b *EventBus) ensureStream(config Config) error {
 }
 
 // Publish publishes events to NATS JetStream.
-func (b *EventBus) Publish(events []*domain.Event) error {
+func (b *EventBus) Publish(events []*eventsourcing.Event) error {
 	if len(events) == 0 {
 		return nil
 	}
@@ -163,15 +162,15 @@ func (b *EventBus) Publish(events []*domain.Event) error {
 
 // Subscribe subscribes to events matching the filter with optional configuration.
 func (b *EventBus) Subscribe(
-	filter messaging.EventFilter,
-	handler messaging.EventHandler,
-	opts ...messaging.SubscribeOption,
-) (messaging.Subscription, error) {
+	filter eventsourcing.EventFilter,
+	handler eventsourcing.EventHandler,
+	opts ...eventsourcing.SubscribeOption,
+) (eventsourcing.Subscription, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	// Build configuration from options
-	config := &messaging.SubscribeConfig{
+	config := &eventsourcing.SubscribeConfig{
 		DeliverAll: true, // Default: deliver all messages
 	}
 	for _, opt := range opts {
@@ -181,7 +180,7 @@ func (b *EventBus) Subscribe(
 	// Generate consumer name if not provided
 	consumerName := config.ConsumerName
 	if consumerName == "" {
-		consumerName = fmt.Sprintf("consumer_%s", domain.GenerateID()[:8])
+		consumerName = fmt.Sprintf("consumer_%s", eventsourcing.GenerateID()[:8])
 	}
 
 	// Build NATS subject from filter
@@ -275,9 +274,9 @@ func (b *EventBus) Subscribe(
 		}
 
 		// Create event envelope with NATS metadata
-		envelope := &domain.EventEnvelope{
+		envelope := &eventsourcing.EventEnvelope{
 			Event: *event,
-			NATSMetadata: &domain.NATSMetadata{
+			NATSMetadata: &eventsourcing.NATSMetadata{
 				StreamSequence:   meta.Sequence.Stream,
 				ConsumerSequence: meta.Sequence.Consumer,
 				Timestamp:        meta.Timestamp,
@@ -339,7 +338,7 @@ func (b *EventBus) validateSequence(sequence uint64) error {
 }
 
 // buildSubject builds a NATS subject from an event filter.
-func (b *EventBus) buildSubject(filter messaging.EventFilter) string {
+func (b *EventBus) buildSubject(filter eventsourcing.EventFilter) string {
 	if len(filter.AggregateTypes) == 0 && len(filter.EventTypes) == 0 {
 		return "events.>" // All events
 	}
@@ -357,13 +356,13 @@ func (b *EventBus) buildSubject(filter messaging.EventFilter) string {
 }
 
 // serializeEvent serializes an event to JSON.
-func (b *EventBus) serializeEvent(event *domain.Event) ([]byte, error) {
+func (b *EventBus) serializeEvent(event *eventsourcing.Event) ([]byte, error) {
 	return json.Marshal(event)
 }
 
 // deserializeEvent deserializes an event from JSON.
-func (b *EventBus) deserializeEvent(data []byte) (*domain.Event, error) {
-	var event domain.Event
+func (b *EventBus) deserializeEvent(data []byte) (*eventsourcing.Event, error) {
+	var event eventsourcing.Event
 	if err := json.Unmarshal(data, &event); err != nil {
 		return nil, err
 	}
@@ -386,7 +385,7 @@ func (b *EventBus) Close() error {
 	return nil
 }
 
-// subscription implements messaging.Subscription.
+// subscription implements eventsourcing.Subscription.
 type subscription struct {
 	bus          *EventBus
 	sub          *nats.Subscription
@@ -403,12 +402,12 @@ func (s *subscription) Unsubscribe() error {
 
 // DeserializeEventPayload is a helper to deserialize event payloads.
 // Users can call this to get the typed protobuf message from an event.
-func DeserializeEventPayload(event *domain.Event, msg proto.Message) error {
+func DeserializeEventPayload(event *eventsourcing.Event, msg proto.Message) error {
 	return proto.Unmarshal(event.Data, msg)
 }
 
 // DeserializeEventPayloadDynamic dynamically deserializes an event payload based on event type.
-func DeserializeEventPayloadDynamic(event *domain.Event) (proto.Message, error) {
+func DeserializeEventPayloadDynamic(event *eventsourcing.Event) (proto.Message, error) {
 	// Look up message type in proto registry
 	messageType, err := protoregistry.GlobalTypes.FindMessageByName(protoreflect.FullName(event.EventType))
 	if err != nil {

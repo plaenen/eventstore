@@ -9,16 +9,14 @@ import (
 
 	"github.com/google/uuid"
 	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
-	"github.com/plaenen/eventstore/pkg/domain"
-	"github.com/plaenen/eventstore/pkg/messaging"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
+	"github.com/plaenen/eventstore/pkg/eventsourcing/store/sqlite"
+	infranats "github.com/plaenen/eventstore/pkg/infrastructure/nats"
 	natseventbus "github.com/plaenen/eventstore/pkg/messaging/nats"
-	"github.com/plaenen/eventstore/pkg/store/sqlite"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
-	infranatsnats "github.com/plaenen/eventstore/pkg/infrastructure/nats"
 	"github.com/plaenen/eventstore/pkg/runner"
 	"github.com/plaenen/eventstore/pkg/runtime/embeddednats"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	_ "modernc.org/sqlite"
 )
 
@@ -93,8 +91,8 @@ func main() {
 	natsService := embeddednats.New(
 		embeddednats.WithLogger(logger),
 		embeddednats.WithNATSOptions(
-			infranatsnats.WithPort(4224),
-			infranatsnats.WithJetStream(true),
+			infranats.WithPort(4224),
+			infranats.WithJetStream(true),
 		),
 	)
 
@@ -151,9 +149,9 @@ func main() {
 	fmt.Println("4️⃣  Setting up event subscriber...")
 
 	var publishedCount atomic.Int32
-	publishedEvents := make(chan *domain.EventEnvelope, 10)
+	publishedEvents := make(chan *eventsourcing.EventEnvelope, 10)
 
-	_, err = eventBus.Subscribe(messaging.EventFilter{}, func(envelope *domain.EventEnvelope) error {
+	_, err = eventBus.Subscribe(eventsourcing.EventFilter{}, func(envelope *eventsourcing.EventEnvelope) error {
 		publishedCount.Add(1)
 		fmt.Printf("   📨 Event published to NATS: %s (v%d)\n",
 			envelope.EventType, envelope.Version)
@@ -170,10 +168,10 @@ func main() {
 	// 5. Start Outbox Forwarder
 	fmt.Println("5️⃣  Starting outbox forwarder...")
 
-	forwarder := messaging.NewOutboxForwarder(
+	forwarder := eventsourcing.NewOutboxForwarder(
 		eventStore,
 		eventBus,
-		messaging.OutboxForwarderConfig{
+		eventsourcing.OutboxForwarderConfig{
 			PollRate:   500 * time.Millisecond, // Poll every 500ms
 			BatchSize:  10,
 			MaxRetries: 5,
@@ -196,7 +194,7 @@ func main() {
 
 	// Event 1: Account Opened
 	event1 := createAccountOpenedEvent(accountID, "Alice", "1000.00")
-	if err := eventStore.AppendEvents(accountID, 0, []*domain.Event{event1}); err != nil {
+	if err := eventStore.AppendEvents(accountID, 0, []*eventsourcing.Event{event1}); err != nil {
 		log.Fatalf("Failed to append event 1: %v", err)
 	}
 	fmt.Printf("   💾 Event 1 stored: AccountOpened (v1)\n")
@@ -204,7 +202,7 @@ func main() {
 
 	// Event 2: Money Deposited
 	event2 := createMoneyDepositedEvent(accountID, "500.00", "1500.00", 2)
-	if err := eventStore.AppendEvents(accountID, 1, []*domain.Event{event2}); err != nil {
+	if err := eventStore.AppendEvents(accountID, 1, []*eventsourcing.Event{event2}); err != nil {
 		log.Fatalf("Failed to append event 2: %v", err)
 	}
 	fmt.Printf("   💾 Event 2 stored: MoneyDeposited (v2)\n")
@@ -212,7 +210,7 @@ func main() {
 
 	// Event 3: Money Withdrawn
 	event3 := createMoneyWithdrawnEvent(accountID, "200.00", "1300.00", 3)
-	if err := eventStore.AppendEvents(accountID, 2, []*domain.Event{event3}); err != nil {
+	if err := eventStore.AppendEvents(accountID, 2, []*eventsourcing.Event{event3}); err != nil {
 		log.Fatalf("Failed to append event 3: %v", err)
 	}
 	fmt.Printf("   💾 Event 3 stored: MoneyWithdrawn (v3)\n")
@@ -323,7 +321,7 @@ func main() {
 
 // Helper functions to create events
 
-func createAccountOpenedEvent(accountID, ownerName, initialBalance string) *domain.Event {
+func createAccountOpenedEvent(accountID, ownerName, initialBalance string) *eventsourcing.Event {
 	payload := &accountv1.AccountOpenedEvent{
 		AccountId:      accountID,
 		OwnerName:      ownerName,
@@ -333,7 +331,7 @@ func createAccountOpenedEvent(accountID, ownerName, initialBalance string) *doma
 
 	data, _ := proto.Marshal(payload)
 
-	return &domain.Event{
+	return &eventsourcing.Event{
 		ID:            uuid.New().String(),
 		AggregateID:   accountID,
 		AggregateType: "Account",
@@ -341,11 +339,11 @@ func createAccountOpenedEvent(accountID, ownerName, initialBalance string) *doma
 		Version:       1,
 		Timestamp:     time.Now(),
 		Data:          data,
-		Metadata:      domain.EventMetadata{},
+		Metadata:      eventsourcing.EventMetadata{},
 	}
 }
 
-func createMoneyDepositedEvent(accountID, amount, newBalance string, version int64) *domain.Event {
+func createMoneyDepositedEvent(accountID, amount, newBalance string, version int64) *eventsourcing.Event {
 	payload := &accountv1.MoneyDepositedEvent{
 		AccountId:  accountID,
 		Amount:     amount,
@@ -355,7 +353,7 @@ func createMoneyDepositedEvent(accountID, amount, newBalance string, version int
 
 	data, _ := proto.Marshal(payload)
 
-	return &domain.Event{
+	return &eventsourcing.Event{
 		ID:            uuid.New().String(),
 		AggregateID:   accountID,
 		AggregateType: "Account",
@@ -363,11 +361,11 @@ func createMoneyDepositedEvent(accountID, amount, newBalance string, version int
 		Version:       version,
 		Timestamp:     time.Now(),
 		Data:          data,
-		Metadata:      domain.EventMetadata{},
+		Metadata:      eventsourcing.EventMetadata{},
 	}
 }
 
-func createMoneyWithdrawnEvent(accountID, amount, newBalance string, version int64) *domain.Event {
+func createMoneyWithdrawnEvent(accountID, amount, newBalance string, version int64) *eventsourcing.Event {
 	payload := &accountv1.MoneyWithdrawnEvent{
 		AccountId:  accountID,
 		Amount:     amount,
@@ -377,7 +375,7 @@ func createMoneyWithdrawnEvent(accountID, amount, newBalance string, version int
 
 	data, _ := proto.Marshal(payload)
 
-	return &domain.Event{
+	return &eventsourcing.Event{
 		ID:            uuid.New().String(),
 		AggregateID:   accountID,
 		AggregateType: "Account",
@@ -385,6 +383,6 @@ func createMoneyWithdrawnEvent(accountID, amount, newBalance string, version int
 		Version:       version,
 		Timestamp:     time.Now(),
 		Data:          data,
-		Metadata:      domain.EventMetadata{},
+		Metadata:      eventsourcing.EventMetadata{},
 	}
 }

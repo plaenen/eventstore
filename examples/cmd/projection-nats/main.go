@@ -8,11 +8,10 @@ import (
 	"time"
 
 	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
-	"github.com/plaenen/eventstore/pkg/domain"
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
-	"github.com/plaenen/eventstore/pkg/infrastructure/nats"
+	"github.com/plaenen/eventstore/pkg/eventsourcing/store/sqlite"
+	infranats "github.com/plaenen/eventstore/pkg/infrastructure/nats"
 	natseventbus "github.com/plaenen/eventstore/pkg/messaging/nats"
-	"github.com/plaenen/eventstore/pkg/store/sqlite"
 	"google.golang.org/protobuf/proto"
 	_ "modernc.org/sqlite"
 )
@@ -56,7 +55,7 @@ func main() {
 	}
 
 	// NATS EventBus with embedded server
-	natsServer, err := nats.StartEmbeddedServer()
+	natsServer, err := infranats.StartEmbeddedServer()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -95,7 +94,7 @@ func main() {
 			`)
 			return err
 		}).
-		On(accountv1.OnAccountOpened(func(ctx context.Context, event *accountv1.AccountOpenedEvent, envelope *domain.EventEnvelope) error {
+		On(accountv1.OnAccountOpened(func(ctx context.Context, event *accountv1.AccountOpenedEvent, envelope *eventsourcing.EventEnvelope) error {
 			tx, _ := sqlite.TxFromContext(ctx)
 			_, err := tx.Exec(`
 				INSERT INTO account_balance (account_id, balance, updated_at)
@@ -103,7 +102,7 @@ func main() {
 			`, event.AccountId, event.InitialBalance, event.Timestamp)
 			return err
 		})).
-		On(accountv1.OnMoneyDeposited(func(ctx context.Context, event *accountv1.MoneyDepositedEvent, envelope *domain.EventEnvelope) error {
+		On(accountv1.OnMoneyDeposited(func(ctx context.Context, event *accountv1.MoneyDepositedEvent, envelope *eventsourcing.EventEnvelope) error {
 			tx, _ := sqlite.TxFromContext(ctx)
 			_, err := tx.Exec(`
 				UPDATE account_balance
@@ -112,7 +111,7 @@ func main() {
 			`, event.NewBalance, event.Timestamp, event.AccountId)
 			return err
 		})).
-		On(accountv1.OnMoneyWithdrawn(func(ctx context.Context, event *accountv1.MoneyWithdrawnEvent, envelope *domain.EventEnvelope) error {
+		On(accountv1.OnMoneyWithdrawn(func(ctx context.Context, event *accountv1.MoneyWithdrawnEvent, envelope *eventsourcing.EventEnvelope) error {
 			tx, _ := sqlite.TxFromContext(ctx)
 			_, err := tx.Exec(`
 				UPDATE account_balance
@@ -150,7 +149,7 @@ func main() {
 			`)
 			return err
 		}).
-		On(accountv1.OnAccountOpened(func(ctx context.Context, event *accountv1.AccountOpenedEvent, envelope *domain.EventEnvelope) error {
+		On(accountv1.OnAccountOpened(func(ctx context.Context, event *accountv1.AccountOpenedEvent, envelope *eventsourcing.EventEnvelope) error {
 			tx, _ := sqlite.TxFromContext(ctx)
 			_, err := tx.Exec(`
 				INSERT INTO account_activity_log (account_id, activity_type, amount, timestamp)
@@ -158,7 +157,7 @@ func main() {
 			`, event.AccountId, event.InitialBalance, event.Timestamp)
 			return err
 		})).
-		On(accountv1.OnMoneyDeposited(func(ctx context.Context, event *accountv1.MoneyDepositedEvent, envelope *domain.EventEnvelope) error {
+		On(accountv1.OnMoneyDeposited(func(ctx context.Context, event *accountv1.MoneyDepositedEvent, envelope *eventsourcing.EventEnvelope) error {
 			tx, _ := sqlite.TxFromContext(ctx)
 			_, err := tx.Exec(`
 				INSERT INTO account_activity_log (account_id, activity_type, amount, timestamp)
@@ -166,7 +165,7 @@ func main() {
 			`, event.AccountId, event.Amount, event.Timestamp)
 			return err
 		})).
-		On(accountv1.OnMoneyWithdrawn(func(ctx context.Context, event *accountv1.MoneyWithdrawnEvent, envelope *domain.EventEnvelope) error {
+		On(accountv1.OnMoneyWithdrawn(func(ctx context.Context, event *accountv1.MoneyWithdrawnEvent, envelope *eventsourcing.EventEnvelope) error {
 			tx, _ := sqlite.TxFromContext(ctx)
 			_, err := tx.Exec(`
 				INSERT INTO account_activity_log (account_id, activity_type, amount, timestamp)
@@ -174,7 +173,7 @@ func main() {
 			`, event.AccountId, event.Amount, event.Timestamp)
 			return err
 		})).
-		On(accountv1.OnAccountClosed(func(ctx context.Context, event *accountv1.AccountClosedEvent, envelope *domain.EventEnvelope) error {
+		On(accountv1.OnAccountClosed(func(ctx context.Context, event *accountv1.AccountClosedEvent, envelope *eventsourcing.EventEnvelope) error {
 			tx, _ := sqlite.TxFromContext(ctx)
 			_, err := tx.Exec(`
 				INSERT INTO account_activity_log (account_id, activity_type, amount, timestamp)
@@ -235,7 +234,7 @@ func main() {
 	fmt.Println()
 
 	// Simulate command handler publishing events
-	events := []*domain.Event{
+	events := []*eventsourcing.Event{
 		{
 			ID:            "evt-1",
 			AggregateID:   "acc-carol-001",

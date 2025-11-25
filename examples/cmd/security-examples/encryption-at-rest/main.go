@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/plaenen/eventstore/pkg/domain"
+	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"github.com/plaenen/eventstore/pkg/security/encryption"
 )
 
@@ -174,7 +174,7 @@ func main() {
 
 	eventDataBytes, _ := json.Marshal(eventData)
 
-	event := &domain.Event{
+	event := &eventsourcing.Event{
 		ID:            "evt-001",
 		AggregateID:   "account-123",
 		AggregateType: "Account",
@@ -182,7 +182,7 @@ func main() {
 		Version:       1,
 		Timestamp:     time.Now(),
 		Data:          eventDataBytes,
-		Metadata: domain.EventMetadata{
+		Metadata: eventsourcing.EventMetadata{
 			PrincipalID: "user-456",
 		},
 	}
@@ -235,7 +235,7 @@ func main() {
 
 	event2DataBytes, _ := json.Marshal(event2Data)
 
-	event2 := &domain.Event{
+	event2 := &eventsourcing.Event{
 		ID:            "evt-002",
 		AggregateID:   "account-456",
 		AggregateType: "Account",
@@ -243,7 +243,7 @@ func main() {
 		Version:       1,
 		Timestamp:     time.Now(),
 		Data:          event2DataBytes,
-		Metadata: domain.EventMetadata{
+		Metadata: eventsourcing.EventMetadata{
 			PrincipalID: "user-789",
 		},
 	}

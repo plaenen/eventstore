@@ -4,10 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-
-	"github.com/plaenen/eventstore/pkg/domain"
-	"github.com/plaenen/eventstore/pkg/messaging"
-	"github.com/plaenen/eventstore/pkg/store"
 )
 
 // Projection defines the interface for building read models from events.
@@ -17,32 +13,26 @@ type Projection interface {
 	Name() string
 
 	// Handle processes an event and updates the read model.
-	Handle(ctx context.Context, event *domain.EventEnvelope) error
+	Handle(ctx context.Context, event *EventEnvelope) error
 
 	// Reset resets the projection state (useful for rebuilding).
 	Reset(ctx context.Context) error
 }
 
-// Deprecated: Use store.ProjectionCheckpoint instead
-type ProjectionCheckpoint = store.ProjectionCheckpoint
-
-// Deprecated: Use store.CheckpointStore instead
-type CheckpointStore = store.CheckpointStore
-
 // ProjectionManager coordinates running projections.
 // Uses hybrid approach: EventBus for real-time, EventStore for rebuilds.
 type ProjectionManager struct {
 	projections     map[string]Projection
-	checkpointStore store.CheckpointStore
-	eventStore      store.EventStore // For rebuilds
-	eventBus        messaging.EventBus   // For real-time
+	checkpointStore CheckpointStore
+	eventStore      EventStore // For rebuilds
+	eventBus        EventBus   // For real-time
 	mu              sync.RWMutex
 	running         map[string]context.CancelFunc
 	wg              sync.WaitGroup
 }
 
 // NewProjectionManager creates a new projection manager.
-func NewProjectionManager(checkpointStore store.CheckpointStore, eventStore store.EventStore, eventBus messaging.EventBus) *ProjectionManager {
+func NewProjectionManager(checkpointStore CheckpointStore, eventStore EventStore, eventBus EventBus) *ProjectionManager {
 	return &ProjectionManager{
 		projections:     make(map[string]Projection),
 		checkpointStore: checkpointStore,
@@ -80,7 +70,7 @@ func (m *ProjectionManager) Start(ctx context.Context, projectionName string) er
 	checkpoint, err := m.checkpointStore.Load(projectionName)
 	if err != nil {
 		// No checkpoint, start from beginning
-		checkpoint = &store.ProjectionCheckpoint{
+		checkpoint = &ProjectionCheckpoint{
 			ProjectionName: projectionName,
 			Position:       0,
 			NATSSequence:   nil,
@@ -100,25 +90,25 @@ func (m *ProjectionManager) Start(ctx context.Context, projectionName string) er
 	projCtx, cancel := context.WithCancel(ctx)
 
 	// Build subscription options
-	subscribeOpts := []messaging.SubscribeOption{
+	subscribeOpts := []SubscribeOption{
 		// Use deterministic consumer name
-		messaging.WithConsumerName(fmt.Sprintf("projection_%s", projectionName)),
+		WithConsumerName(fmt.Sprintf("projection_%s", projectionName)),
 	}
 
 	// If we have a NATS sequence checkpoint, resume from there
 	if checkpoint.NATSSequence != nil {
 		// Resume from NEXT sequence (checkpoint is last processed)
 		nextSequence := uint64(*checkpoint.NATSSequence + 1)
-		subscribeOpts = append(subscribeOpts, messaging.WithStartSequence(nextSequence))
+		subscribeOpts = append(subscribeOpts, WithStartSequence(nextSequence))
 	} else {
 		// No NATS checkpoint - deliver all (initial build or legacy checkpoint)
-		subscribeOpts = append(subscribeOpts, messaging.WithDeliverAll())
+		subscribeOpts = append(subscribeOpts, WithDeliverAll())
 	}
 
 	// Subscribe to event bus
 	subscription, err := m.eventBus.Subscribe(
-		messaging.EventFilter{},
-		func(event *domain.EventEnvelope) error {
+		EventFilter{},
+		func(event *EventEnvelope) error {
 			// CRITICAL FIX: Check if we've already processed this event position
 			// This prevents double-counting when events are reprocessed from NATS after rebuild
 			if event.Event.Position <= checkpoint.Position {
@@ -126,7 +116,7 @@ func (m *ProjectionManager) Start(ctx context.Context, projectionName string) er
 				if event.NATSMetadata != nil {
 					seq := int64(event.NATSMetadata.StreamSequence)
 					checkpoint.NATSSequence = &seq
-					checkpoint.UpdatedAt = domain.Now()
+					checkpoint.UpdatedAt = Now()
 					if err := m.checkpointStore.Save(checkpoint); err != nil {
 						return fmt.Errorf("failed to save checkpoint: %w", err)
 					}
@@ -148,7 +138,7 @@ func (m *ProjectionManager) Start(ctx context.Context, projectionName string) er
 
 			checkpoint.Position = event.Event.Position
 			checkpoint.LastEventID = event.Event.ID
-			checkpoint.UpdatedAt = domain.Now()
+			checkpoint.UpdatedAt = Now()
 
 			if err := m.checkpointStore.Save(checkpoint); err != nil {
 				return fmt.Errorf("failed to save checkpoint: %w", err)
@@ -217,13 +207,13 @@ func (m *ProjectionManager) Rebuild(ctx context.Context, projectionName string) 
 	m.mu.Unlock()
 
 	// Set rebuilding flag FIRST (before reset, in case of crash during reset)
-	if err := m.checkpointStore.Save(&store.ProjectionCheckpoint{
+	if err := m.checkpointStore.Save(&ProjectionCheckpoint{
 		ProjectionName: projectionName,
 		Position:       0,
 		NATSSequence:   nil,
 		LastEventID:    "",
 		IsRebuilding:   true,
-		UpdatedAt:      domain.Now(),
+		UpdatedAt:      Now(),
 	}); err != nil {
 		return fmt.Errorf("failed to set rebuilding flag: %w", err)
 	}
@@ -248,7 +238,7 @@ func (m *ProjectionManager) Rebuild(ctx context.Context, projectionName string) 
 		}
 
 		for _, event := range events {
-			envelope := &domain.EventEnvelope{
+			envelope := &EventEnvelope{
 				Event:        *event,
 				NATSMetadata: nil, // No NATS metadata during rebuild (from EventStore)
 			}
@@ -265,12 +255,12 @@ func (m *ProjectionManager) Rebuild(ctx context.Context, projectionName string) 
 			lastEventID = events[len(events)-1].ID
 		}
 
-		if err := m.checkpointStore.Save(&store.ProjectionCheckpoint{
+		if err := m.checkpointStore.Save(&ProjectionCheckpoint{
 			ProjectionName: projectionName,
 			Position:       position,
 			NATSSequence:   nil, // NATS sequence not set during rebuild
 			LastEventID:    lastEventID,
-			UpdatedAt:      domain.Now(),
+			UpdatedAt:      Now(),
 			IsRebuilding:   true, // Still rebuilding
 		}); err != nil {
 			return fmt.Errorf("failed to save checkpoint: %w", err)
@@ -282,12 +272,12 @@ func (m *ProjectionManager) Rebuild(ctx context.Context, projectionName string) 
 	}
 
 	// Clear rebuilding flag (rebuild complete)
-	if err := m.checkpointStore.Save(&store.ProjectionCheckpoint{
+	if err := m.checkpointStore.Save(&ProjectionCheckpoint{
 		ProjectionName: projectionName,
 		Position:       position,
 		NATSSequence:   nil, // Will be set when subscription starts
 		LastEventID:    "",  // Will be updated by first NATS message
-		UpdatedAt:      domain.Now(),
+		UpdatedAt:      Now(),
 		IsRebuilding:   false, // Rebuild complete
 	}); err != nil {
 		return fmt.Errorf("failed to clear rebuilding flag: %w", err)
