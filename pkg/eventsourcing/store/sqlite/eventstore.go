@@ -207,12 +207,50 @@ func WithLibSQLEmbeddedReplica(localPath, remoteURL, authToken string) EventStor
 	}
 }
 
+// WithEncryption enables encryption at rest using the provided key.
+// This is supported by LibSQL and some SQLite builds with encryption extensions.
+func WithEncryption(key string) EventStoreOption {
+	return func(c *eventStoreConfig) {
+		if strings.Contains(c.dsn, "?") {
+			c.dsn = fmt.Sprintf("%s&_key=%s", c.dsn, key)
+		} else {
+			c.dsn = fmt.Sprintf("%s?_key=%s", c.dsn, key)
+		}
+	}
+}
+
+// WithSyncInterval sets the synchronization interval for embedded replicas.
+// This appends the _sync_interval parameter to the DSN.
+func WithSyncInterval(interval time.Duration) EventStoreOption {
+	return func(c *eventStoreConfig) {
+		// Convert to milliseconds or string format supported by driver
+		// LibSQL driver typically expects duration string or ms
+		if strings.Contains(c.dsn, "?") {
+			c.dsn = fmt.Sprintf("%s&_sync_interval=%s", c.dsn, interval.String())
+		} else {
+			c.dsn = fmt.Sprintf("%s?_sync_interval=%s", c.dsn, interval.String())
+		}
+	}
+}
+
+// WithAuthToken sets the authentication token for remote or embedded replica connections.
+// This is useful when the token is not provided in the initial DSN/URL.
+func WithAuthToken(token string) EventStoreOption {
+	return func(c *eventStoreConfig) {
+		if strings.Contains(c.dsn, "?") {
+			c.dsn = fmt.Sprintf("%s&_auth_token=%s", c.dsn, token)
+		} else {
+			c.dsn = fmt.Sprintf("%s?_auth_token=%s", c.dsn, token)
+		}
+	}
+}
+
 // NewEventStore creates a new LibSQL-powered event store with the given options.
 //
 // Supports three deployment modes:
-//   1. Local file - Traditional SQLite file on disk
-//   2. Remote - Cloud-hosted LibSQL/Turso database
-//   3. Embedded Replica - Local-first with cloud sync
+//  1. Local file - Traditional SQLite file on disk
+//  2. Remote - Cloud-hosted LibSQL/Turso database
+//  3. Embedded Replica - Local-first with cloud sync
 //
 // Example usage:
 //
