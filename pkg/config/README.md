@@ -6,6 +6,28 @@
 
 This package provides enterprise-grade dynamic configuration management using [Go Cloud Development Kit's runtimevar](https://gocloud.dev/howto/runtimevar/), enabling real-time configuration updates across multiple cloud providers and local environments without application restarts.
 
+## Key Features
+
+- **Type-Safe Configuration**: Generic `Provider[T]` interface supporting any config type.
+- **Real-time Updates**: Hot-reload configuration without application restarts.
+- **Multi-Cloud Support**: AWS Parameter Store, GCP Runtime Configurator, Azure App Config, etcd.
+- **Development Friendly**: Static and environment variable providers for local development and CI/CD.
+- **Resilient**: Chain provider for fallback scenarios and built-in caching.
+- **Safe**: Automatic validation via `Validator` interface and thread-safe implementation.
+- **Integrated**: Seamless integration with the `runner` package for automatic service updates.
+
+## Architecture
+
+```text
+pkg/config/
+├── provider.go           # Core interfaces
+├── runtimevar.go         # Cloud provider integration
+├── static.go             # Development providers
+├── types.go              # Pre-built config types
+├── provider_test.go      # Unit tests
+└── README.md             # Comprehensive docs
+```
+
 ## Table of Contents
 
 - [Quick Start](#quick-start)
@@ -15,6 +37,8 @@ This package provides enterprise-grade dynamic configuration management using [G
 - [Production Deployment](#production-deployment)
 - [Integration with Runner](#integration-with-runner)
 - [Best Practices](#best-practices)
+- [Benefits](#benefits)
+- [Future Enhancements](#future-enhancements)
 - [Migration Guide](#migration-guide)
 - [API Reference](#api-reference)
 - [Troubleshooting](#troubleshooting)
@@ -875,6 +899,21 @@ func main() {
        go applyConfigAsync(cfg) // Non-blocking
    })
    ```
+
+## Benefits
+
+- **For Developers**: Type-safe configuration, easy-to-use API, hot-reload, built-in validation.
+- **For Operations**: Centralized management, zero-downtime updates, multi-environment support.
+- **For Business**: Feature flags for quick rollouts, A/B testing, cost optimization.
+
+## Future Enhancements
+
+- Configuration versioning and rollback
+- Configuration diff and audit log
+- Configuration templates and inheritance
+- Multi-tenant configuration isolation
+- Configuration encryption at rest
+- Webhook notifications for changes
 
 ## Migration Guide
 
