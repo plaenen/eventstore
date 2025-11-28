@@ -5,25 +5,25 @@ An alpha version Event Sourcing and CQRS framework for Go with Protocol Buffers 
 [![Go Version](https://img.shields.io/badge/go-1.25%2B-blue)](https://golang.org/dl/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-## ⚠️ Security Warning
+## ⚠️ Security Notice
 
-**This project is in alpha and NOT production-ready.** While significant security improvements have been made, critical issues remain:
+**This project is in Beta.** Significant security features have been implemented, but production deployments require careful configuration.
 
-### ✅ Recent Security Improvements
+### ✅ Security Improvements
 - ✅ **Secure credentials management** - `pkg/security/credentials` with encryption support (AWS, GCP, Azure, Vault)
-- ✅ **SQL injection protection** - Comprehensive input validation with sanitization
+- ✅ **SQL injection protection** - Comprehensive input validation and parameterized queries
+- ✅ **Error Handling** - `pkg/errorx` provides safe error propagation and sanitization patterns
 - ✅ **Input validation** - Defense-in-depth validation across event store operations
-- ✅ **Improved test coverage** - Now 44-62% across core packages (up from 18%)
+- ✅ **Encrypted Storage** - Support for encrypted key stores and multi-tenant data
 
-### ⚠️ Remaining Security Concerns
-- ⚠️ **TLS configuration** - Requires explicit setup (not enforced by default)
-- ⚠️ **Error message sanitization** - Stack traces may leak sensitive information
-- ⚠️ **Authorization** - ABAC/RBAC patterns need documentation
-- ⚠️ **Rate limiting** - DoS protection not implemented
+### 🛡️ Production Checklist
+- ⚠️ **TLS Configuration** - Ensure NATS and Database connections use TLS (requires explicit setup)
+- ⚠️ **Authorization** - Implement ABAC/RBAC using your preferred policy engine (e.g., OPA)
+- ⚠️ **Rate Limiting** - Configure rate limits in `pkg/config` and ensure enforcement at the gateway level
+- ⚠️ **Secret Management** - Use a production secret manager (AWS Secrets Manager, Vault) instead of local files
 
-**📚 See [Security Review Summary](docs/REVIEW_SUMMARY.md) and [Security Credentials Guide](docs/SECURITY_CREDENTIALS.md) for details.**
+**📚 See [Security Credentials Guide](docs/SECURITY_CREDENTIALS.md) for configuration details.**
 
-**DO NOT use in production until all security issues are resolved (estimated 2-3 months).**
 
 ---
 
@@ -47,10 +47,10 @@ This framework provides everything you need to build event-sourced systems in Go
 
 ### Prerequisites
 
-- Go 1.25 or later
-- Protocol Buffers compiler (`protoc`)
-- Task runner (`go install github.com/go-task/task/v3/cmd/task@latest`)
-- Buf (`go install github.com/bufbuild/buf/cmd/buf@latest`)
+- Go 1.25+
+- `buf` (for Protobuf generation)
+- `protoc-gen-go`, `protoc-gen-connect-go`
+- NATS server (for messaging)
 
 ### Installation
 
@@ -69,183 +69,164 @@ task generate
 task test
 ```
 
-### Your First Event-Sourced Aggregate
+### Building Your First Application
 
-**1. Define your proto schema** (`proto/account/v1/account.proto`):
+This guide walks through building a scalable, multi-tenant application using Event Sourcing and CQRS.
 
+#### 1. Define Service & Domain (Proto)
+
+Define your service, commands, events, and aggregate state in `.proto` files.
+
+**`proto/account/domain/v1/account.proto`** (Domain Model):
 ```protobuf
 syntax = "proto3";
-package account.v1;
+package account.domain.v1;
 
 import "eventsourcing/options.proto";
 
-// Declare the aggregate
-service AccountCommandService {
-  option (eventsourcing.service) = {
-    aggregate_name: "Account"
-    aggregate_root_message: "Account"
-  };
-  rpc OpenAccount(OpenAccountCommand) returns (OpenAccountResponse);
-  rpc Deposit(DepositCommand) returns (DepositResponse);
-}
-
-// Commands
-message OpenAccountCommand {
+// Aggregate State
+message Account {
+  option (eventsourcing.aggregate_root) = { id_field: "account_id" };
   string account_id = 1;
-  string owner_name = 2;
-  string initial_balance = 3;
+  string balance = 2;
+  string status = 3;
 }
 
 // Events
 message AccountOpenedEvent {
-  option (eventsourcing.event) = {aggregate_name: "Account"};
+  option (eventsourcing.event) = { aggregate_name: "Account" };
   string account_id = 1;
   string owner_name = 2;
-  string initial_balance = 3;
-  int64 timestamp = 4;
 }
 
-// Aggregate state
-message Account {
-  option (eventsourcing.aggregate_root) = {id_field: "account_id"};
+message MoneyDepositedEvent {
+  option (eventsourcing.event) = { aggregate_name: "Account" };
   string account_id = 1;
-  string owner_name = 2;
-  string balance = 3;
-  AccountStatus status = 4;
-}
-
-enum AccountStatus {
-  ACCOUNT_STATUS_UNSPECIFIED = 0;
-  ACCOUNT_STATUS_OPEN = 1;
-  ACCOUNT_STATUS_CLOSED = 2;
+  string amount = 2;
+  string new_balance = 3;
 }
 ```
 
-**2. Generate code**:
+**`proto/account/service/v1/account.proto`** (API Definition):
+```protobuf
+syntax = "proto3";
+package account.service.v1;
 
-```bash
-buf generate
+import "eventsourcing/options.proto";
+import "cqrs/options.proto";
+import "account/domain/v1/account.proto";
+
+service AccountCommandService {
+  option (cqrs.service) = {
+    service_type: SERVICE_TYPE_COMMAND
+    generate_client: true
+  };
+
+  rpc OpenAccount(OpenAccountCommand) returns (OpenAccountResponse);
+  rpc Deposit(DepositCommand) returns (DepositResponse);
+}
+
+message OpenAccountCommand { ... }
+message OpenAccountResponse { ... }
+message DepositCommand { ... }
+message DepositResponse { ... }
 ```
 
-**3. Implement business logic** (`domain/account.go`):
+#### 2. Generate Code
+
+Run `buf generate` to create type-safe Go code, including:
+*   `AccountAggregate`: Domain object with `Apply*` methods.
+*   `AccountRepository`: For loading/saving aggregates.
+*   `AccountEventApplier`: Interface for domain logic.
+*   `AccountCommandServiceHandler`: Interface for service implementation.
+
+#### 3. Implement Domain Logic (Appliers)
+
+Implement `AccountEventApplier` to define how events mutate state. This is **pure domain logic**.
 
 ```go
-package domain
+type AccountAppliers struct{}
 
-import (
-    "context"
-    "math/big"
-    "time"
-
-    accountv1 "github.com/your-org/your-app/gen/pb/account/v1"
-    "github.com/plaenen/eventstore/pkg/eventsourcing"
-)
-
-// Event appliers - update aggregate state
-func (a *accountv1.AccountAggregate) ApplyAccountOpenedEvent(e *accountv1.AccountOpenedEvent) error {
-    a.AccountId = e.AccountId
-    a.OwnerName = e.OwnerName
-    a.Balance = e.InitialBalance
-    a.Status = accountv1.AccountStatus_ACCOUNT_STATUS_OPEN
+func (a *AccountAppliers) ApplyAccountOpenedEvent(agg *accountdomainv1.Account, e *accountdomainv1.AccountOpenedEvent) error {
+    agg.AccountId = e.AccountId
+    agg.Status = accountdomainv1.AccountStatus_ACCOUNT_STATUS_OPEN
+    agg.Balance = "0"
     return nil
 }
 
-// Command handler - business logic
-type AccountHandler struct {
-    repo Repository[*accountv1.AccountAggregate]
-}
-
-func (h *AccountHandler) OpenAccount(
-    ctx context.Context,
-    cmd *accountv1.OpenAccountCommand,
-) (*accountv1.OpenAccountResponse, *eventsourcing.AppError) {
-    // Validation
-    if cmd.OwnerName == "" {
-        return nil, &eventsourcing.AppError{
-            Code: "INVALID_OWNER",
-            Message: "Owner name is required",
-        }
-    }
-
-    // Create aggregate
-    account := accountv1.NewAccount(cmd.AccountId)
-
-    // Create and emit event
-    event := &accountv1.AccountOpenedEvent{
-        AccountId: cmd.AccountId,
-        OwnerName: cmd.OwnerName,
-        InitialBalance: cmd.InitialBalance,
-        Timestamp: time.Now().Unix(),
-    }
-
-    account.AggregateRoot.ApplyChange(
-        event,
-        "accountv1.AccountOpenedEvent",
-        eventsourcing.EventMetadata{},
-    )
-
-    // Save
-    if _, err := h.repo.Save(ctx, account); err != nil {
-        return nil, &eventsourcing.AppError{
-            Code: "SAVE_FAILED",
-            Message: err.Error(),
-        }
-    }
-
-    return &accountv1.OpenAccountResponse{
-        AccountId: account.AccountId,
-    }, nil
+func (a *AccountAppliers) ApplyMoneyDepositedEvent(agg *accountdomainv1.Account, e *accountdomainv1.MoneyDepositedEvent) error {
+    agg.Balance = e.NewBalance
+    return nil
 }
 ```
 
-**4. Wire it up**:
+#### 4. Implement Command Handler
+
+Implement `AccountCommandServiceHandler` to coordinate loading, validating, and saving.
 
 ```go
-package main
+type AccountHandler struct {
+    repo *accountservicev1.AccountRepository
+}
 
-import (
-    "context"
-    "log"
+func (h *AccountHandler) Deposit(ctx context.Context, cmd *accountservicev1.DepositCommand) (*accountservicev1.DepositResponse, error) {
+    // 1. Validate Command
+    if cmd.Amount <= 0 { return nil, fmt.Errorf("invalid amount") }
 
-    "github.com/plaenen/eventstore/pkg/store/sqlite"
-    accountv1 "github.com/your-org/your-app/gen/pb/account/v1"
-    "github.com/your-org/your-app/domain"
-)
+    // 2. Load & Mutate (with optimistic locking retry)
+    err := h.repo.RetryOnConflict(cmd.AccountId, 3, func(agg *accountdomainv1.Account) error {
+        // Business Rule Check
+        if agg.Status != accountdomainv1.AccountStatus_ACCOUNT_STATUS_OPEN { return fmt.Errorf("account closed") }
 
+        // Calculate new state & Emit Event
+        event := &accountdomainv1.MoneyDepositedEvent{
+            AccountId: cmd.AccountId,
+            Amount: cmd.Amount,
+            NewBalance: newBalance,
+        }
+        
+        // Apply Event (updates in-memory state)
+        return agg.ApplyMoneyDepositedEvent(event)
+    })
+
+    return &accountservicev1.DepositResponse{...}, err
+}
+```
+
+#### 5. Create Projections (Read Models)
+
+Projections listen to the event stream and update a read-optimized database.
+
+```go
+func (p *AccountProjection) HandleEvent(ctx context.Context, event *eventsourcing.Event) error {
+    switch e := event.Payload.(type) {
+    case *accountv1.AccountOpenedEvent:
+        _, err := p.db.Exec("INSERT INTO accounts (id, balance) VALUES (?, ?)", e.AccountId, 0)
+        return err
+    case *accountv1.MoneyDepositedEvent:
+        _, err := p.db.Exec("UPDATE accounts SET balance = ? WHERE id = ?", e.NewBalance, e.AccountId)
+        return err
+    }
+    return nil
+}
+```
+
+#### 6. Wiring It All Together
+
+```go
 func main() {
-    ctx := context.Background()
-
-    // Setup event store
-    eventStore, err := sqlite.NewEventStore(
-        sqlite.WithDSN("events.db"),
-    )
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer eventStore.Close()
-
-    // Create repository
-    repo := sqlite.NewRepository[*accountv1.AccountAggregate](
-        eventStore,
-        accountv1.NewAccount,
-    )
-
-    // Create handler
-    handler := &domain.AccountHandler{repo: repo}
-
-    // Execute command
-    cmd := &accountv1.OpenAccountCommand{
-        AccountId: "acc-001",
-        OwnerName: "Alice",
-        InitialBalance: "1000.00",
-    }
-
-    response, appErr := handler.OpenAccount(ctx, cmd)
-    if appErr != nil {
-        log.Fatal(appErr)
-    }
-
-    log.Printf("Account opened: %s", response.AccountId)
+    // 1. Initialize Infrastructure
+    nc, _ := nats.Connect("nats://localhost:4222")
+    eventStore, _ := sqlite.NewEventStore(sqlite.WithDSN("events.db"))
+    
+    // 2. Initialize Components
+    repo := accountservicev1.NewAccountRepository(eventStore, domain.NewAccountAppliers())
+    handler := handlers.NewAccountHandler(repo)
+    
+    // 3. Start NATS Server
+    server, _ := nats.NewServer(&nats.ServerConfig{Connection: nc})
+    server.RegisterHandler("commands.account.deposit", handler.Deposit)
+    server.Start(context.Background())
 }
 ```
 
@@ -580,14 +561,21 @@ go run ./examples/cmd/bankaccount-observability
 - **[Event Upcasting](docs/guides/event-upcasting.md)** - Schema evolution and backward compatibility
 - **[SDK Generation](docs/guides/sdk-generation.md)** - Generating unified SDKs
 
-### Package Documentation
 
-- [Domain Layer](pkg/domain/) - Core domain types
-- [Event Store](pkg/store/) - Event persistence
-- [CQRS](pkg/cqrs/) - Command/Query handling
-- [Messaging](pkg/messaging/) - Event pub/sub
-- [Runtime Services](pkg/runtime/) - Service lifecycle
-- [Observability](pkg/observability/) - OpenTelemetry
+
+- **[Domain Layer](pkg/domain/)** - Core interfaces for Aggregates, Events, and Commands. Defines the `AggregateRoot` and `EventEnvelope` types.
+- **[Event Store](pkg/store/)** - Persistence layer for storing events. Includes:
+    - `pkg/store/sqlite`: SQLite/LibSQL implementation with support for local files, Turso, and embedded replicas.
+- **[CQRS](pkg/cqrs/)** - Command Query Responsibility Segregation framework.
+    - `pkg/cqrs/nats`: NATS-based transport for command routing and query handling.
+- **[Messaging](pkg/messaging/)** - Event publishing and subscription infrastructure.
+    - `pkg/messaging/nats`: JetStream implementation for reliable event streaming.
+- **[Identity](pkg/identity/)** - Identity and Access Management (IAM) service.
+    - `pkg/identity/store/sqlite`: Secure credential storage using SQLite.
+- **[Runtime Services](pkg/runtime/)** - Service lifecycle management, graceful shutdown, and dependency injection.
+- **[Observability](pkg/observability/)** - OpenTelemetry integration for distributed tracing and metrics.
+- **[Security](pkg/security/)** - Security utilities including encryption and credential management.
+
 
 ### All Documentation
 
