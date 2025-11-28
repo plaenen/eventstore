@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	accountdomainv1 "github.com/plaenen/eventstore/examples/pb/account/domain/v1"
 	infranats "github.com/plaenen/eventstore/pkg/embeddednats"
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"github.com/plaenen/eventstore/pkg/eventsourcing/store/sqlite"

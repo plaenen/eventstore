@@ -3,7 +3,7 @@ package sqlite
 import (
 	"testing"
 
-	"github.com/plaenen/eventstore/pkg/eventsourcing/store/sqlite/migrate"
+	"github.com/plaenen/eventstore/pkg/sqlite/migrate"
 	"github.com/plaenen/eventstore/pkg/validation"
 )
 
@@ -85,7 +85,7 @@ func TestSQL_Injection_Protection(t *testing.T) {
 func TestProjectionBuilder_SQL_Injection(t *testing.T) {
 	// Test that sanitizeTableName properly handles injection attempts
 	tests := []struct {
-		input    string
+		input         string
 		shouldBeValid bool
 	}{
 		// Valid inputs
@@ -95,7 +95,7 @@ func TestProjectionBuilder_SQL_Injection(t *testing.T) {
 
 		// Injection attempts - should be sanitized to safe values
 		{"users; DROP TABLE", true}, // Will be sanitized
-		{"users'--", true},           // Will be sanitized
+		{"users'--", true},          // Will be sanitized
 	}
 
 	for _, tt := range tests {

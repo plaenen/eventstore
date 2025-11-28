@@ -6,11 +6,9 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
-	"github.com/nats-io/nats.go"
+	infranats "github.com/plaenen/eventstore/pkg/embeddednats"
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"github.com/plaenen/eventstore/pkg/eventsourcing/store/sqlite"
 	natseventbus "github.com/plaenen/eventstore/pkg/messaging/nats"
@@ -87,10 +85,11 @@ func runBasicDemo() {
 	cleanup := setupInfrastructure()
 	defer cleanup()
 
-	eventStore, projectionStore, eventBus := createStores()
+	eventStore, projectionStore, eventBus, natsServer := createStores()
 	defer eventStore.Close()
 	defer projectionStore.Close()
 	defer eventBus.Close()
+	defer natsServer.Shutdown()
 
 	// Create projection manager
 	checkpointStore, _ := sqlite.NewCheckpointStore(projectionStore.DB())
@@ -116,7 +115,7 @@ func runBasicDemo() {
 	createAccountEvents(eventStore, eventBus, 10)
 
 	// Wait for processing
-	time.Sleep(2 * time.Second)
+	time.Sleep(5 * time.Second)
 
 	// Show checkpoint state
 	log.Println()
@@ -157,10 +156,11 @@ func runRebuildDemo() {
 	cleanup := setupInfrastructure()
 	defer cleanup()
 
-	eventStore, projectionStore, eventBus := createStores()
+	eventStore, projectionStore, eventBus, natsServer := createStores()
 	defer eventStore.Close()
 	defer projectionStore.Close()
 	defer eventBus.Close()
+	defer natsServer.Shutdown()
 
 	checkpointStore, _ := sqlite.NewCheckpointStore(projectionStore.DB())
 	projectionManager := eventsourcing.NewProjectionManager(
@@ -264,10 +264,11 @@ func runInterruptedRebuildDemo() {
 	cleanup := setupInfrastructure()
 	defer cleanup()
 
-	eventStore, projectionStore, eventBus := createStores()
+	eventStore, projectionStore, eventBus, natsServer := createStores()
 	defer eventStore.Close()
 	defer projectionStore.Close()
 	defer eventBus.Close()
+	defer natsServer.Shutdown()
 
 	checkpointStore, _ := sqlite.NewCheckpointStore(projectionStore.DB())
 
@@ -301,7 +302,7 @@ func runInterruptedRebuildDemo() {
 
 	err := projectionManager.Start(ctx, "account-balance")
 	if err != nil {
-		log.Printf()
+		log.Println()
 		log.Printf("Expected error: %v", err)
 		log.Println()
 		log.Println("✅ Correctly detected interrupted rebuild!")
@@ -351,10 +352,11 @@ func runMonitoringDemo() {
 	cleanup := setupInfrastructure()
 	defer cleanup()
 
-	eventStore, projectionStore, eventBus := createStores()
+	eventStore, projectionStore, eventBus, natsServer := createStores()
 	defer eventStore.Close()
 	defer projectionStore.Close()
 	defer eventBus.Close()
+	defer natsServer.Shutdown()
 
 	checkpointStore, _ := sqlite.NewCheckpointStore(projectionStore.DB())
 	projectionManager := eventsourcing.NewProjectionManager(
@@ -424,10 +426,11 @@ func runConcurrentEventsDemo() {
 	cleanup := setupInfrastructure()
 	defer cleanup()
 
-	eventStore, projectionStore, eventBus := createStores()
+	eventStore, projectionStore, eventBus, natsServer := createStores()
 	defer eventStore.Close()
 	defer projectionStore.Close()
 	defer eventBus.Close()
+	defer natsServer.Shutdown()
 
 	checkpointStore, _ := sqlite.NewCheckpointStore(projectionStore.DB())
 	projectionManager := eventsourcing.NewProjectionManager(
@@ -488,6 +491,7 @@ func runConcurrentEventsDemo() {
 	// Restart projection
 	log.Println()
 	log.Println("▶️  Restarting projection...")
+	// NATS
 	if err := projectionManager.Start(ctx, "account-balance"); err != nil {
 		log.Fatalf("Failed to restart: %v", err)
 	}
@@ -527,30 +531,21 @@ func setupInfrastructure() func() {
 	}
 }
 
-func createStores() (*sqlite.EventStore, *sqlite.EventStore, *natseventbus.EventBus) {
+func createStores() (*sqlite.EventStore, *sqlite.EventStore, *natseventbus.EventBus, *infranats.EmbeddedServer) {
 	// Event store
-	eventStoreDB, err := sql.Open("sqlite", "demo_eventstore.db")
-	if err != nil {
-		log.Fatalf("Failed to open event store: %v", err)
-	}
-
-	eventStore, err := sqlite.NewEventStore(eventStoreDB)
+	eventStore, err := sqlite.NewEventStore(sqlite.WithFilename("demo_eventstore.db"))
 	if err != nil {
 		log.Fatalf("Failed to create event store: %v", err)
 	}
 
 	// Projection store (separate database)
-	projectionDB, err := sql.Open("sqlite", "demo_projections.db")
-	if err != nil {
-		log.Fatalf("Failed to open projection store: %v", err)
-	}
-
-	projectionStore, err := sqlite.NewEventStore(projectionDB)
+	projectionStore, err := sqlite.NewEventStore(sqlite.WithFilename("demo_projections.db"))
 	if err != nil {
 		log.Fatalf("Failed to create projection store: %v", err)
 	}
 
 	// Create projection table
+	projectionDB := projectionStore.DB()
 	_, err = projectionDB.Exec(`
 		CREATE TABLE IF NOT EXISTS account_balances (
 			account_id TEXT PRIMARY KEY,
@@ -563,15 +558,22 @@ func createStores() (*sqlite.EventStore, *sqlite.EventStore, *natseventbus.Event
 		log.Fatalf("Failed to create projection table: %v", err)
 	}
 
+	// Start embedded NATS server
+	natsServer, err := infranats.StartEmbeddedServer()
+	if err != nil {
+		log.Fatalf("Failed to start embedded NATS: %v", err)
+	}
+
 	// NATS event bus
 	eventBus, err := natseventbus.NewEventBus(natseventbus.Config{
-		URL:            nats.DefaultURL,
+		URL:            natsServer.URL(),
 		StreamName:     "DEMO_EVENTS",
-		StreamSubjects: []string{"demo.>"},
+		StreamSubjects: []string{"events.>"},
 		MaxAge:         24 * time.Hour,
 		MaxBytes:       100 * 1024 * 1024,
 	})
 	if err != nil {
+		natsServer.Shutdown()
 		log.Fatalf("Failed to create event bus: %v", err)
 	}
 
@@ -586,12 +588,12 @@ func createStores() (*sqlite.EventStore, *sqlite.EventStore, *natseventbus.Event
 	log.Println("✅ Infrastructure ready")
 	log.Println()
 
-	return eventStore, projectionStore, eventBus
+	return eventStore, projectionStore, eventBus, natsServer
 }
 
 func createAccountEvents(eventStore *sqlite.EventStore, eventBus *natseventbus.EventBus, count int) {
 	for i := 0; i < count; i++ {
-		accountID := fmt.Sprintf("account-%d", time.Now().UnixNano()%1000)
+		accountID := fmt.Sprintf("account-%d-%d", time.Now().UnixNano(), i)
 
 		event := &eventsourcing.Event{
 			ID:            eventsourcing.GenerateID(),
@@ -606,7 +608,7 @@ func createAccountEvents(eventStore *sqlite.EventStore, eventBus *natseventbus.E
 			},
 		}
 
-		if err := eventStore.AppendEvents(context.Background(), []*domain.Event{event}); err != nil {
+		if err := eventStore.AppendEvents(event.AggregateID, 0, []*eventsourcing.Event{event}); err != nil {
 			log.Printf("Failed to append event: %v", err)
 		}
 

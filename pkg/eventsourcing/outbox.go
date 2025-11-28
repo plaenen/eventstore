@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 )
 
@@ -18,6 +19,7 @@ type OutboxForwarder struct {
 	logger     OutboxLogger
 	stopCh     chan struct{}
 	doneCh     chan struct{}
+	stopOnce   sync.Once
 }
 
 // OutboxLogger defines the logging interface used by OutboxForwarder.
@@ -102,7 +104,9 @@ func (f *OutboxForwarder) Start(ctx context.Context) {
 
 // Stop gracefully stops the forwarder and waits for the current batch to complete.
 func (f *OutboxForwarder) Stop() {
-	close(f.stopCh)
+	f.stopOnce.Do(func() {
+		close(f.stopCh)
+	})
 	<-f.doneCh
 }
 

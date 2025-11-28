@@ -7,6 +7,7 @@ import (
 	"log"
 	"time"
 
+	accountdomainv1 "github.com/plaenen/eventstore/examples/pb/account/domain/v1"
 	infranats "github.com/plaenen/eventstore/pkg/embeddednats"
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"github.com/plaenen/eventstore/pkg/eventsourcing/store/sqlite"
@@ -288,7 +289,7 @@ func main() {
 
 	// Give projections time to process events
 	fmt.Println("6️⃣  Waiting for projections to process events...")
-	time.Sleep(2 * time.Second)
+	time.Sleep(5 * time.Second)
 	fmt.Println("   ✅ Processing complete")
 	fmt.Println()
 

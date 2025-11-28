@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 
+	accountdomainv1 "github.com/plaenen/eventstore/examples/pb/account/domain/v1"
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"github.com/plaenen/eventstore/pkg/eventsourcing/store/sqlite"
 	"google.golang.org/protobuf/proto"

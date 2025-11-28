@@ -9,7 +9,7 @@ import (
 
 	"github.com/plaenen/eventstore/pkg/cqrs"
 	natscqrs "github.com/plaenen/eventstore/pkg/cqrs/nats"
-	"github.com/plaenen/eventstore/pkg/embeddednats"
+	infranats "github.com/plaenen/eventstore/pkg/embeddednats"
 	"github.com/plaenen/eventstore/pkg/runner"
 	"github.com/plaenen/eventstore/pkg/runtime/embeddednats"
 	"github.com/plaenen/eventstore/pkg/security/credentials"
@@ -156,7 +156,7 @@ func main() {
 	natsService := embeddednats.New(
 		embeddednats.WithLogger(runner.NewNoopLogger()),
 		embeddednats.WithNATSOptions(
-			nats.WithPort(14222), // Different port to avoid conflicts
+			infranats.WithPort(14222), // Different port to avoid conflicts
 		),
 	)
 

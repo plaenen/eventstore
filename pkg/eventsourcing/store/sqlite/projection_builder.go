@@ -8,7 +8,7 @@ import (
 	"io/fs"
 
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
-	"github.com/plaenen/eventstore/pkg/eventsourcing/store/sqlite/migrate"
+	"github.com/plaenen/eventstore/pkg/sqlite/migrate"
 	"github.com/plaenen/eventstore/pkg/validation"
 )
 

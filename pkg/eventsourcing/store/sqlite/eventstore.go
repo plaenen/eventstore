@@ -103,7 +103,11 @@ func WithMemoryDatabase() EventStoreOption {
 // With Filename sets the filename for the database.
 func WithFilename(filename string) EventStoreOption {
 	return func(c *eventStoreConfig) {
-		c.dsn = filename
+		if !strings.HasPrefix(filename, "file:") {
+			c.dsn = "file:" + filename
+		} else {
+			c.dsn = filename
+		}
 	}
 }
 
