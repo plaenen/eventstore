@@ -8,6 +8,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/plaenen/eventstore/pkg/cqrs"
+	"github.com/plaenen/eventstore/pkg/multitenancy"
 	"github.com/plaenen/eventstore/pkg/observability"
 	"github.com/plaenen/eventstore/pkg/protocol"
 	"github.com/plaenen/eventstore/pkg/security/credentials"
@@ -168,8 +169,26 @@ func (t *Transport) doRequestWithRetry(ctx context.Context, subject string, requ
 		// Attempt the request
 		resp, err := t.doRequest(ctx, subject, request)
 
-		// If transport error, return immediately (don't retry network failures)
+		// If error, check if it's retryable
 		if err != nil {
+			if t.isRetryableError(err) {
+				lastErr = err
+				// Don't retry on last attempt
+				if attempt == maxRetries {
+					break
+				}
+
+				// Exponential backoff: 10ms, 20ms, 40ms
+				backoff := time.Duration(10*(1<<uint(attempt))) * time.Millisecond
+				select {
+				case <-time.After(backoff):
+					// Continue to next retry
+					continue
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
+			}
+			// Not retryable or transport error
 			return nil, err
 		}
 
@@ -178,32 +197,8 @@ func (t *Transport) doRequestWithRetry(ctx context.Context, subject string, requ
 			return resp, nil
 		}
 
-		// Response is nil, meaning we got an error - check if retryable
-		if err == nil {
-			// This shouldn't happen, but if it does, return an error
-			return nil, protocol.ErrInternal("received nil response with no error")
-		}
-
-		// Check if this is a retryable error (concurrency conflict)
-		if !t.isRetryableError(err) {
-			return nil, err
-		}
-
-		lastErr = err
-
-		// Don't retry on last attempt
-		if attempt == maxRetries {
-			break
-		}
-
-		// Exponential backoff: 10ms, 20ms, 40ms
-		backoff := time.Duration(10*(1<<uint(attempt))) * time.Millisecond
-		select {
-		case <-time.After(backoff):
-			// Continue to next retry
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
+		// Response is nil but no error? Should not happen
+		return nil, protocol.ErrInternal("received nil response with no error")
 	}
 
 	// All retries exhausted
@@ -266,7 +261,7 @@ func (t *Transport) doRequest(ctx context.Context, subject string, request proto
 	msg.Data = requestData
 
 	// Add metadata from context (tenant, trace IDs, etc.)
-	if tenantID, ok := ctx.Value("tenant_id").(string); ok {
+	if tenantID, err := multitenancy.GetTenantID(ctx); err == nil {
 		msg.Header.Set("Tenant-ID", tenantID)
 	}
 	if traceID, ok := ctx.Value("trace_id").(string); ok {

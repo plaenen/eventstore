@@ -10,6 +10,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/micro"
 	"github.com/plaenen/eventstore/pkg/cqrs"
+	"github.com/plaenen/eventstore/pkg/multitenancy"
 	"github.com/plaenen/eventstore/pkg/observability"
 	"github.com/plaenen/eventstore/pkg/protocol"
 	"go.opentelemetry.io/otel/propagation"
@@ -127,11 +128,10 @@ func (s *Server) RegisterHandler(subject string, handler cqrs.HandlerFunc) error
 		return fmt.Errorf("handler already registered for subject: %s", subject)
 	}
 
-	// TODO: Re-enable observability middleware after updating it to work with new signature
-	// if s.telemetry != nil {
-	// 	middleware := observability.HandlerMiddleware(s.telemetry, subject)
-	// 	handler = middleware(handler)
-	// }
+	if s.telemetry != nil {
+		middleware := observability.HandlerMiddleware(s.telemetry, subject)
+		handler = middleware(handler)
+	}
 
 	s.handlers[subject] = handler
 	return nil
@@ -195,7 +195,7 @@ func (s *Server) handleMicroRequest(req micro.Request, handler cqrs.HandlerFunc)
 
 	// Extract metadata from headers
 	if tenantID := req.Headers().Get("Tenant-ID"); tenantID != "" {
-		ctx = context.WithValue(ctx, "tenant_id", tenantID)
+		ctx = multitenancy.WithTenantID(ctx, tenantID)
 	}
 	if traceID := req.Headers().Get("Trace-ID"); traceID != "" {
 		ctx = context.WithValue(ctx, "trace_id", traceID)
