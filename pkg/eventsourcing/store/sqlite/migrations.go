@@ -5,7 +5,7 @@ import (
 	"embed"
 	"fmt"
 
-	"github.com/plaenen/eventstore/pkg/eventsourcing/store/sqlite/migrate"
+	"github.com/plaenen/eventstore/pkg/sqlite/migrate"
 )
 
 //go:embed migrations/*.sql
