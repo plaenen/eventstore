@@ -34,6 +34,7 @@ pkg/config/
 - [Provider Types](#provider-types)
 - [Common Configuration Types](#common-configuration-types)
 - [Usage Examples](#usage-examples)
+- [Security & Production Readiness](#security--production-readiness)
 - [Production Deployment](#production-deployment)
 - [Integration with Runner](#integration-with-runner)
 - [Best Practices](#best-practices)
@@ -504,6 +505,32 @@ func main() {
 }
 ```
 
+## Security & Production Readiness
+
+### Secret Management
+The package uses a `*Ref` pattern (e.g., `JWTSecretRef`, `URLRef`) in `SecurityConfig` and `DatabaseConfig`. This design encourages separation of concerns:
+- **Configuration**: Stores references to secrets (e.g., `arn:aws:secretsmanager:region:account:secret:my-secret`).
+- **Secret Store**: Stores the actual sensitive data.
+
+**Recommendation**: Do not store actual secrets in your configuration files. Use the references to fetch secrets at runtime using a dedicated secret manager client (e.g., AWS Secrets Manager, HashiCorp Vault).
+
+### Thread Safety
+The `Provider` implementations are thread-safe.
+- `RuntimeVarProvider` uses `sync.RWMutex` to protect concurrent access to the cached configuration.
+- `Watch` callbacks are invoked sequentially, but you should ensure your callback handler is also thread-safe if it modifies shared state.
+
+### Input Validation
+Always implement the `Validator` interface for your configuration types. This ensures that invalid configuration is caught early, preventing the application from starting with a bad config or applying a bad update.
+
+```go
+func (c *MyConfig) Validate() error {
+    if c.Port < 0 {
+        return fmt.Errorf("port cannot be negative")
+    }
+    return nil
+}
+```
+
 ## Production Deployment
 
 ### AWS Parameter Store
@@ -798,343 +825,19 @@ func main() {
    }
    ```
 
-3. **Watch for configuration changes**
-   ```go
-   stop, _ := provider.Watch(ctx, func(cfg MyConfig) {
-       log.Printf("Config updated: %+v", cfg)
-       applyNewConfig(cfg)
-   })
-   defer stop()
-   ```
+3. **Use ChainProvider for resilience**
+   Combine cloud config with local fallbacks to ensure your app starts even if the config service is temporarily unavailable.
 
-4. **Use Latest() for frequently accessed config**
-   ```go
-   // Cached, no network call
-   cfg, _ := provider.Latest()
-   ```
-
-5. **Set appropriate poll intervals**
-   ```go
-   config := config.ProviderConfig{
-       URL:           "awsparamstore://...",
-       WatchInterval: 30 * time.Second, // Balance freshness vs load
-   }
-   ```
-
-6. **Handle configuration errors gracefully**
-   ```go
-   cfg, err := provider.Get(ctx)
-   if err != nil {
-       // Use cached/default config
-       cfg = fallbackConfig
-   }
-   ```
+4. **Tune WatchInterval**
+   For `EnvProvider` or polling-based providers, set a reasonable `WatchInterval` (e.g., 1-5 minutes) to avoid unnecessary CPU usage.
 
 ### ❌ DON'T
 
-1. **Never store secrets in configuration**
-   ```go
-   // ❌ BAD
-   type Config struct {
-       DatabasePassword string // NO!
-   }
+1. **Don't store secrets in plain text**
+   Use the `*Ref` pattern and fetch secrets from a dedicated secret manager.
 
-   // ✅ GOOD
-   type Config struct {
-       DatabaseURLRef string // Reference to secret
-   }
-   ```
+2. **Don't ignore errors from `Watch`**
+   Log errors in your watch callback so you know if updates are failing.
 
-2. **Never ignore validation errors**
-   ```go
-   // ❌ BAD
-   cfg.Validate() // Ignored!
-
-   // ✅ GOOD
-   if err := cfg.Validate(); err != nil {
-       log.Fatal(err)
-   }
-   ```
-
-3. **Never use Get() in hot paths**
-   ```go
-   // ❌ BAD - calls backend every time
-   for _, item := range items {
-       cfg, _ := provider.Get(ctx)
-       process(item, cfg)
-   }
-
-   // ✅ GOOD - use cached Latest()
-   cfg, _ := provider.Latest()
-   for _, item := range items {
-       process(item, cfg)
-   }
-   ```
-
-4. **Never create providers in loops**
-   ```go
-   // ❌ BAD
-   for i := 0; i < 100; i++ {
-       p, _ := config.NewProvider[T](ctx, url)
-       defer p.Close()
-   }
-
-   // ✅ GOOD
-   provider, _ := config.NewProvider[T](ctx, url)
-   defer provider.Close()
-   for i := 0; i < 100; i++ {
-       cfg, _ := provider.Latest()
-   }
-   ```
-
-5. **Never block on Watch callbacks**
-   ```go
-   // ❌ BAD
-   provider.Watch(ctx, func(cfg Config) {
-       time.Sleep(10 * time.Second) // Blocks watcher!
-   })
-
-   // ✅ GOOD
-   provider.Watch(ctx, func(cfg Config) {
-       go applyConfigAsync(cfg) // Non-blocking
-   })
-   ```
-
-## Benefits
-
-- **For Developers**: Type-safe configuration, easy-to-use API, hot-reload, built-in validation.
-- **For Operations**: Centralized management, zero-downtime updates, multi-environment support.
-- **For Business**: Feature flags for quick rollouts, A/B testing, cost optimization.
-
-## Future Enhancements
-
-- Configuration versioning and rollback
-- Configuration diff and audit log
-- Configuration templates and inheritance
-- Multi-tenant configuration isolation
-- Configuration encryption at rest
-- Webhook notifications for changes
-
-## Migration Guide
-
-### From Hardcoded Config to Dynamic Config
-
-#### Before (Static)
-
-```go
-const (
-    MaxConnections = 10
-    BatchSize      = 100
-    CacheTTL       = 5 * time.Minute
-)
-
-func main() {
-    processor := NewProcessor(MaxConnections, BatchSize)
-    cache := NewCache(CacheTTL)
-    // ...
-}
-```
-
-#### After (Dynamic)
-
-```go
-type AppConfig struct {
-    MaxConnections int           `json:"max_connections"`
-    BatchSize      int           `json:"batch_size"`
-    CacheTTL       time.Duration `json:"cache_ttl"`
-}
-
-func main() {
-    ctx := context.Background()
-
-    provider, _ := config.NewProvider[AppConfig](ctx,
-        "awsparamstore:///prod/config?decoder=json")
-    defer provider.Close()
-
-    cfg, _ := provider.Get(ctx)
-
-    processor := NewProcessor(cfg.MaxConnections, cfg.BatchSize)
-    cache := NewCache(cfg.CacheTTL)
-
-    // Watch for updates
-    provider.Watch(ctx, func(cfg AppConfig) {
-        processor.UpdateConfig(cfg.MaxConnections, cfg.BatchSize)
-        cache.UpdateTTL(cfg.CacheTTL)
-    })
-}
-```
-
-### From Environment Variables to Config Provider
-
-#### Before
-
-```go
-maxConn, _ := strconv.Atoi(os.Getenv("MAX_CONNECTIONS"))
-batchSize, _ := strconv.Atoi(os.Getenv("BATCH_SIZE"))
-```
-
-#### After
-
-```go
-provider := config.NewEnvJSONProvider[AppConfig]("APP_CONFIG", 1*time.Minute)
-cfg, _ := provider.Get(ctx)
-```
-
-## API Reference
-
-### Provider Interface
-
-```go
-type Provider[T any] interface {
-    Get(ctx context.Context) (T, error)
-    Watch(ctx context.Context, handler func(T)) (stop func(), err error)
-    Latest() (T, error)
-    Close() error
-}
-```
-
-### Configuration Types
-
-- `FeatureFlags` - Feature toggle management
-- `ServiceEndpoints` - Service discovery
-- `RuntimeTuning` - Performance tuning
-- `RateLimits` - Rate limiting configuration
-- `SecurityConfig` - Security settings
-- `LoggingConfig` - Logging configuration
-- `DatabaseConfig` - Database settings
-- `AppConfig` - Comprehensive application config
-
-### Validator Interface
-
-```go
-type Validator interface {
-    Validate() error
-}
-```
-
-Implement this interface on your configuration types for automatic validation.
-
-## Troubleshooting
-
-### Common Issues
-
-#### 1. "Provider is closed"
-
-**Problem:** Attempting to use a provider after calling `Close()`.
-
-**Solution:**
-```go
-defer provider.Close() // Ensure Close() is only called once
-
-cfg, err := provider.Get(ctx)
-if errors.Is(err, config.ErrProviderClosed) {
-    // Recreate provider
-}
-```
-
-#### 2. "Failed to decode configuration"
-
-**Problem:** Invalid JSON or wrong decoder.
-
-**Solution:**
-```go
-// Ensure URL includes correct decoder
-"awsparamstore:///config?decoder=json"  // For JSON
-"awsparamstore:///config?decoder=string" // For plain text
-```
-
-#### 3. "Validation failed"
-
-**Problem:** Configuration doesn't meet validation requirements.
-
-**Solution:**
-```go
-func (c *MyConfig) Validate() error {
-    if c.Port < 1 {
-        return fmt.Errorf("invalid port: %d", c.Port)
-    }
-    return nil
-}
-```
-
-#### 4. Watch not triggering
-
-**Problem:** Configuration changes but Watch callback not called.
-
-**Solution:**
-```go
-// Check watch interval
-config := config.ProviderConfig{
-    WatchInterval: 10 * time.Second, // Adjust polling frequency
-}
-
-// Ensure stop function is not called prematurely
-stop, _ := provider.Watch(ctx, handler)
-defer stop() // Not stop() immediately!
-```
-
-### Debug Logging
-
-```go
-provider.Watch(ctx, func(cfg MyConfig) {
-    log.Printf("Configuration updated: %+v", cfg)
-    log.Printf("Applying changes...")
-})
-```
-
-### Testing
-
-#### Unit Tests
-
-```go
-func TestMyService(t *testing.T) {
-    cfg := MyConfig{
-        MaxConnections: 10,
-    }
-
-    provider := config.NewStaticProvider(cfg)
-    defer provider.Close()
-
-    service := NewService(provider)
-    // Test service...
-}
-```
-
-#### Integration Tests
-
-```go
-func TestIntegration(t *testing.T) {
-    if testing.Short() {
-        t.Skip("Skipping integration test")
-    }
-
-    ctx := context.Background()
-    provider, err := config.NewProvider[MyConfig](ctx,
-        os.Getenv("TEST_CONFIG_URL"))
-    if err != nil {
-        t.Fatal(err)
-    }
-    defer provider.Close()
-
-    // Run integration test...
-}
-```
-
-## Additional Resources
-
-- [Go Cloud Runtime Variables Documentation](https://gocloud.dev/howto/runtimevar/)
-- [Example Applications](../../examples/cmd/config-examples/)
-- [Unit Tests](./provider_test.go)
-- [Credentials Package](../security/credentials/) - For secret management
-
-## Support
-
-For issues or questions:
-
-1. Check [Troubleshooting](#troubleshooting) section
-2. Review [examples](../../examples/cmd/config-examples/)
-3. Open an issue on GitHub
-
-## License
-
-See the main project LICENSE file.
+3. **Don't perform heavy work in `Watch` callbacks**
+   The callback blocks the watcher. Offload heavy work to a separate goroutine if needed.
