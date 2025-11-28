@@ -1,12 +1,24 @@
 version: "2"
 sql:
   - engine: "sqlite"
-    queries: "pkg/store/sqlite/queries"
-    schema: "pkg/store/sqlite/schema"
+    queries: "pkg/eventsourcing/store/sqlite/queries"
+    schema: "pkg/eventsourcing/store/sqlite/schema"
     gen:
       go:
         package: "sqlcgen"
-        out: "pkg/store/sqlite/sqlcgen"
+        out: "pkg/eventsourcing/store/sqlite/sqlcgen"
+        emit_json_tags: true
+        emit_prepared_queries: true
+        emit_interface: true
+        emit_exact_table_names: false
+        emit_empty_slices: true
+  - engine: "sqlite"
+    queries: "pkg/identity/store/sqlite/queries"
+    schema: "pkg/identity/store/sqlite/schema"
+    gen:
+      go:
+        package: "sqlcgen"
+        out: "pkg/identity/store/sqlite/sqlcgen"
         emit_json_tags: true
         emit_prepared_queries: true
         emit_interface: true
