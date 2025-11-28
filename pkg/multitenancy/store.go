@@ -1,6 +1,7 @@
 package multitenancy
 
 import (
+	"container/list"
 	"context"
 	"fmt"
 	"sync"
@@ -24,8 +25,9 @@ const (
 type MultiTenantEventStore struct {
 	strategy       TenantStoreStrategy
 	sharedStore    eventsourcing.EventStore // Used for SharedDatabase strategy
-	tenantStores   map[string]eventsourcing.EventStore
-	tenantStoresMu sync.RWMutex
+	tenantStores   map[string]*list.Element // Map tenantID to LRU element
+	lruList        *list.List               // LRU list of tenant stores
+	tenantStoresMu sync.Mutex               // Mutex for both map and list
 	config         MultiTenantConfig
 }
 
@@ -38,13 +40,25 @@ type MultiTenantConfig struct {
 
 	// For DatabasePerTenant strategy
 	DatabasePathTemplate string // e.g., "./data/tenant_%s.db"
+	MaxOpenTenants       int    // Maximum number of open tenant databases (default: 100)
+}
+
+// tenantStoreEntry holds the store and its ID for the LRU list
+type tenantStoreEntry struct {
+	tenantID string
+	store    eventsourcing.EventStore
 }
 
 // NewMultiTenantEventStore creates a new multi-tenant event store
 func NewMultiTenantEventStore(config MultiTenantConfig) (*MultiTenantEventStore, error) {
+	if config.MaxOpenTenants <= 0 {
+		config.MaxOpenTenants = 100
+	}
+
 	mtStore := &MultiTenantEventStore{
 		strategy:     config.Strategy,
-		tenantStores: make(map[string]eventsourcing.EventStore),
+		tenantStores: make(map[string]*list.Element),
+		lruList:      list.New(),
 		config:       config,
 	}
 
@@ -80,23 +94,29 @@ func (m *MultiTenantEventStore) GetStore(ctx context.Context) (eventsourcing.Eve
 
 // getOrCreateTenantStore gets or creates a per-tenant database
 func (m *MultiTenantEventStore) getOrCreateTenantStore(tenantID string) (eventsourcing.EventStore, error) {
-	// Try read lock first
-	m.tenantStoresMu.RLock()
-	eventStore, exists := m.tenantStores[tenantID]
-	m.tenantStoresMu.RUnlock()
-
-	if exists {
-		return eventStore, nil
-	}
-
-	// Need to create store - acquire write lock
 	m.tenantStoresMu.Lock()
 	defer m.tenantStoresMu.Unlock()
 
-	// Double-check after acquiring write lock
-	eventStore, exists = m.tenantStores[tenantID]
-	if exists {
-		return eventStore, nil
+	// Check if store exists
+	if element, exists := m.tenantStores[tenantID]; exists {
+		m.lruList.MoveToFront(element)
+		return element.Value.(*tenantStoreEntry).store, nil
+	}
+
+	// Check if we need to evict
+	if m.lruList.Len() >= m.config.MaxOpenTenants {
+		// Remove oldest
+		oldest := m.lruList.Back()
+		if oldest != nil {
+			entry := oldest.Value.(*tenantStoreEntry)
+			// Close the store
+			if err := entry.store.Close(); err != nil {
+				// Log error but continue
+				fmt.Printf("failed to close evicted store for tenant %s: %v\n", entry.tenantID, err)
+			}
+			delete(m.tenantStores, entry.tenantID)
+			m.lruList.Remove(oldest)
+		}
 	}
 
 	// Create new tenant database
@@ -109,7 +129,14 @@ func (m *MultiTenantEventStore) getOrCreateTenantStore(tenantID string) (eventso
 		return nil, fmt.Errorf("failed to create tenant store for %s: %w", tenantID, err)
 	}
 
-	m.tenantStores[tenantID] = tenantStore
+	// Add to LRU
+	entry := &tenantStoreEntry{
+		tenantID: tenantID,
+		store:    tenantStore,
+	}
+	element := m.lruList.PushFront(entry)
+	m.tenantStores[tenantID] = element
+
 	return tenantStore, nil
 }
 
@@ -124,9 +151,10 @@ func (m *MultiTenantEventStore) Close() error {
 	m.tenantStoresMu.Lock()
 	defer m.tenantStoresMu.Unlock()
 
-	for tenantID, store := range m.tenantStores {
-		if err := store.Close(); err != nil {
-			return fmt.Errorf("failed to close store for tenant %s: %w", tenantID, err)
+	for e := m.lruList.Front(); e != nil; e = e.Next() {
+		entry := e.Value.(*tenantStoreEntry)
+		if err := entry.store.Close(); err != nil {
+			return fmt.Errorf("failed to close store for tenant %s: %w", entry.tenantID, err)
 		}
 	}
 
