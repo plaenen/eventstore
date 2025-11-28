@@ -9,7 +9,7 @@ import (
 
 	"github.com/plaenen/eventstore/pkg/cqrs"
 	natscqrs "github.com/plaenen/eventstore/pkg/cqrs/nats"
-	"github.com/plaenen/eventstore/pkg/infrastructure/nats"
+	"github.com/plaenen/eventstore/pkg/embeddednats"
 	"github.com/plaenen/eventstore/pkg/runner"
 	"github.com/plaenen/eventstore/pkg/runtime/embeddednats"
 	"github.com/plaenen/eventstore/pkg/security/credentials"

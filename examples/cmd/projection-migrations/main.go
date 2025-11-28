@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 
-	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"github.com/plaenen/eventstore/pkg/eventsourcing/store/sqlite"
 	"google.golang.org/protobuf/proto"
@@ -72,7 +71,7 @@ func main() {
 		// Migrations are automatically run during Build()
 		WithMigrations(migrationsFS, "projections/account_balance/migrations").
 		// Register event handlers
-		On(accountv1.OnAccountOpened(func(ctx context.Context, event *accountv1.AccountOpenedEvent, envelope *eventsourcing.EventEnvelope) error {
+		On(accountdomainv1.OnAccountOpened(func(ctx context.Context, event *accountdomainv1.AccountOpenedEvent, envelope *eventsourcing.EventEnvelope) error {
 			fmt.Printf("   ✨ AccountOpened: %s (Owner: %s)\n", event.AccountId, event.OwnerName)
 
 			tx, _ := sqlite.TxFromContext(ctx)
@@ -88,7 +87,7 @@ func main() {
 
 			return err
 		})).
-		On(accountv1.OnMoneyDeposited(func(ctx context.Context, event *accountv1.MoneyDepositedEvent, envelope *eventsourcing.EventEnvelope) error {
+		On(accountdomainv1.OnMoneyDeposited(func(ctx context.Context, event *accountdomainv1.MoneyDepositedEvent, envelope *eventsourcing.EventEnvelope) error {
 			fmt.Printf("   💵 MoneyDeposited: Amount %s\n", event.Amount)
 
 			tx, _ := sqlite.TxFromContext(ctx)
@@ -100,7 +99,7 @@ func main() {
 
 			return err
 		})).
-		On(accountv1.OnMoneyWithdrawn(func(ctx context.Context, event *accountv1.MoneyWithdrawnEvent, envelope *eventsourcing.EventEnvelope) error {
+		On(accountdomainv1.OnMoneyWithdrawn(func(ctx context.Context, event *accountdomainv1.MoneyWithdrawnEvent, envelope *eventsourcing.EventEnvelope) error {
 			fmt.Printf("   💸 MoneyWithdrawn: Amount %s\n", event.Amount)
 
 			tx, _ := sqlite.TxFromContext(ctx)
@@ -161,9 +160,9 @@ func main() {
 			Event: eventsourcing.Event{
 				ID:          "evt-1",
 				AggregateID: "acc-diana-001",
-				EventType:   accountv1.AccountOpenedEventType,
+				EventType:   accountdomainv1.AccountOpenedEventType,
 				Version:     1,
-				Data:        mustMarshal(&accountv1.AccountOpenedEvent{
+				Data: mustMarshal(&accountdomainv1.AccountOpenedEvent{
 					AccountId:      "acc-diana-001",
 					OwnerName:      "Diana",
 					InitialBalance: "8000.00",
@@ -175,9 +174,9 @@ func main() {
 			Event: eventsourcing.Event{
 				ID:          "evt-2",
 				AggregateID: "acc-diana-001",
-				EventType:   accountv1.MoneyDepositedEventType,
+				EventType:   accountdomainv1.MoneyDepositedEventType,
 				Version:     2,
-				Data:        mustMarshal(&accountv1.MoneyDepositedEvent{
+				Data: mustMarshal(&accountdomainv1.MoneyDepositedEvent{
 					AccountId:  "acc-diana-001",
 					Amount:     "3000.00",
 					NewBalance: "11000.00",
@@ -189,9 +188,9 @@ func main() {
 			Event: eventsourcing.Event{
 				ID:          "evt-3",
 				AggregateID: "acc-diana-001",
-				EventType:   accountv1.MoneyWithdrawnEventType,
+				EventType:   accountdomainv1.MoneyWithdrawnEventType,
 				Version:     3,
-				Data:        mustMarshal(&accountv1.MoneyWithdrawnEvent{
+				Data: mustMarshal(&accountdomainv1.MoneyWithdrawnEvent{
 					AccountId:  "acc-diana-001",
 					Amount:     "1000.00",
 					NewBalance: "10000.00",

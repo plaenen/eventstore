@@ -10,11 +10,12 @@ import (
 	"github.com/nats-io/nats-server/v2/server"
 	"github.com/plaenen/eventstore/examples/bankaccount/domain"
 	"github.com/plaenen/eventstore/examples/bankaccount/handlers"
-	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
+	accountdomainv1 "github.com/plaenen/eventstore/examples/pb/account/domain/v1"
+	accountservicev1 "github.com/plaenen/eventstore/examples/pb/account/service/v1"
 	"github.com/plaenen/eventstore/pkg/cqrs"
 	cqrsnats "github.com/plaenen/eventstore/pkg/cqrs/nats"
-	"github.com/plaenen/eventstore/pkg/observability"
 	"github.com/plaenen/eventstore/pkg/eventsourcing/store/sqlite"
+	"github.com/plaenen/eventstore/pkg/observability"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	_ "modernc.org/sqlite" // SQLite driver
 )
@@ -27,36 +28,36 @@ type accountCQRSAdapter struct {
 }
 
 // Command methods - strip MethodOptions
-func (a *accountCQRSAdapter) OpenAccount(ctx context.Context, cmd *accountv1.OpenAccountCommand) (*accountv1.OpenAccountResponse, error) {
+func (a *accountCQRSAdapter) OpenAccount(ctx context.Context, cmd *accountservicev1.OpenAccountCommand) (*accountservicev1.OpenAccountResponse, error) {
 	return a.handler.OpenAccount(ctx, cmd /* no options */)
 }
 
-func (a *accountCQRSAdapter) Deposit(ctx context.Context, cmd *accountv1.DepositCommand) (*accountv1.DepositResponse, error) {
+func (a *accountCQRSAdapter) Deposit(ctx context.Context, cmd *accountservicev1.DepositCommand) (*accountservicev1.DepositResponse, error) {
 	return a.handler.Deposit(ctx, cmd /* no options */)
 }
 
-func (a *accountCQRSAdapter) Withdraw(ctx context.Context, cmd *accountv1.WithdrawCommand) (*accountv1.WithdrawResponse, error) {
+func (a *accountCQRSAdapter) Withdraw(ctx context.Context, cmd *accountservicev1.WithdrawCommand) (*accountservicev1.WithdrawResponse, error) {
 	return a.handler.Withdraw(ctx, cmd /* no options */)
 }
 
-func (a *accountCQRSAdapter) CloseAccount(ctx context.Context, cmd *accountv1.CloseAccountCommand) (*accountv1.CloseAccountResponse, error) {
+func (a *accountCQRSAdapter) CloseAccount(ctx context.Context, cmd *accountservicev1.CloseAccountCommand) (*accountservicev1.CloseAccountResponse, error) {
 	return a.handler.CloseAccount(ctx, cmd /* no options */)
 }
 
 // Query methods - strip MethodOptions
-func (a *accountCQRSAdapter) GetAccount(ctx context.Context, query *accountv1.GetAccountRequest) (*accountv1.AccountView, error) {
+func (a *accountCQRSAdapter) GetAccount(ctx context.Context, query *accountservicev1.GetAccountRequest) (*accountservicev1.AccountView, error) {
 	return a.handler.GetAccount(ctx, query /* no options */)
 }
 
-func (a *accountCQRSAdapter) ListAccounts(ctx context.Context, query *accountv1.ListAccountsRequest) (*accountv1.ListAccountsResponse, error) {
+func (a *accountCQRSAdapter) ListAccounts(ctx context.Context, query *accountservicev1.ListAccountsRequest) (*accountservicev1.ListAccountsResponse, error) {
 	return a.handler.ListAccounts(ctx, query /* no options */)
 }
 
-func (a *accountCQRSAdapter) GetAccountBalance(ctx context.Context, query *accountv1.GetAccountBalanceRequest) (*accountv1.BalanceView, error) {
+func (a *accountCQRSAdapter) GetAccountBalance(ctx context.Context, query *accountservicev1.GetAccountBalanceRequest) (*accountservicev1.BalanceView, error) {
 	return a.handler.GetAccountBalance(ctx, query /* no options */)
 }
 
-func (a *accountCQRSAdapter) GetAccountHistory(ctx context.Context, query *accountv1.GetAccountHistoryRequest) (*accountv1.AccountHistoryResponse, error) {
+func (a *accountCQRSAdapter) GetAccountHistory(ctx context.Context, query *accountservicev1.GetAccountHistoryRequest) (*accountservicev1.AccountHistoryResponse, error) {
 	return a.handler.GetAccountHistory(ctx, query /* no options */)
 }
 
@@ -171,7 +172,9 @@ func main() {
 	// 4. Create Repository and Handler
 	fmt.Println("4️⃣  Creating repository and handler...")
 	appliers := domain.NewAccountAppliers()
-	repo := accountv1.NewAccountRepository(eventStore, nil, appliers) // nil snapshot store for now
+	repo := accountdomainv1.NewAccountRepository(eventStore, func(id string) *accountdomainv1.AccountAggregate {
+		return accountdomainv1.NewAccount(id, appliers)
+	})
 	handler := handlers.NewAccountHandler(repo)
 	fmt.Println("   ✅ Ready")
 	fmt.Println()
@@ -204,12 +207,12 @@ func main() {
 	// This keeps CQRS independent from eventsourcing-specific concerns
 	cqrsAdapter := &accountCQRSAdapter{handler: handler}
 
-	commandService := accountv1.NewCqrsAccountCommandServiceServer(natsServer, cqrsAdapter)
+	commandService := accountservicev1.NewCqrsAccountCommandServiceServer(natsServer, cqrsAdapter)
 	if err := commandService.Start(ctx); err != nil {
 		log.Fatalf("Failed to start command service: %v", err)
 	}
 
-	queryService := accountv1.NewCqrsAccountQueryServiceServer(natsServer, cqrsAdapter)
+	queryService := accountservicev1.NewCqrsAccountQueryServiceServer(natsServer, cqrsAdapter)
 	if err := queryService.Start(ctx); err != nil {
 		log.Fatalf("Failed to start query service: %v", err)
 	}
@@ -236,8 +239,8 @@ func main() {
 	defer transport.Close()
 
 	// Create separate clients for commands and queries
-	commandClient := accountv1.NewCqrsAccountCommandServiceClient(transport)
-	queryClient := accountv1.NewCqrsAccountQueryServiceClient(transport)
+	commandClient := accountservicev1.NewCqrsAccountCommandServiceClient(transport)
+	queryClient := accountservicev1.NewCqrsAccountQueryServiceClient(transport)
 	fmt.Println("   ✅ Clients ready")
 	fmt.Println()
 
@@ -249,7 +252,7 @@ func main() {
 
 	// Open Account
 	fmt.Println("   📝 Opening account...")
-	openResp, err := commandClient.OpenAccount(ctx, &accountv1.OpenAccountCommand{
+	openResp, err := commandClient.OpenAccount(ctx, &accountservicev1.OpenAccountCommand{
 		AccountId:      accountID,
 		OwnerName:      "Charlie Brown",
 		InitialBalance: "3000.00",
@@ -263,7 +266,7 @@ func main() {
 	// Multiple deposits (transport layer handles retries automatically)
 	for i := 1; i <= 3; i++ {
 		fmt.Printf("   💵 Deposit #%d ($%d00)...\n", i, i)
-		resp, err := commandClient.Deposit(ctx, &accountv1.DepositCommand{
+		resp, err := commandClient.Deposit(ctx, &accountservicev1.DepositCommand{
 			AccountId: accountID,
 			Amount:    fmt.Sprintf("%d00.00", i),
 		})
@@ -277,7 +280,7 @@ func main() {
 	// Multiple withdrawals (transport layer handles retries automatically)
 	for i := 1; i <= 2; i++ {
 		fmt.Printf("   💸 Withdrawal #%d ($%d50)...\n", i, i)
-		resp, err := commandClient.Withdraw(ctx, &accountv1.WithdrawCommand{
+		resp, err := commandClient.Withdraw(ctx, &accountservicev1.WithdrawCommand{
 			AccountId: accountID,
 			Amount:    fmt.Sprintf("%d50.00", i),
 		})
@@ -289,7 +292,7 @@ func main() {
 	}
 
 	// Get balance
-	balance, err := queryClient.GetAccountBalance(ctx, &accountv1.GetAccountBalanceRequest{
+	balance, err := queryClient.GetAccountBalance(ctx, &accountservicev1.GetAccountBalanceRequest{
 		AccountId: accountID,
 	})
 	if err != nil {

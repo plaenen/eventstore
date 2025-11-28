@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package identity.v1;
+
+option go_package = "github.com/plaenen/eventstore/pkg/identity/v1;identityv1";
+
+// IdentityService handles authentication and token exchange for edge devices.
+service IdentityService {
+  // ExchangeToken exchanges a third-party or app token for NATS User Credentials.
+  rpc ExchangeToken(ExchangeTokenRequest) returns (ExchangeTokenResponse);
+}
+
+message ExchangeTokenRequest {
+  // The tenant ID the user belongs to.
+  string tenant_id = 1;
+
+  // The user ID (subject) to authenticate as.
+  string user_id = 2;
+
+  // The application token (e.g., OIDC ID Token, or custom app token).
+  // In a real implementation, this would be validated against an IDP.
+  string token = 3;
+}
+
+message ExchangeTokenResponse {
+  // The NATS User JWT.
+  string jwt = 1;
+
+  // The NATS User Seed (Private Key).
+  // Combined with JWT, this forms the Creds file.
+  string seed = 2;
+
+  // The full NATS Creds file content (convenience).
+  string creds = 3;
+
+  // Expiration time of the credentials (unix timestamp).
+  int64 expires_at = 4;
+}

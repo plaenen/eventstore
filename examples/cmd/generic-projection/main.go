@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 
-	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"github.com/plaenen/eventstore/pkg/eventsourcing/store/sqlite"
 	"google.golang.org/protobuf/proto"
@@ -74,7 +73,7 @@ func main() {
 
 	projection := eventsourcing.NewProjectionBuilder("customer-activity").
 		// Account domain events
-		On(accountv1.OnAccountOpened(func(ctx context.Context, event *accountv1.AccountOpenedEvent, envelope *eventsourcing.EventEnvelope) error {
+		On(accountdomainv1.OnAccountOpened(func(ctx context.Context, event *accountdomainv1.AccountOpenedEvent, envelope *eventsourcing.EventEnvelope) error {
 			fmt.Printf("   🏦 Account domain: AccountOpened (ID: %s, Owner: %s)\n",
 				event.AccountId, event.OwnerName)
 
@@ -115,7 +114,7 @@ func main() {
 
 			return tx.Commit()
 		})).
-		On(accountv1.OnMoneyDeposited(func(ctx context.Context, event *accountv1.MoneyDepositedEvent, envelope *eventsourcing.EventEnvelope) error {
+		On(accountdomainv1.OnMoneyDeposited(func(ctx context.Context, event *accountdomainv1.MoneyDepositedEvent, envelope *eventsourcing.EventEnvelope) error {
 			fmt.Printf("   💵 Account domain: MoneyDeposited (Amount: %s)\n", event.Amount)
 
 			tx, err := db.Begin()
@@ -148,7 +147,7 @@ func main() {
 
 			return tx.Commit()
 		})).
-		On(accountv1.OnMoneyWithdrawn(func(ctx context.Context, event *accountv1.MoneyWithdrawnEvent, envelope *eventsourcing.EventEnvelope) error {
+		On(accountdomainv1.OnMoneyWithdrawn(func(ctx context.Context, event *accountdomainv1.MoneyWithdrawnEvent, envelope *eventsourcing.EventEnvelope) error {
 			fmt.Printf("   💸 Account domain: MoneyWithdrawn (Amount: %s)\n", event.Amount)
 
 			tx, err := db.Begin()
@@ -181,7 +180,7 @@ func main() {
 
 			return tx.Commit()
 		})).
-		On(accountv1.OnAccountClosed(func(ctx context.Context, event *accountv1.AccountClosedEvent, envelope *eventsourcing.EventEnvelope) error {
+		On(accountdomainv1.OnAccountClosed(func(ctx context.Context, event *accountdomainv1.AccountClosedEvent, envelope *eventsourcing.EventEnvelope) error {
 			fmt.Printf("   🔒 Account domain: AccountClosed\n")
 
 			tx, err := db.Begin()
@@ -237,9 +236,9 @@ func main() {
 			Event: eventsourcing.Event{
 				ID:          "evt-1",
 				AggregateID: "acc-alice-001",
-				EventType:   accountv1.AccountOpenedEventType,
+				EventType:   accountdomainv1.AccountOpenedEventType,
 				Version:     1,
-				Data:        mustMarshal(&accountv1.AccountOpenedEvent{
+				Data: mustMarshal(&accountdomainv1.AccountOpenedEvent{
 					AccountId:      "acc-alice-001",
 					OwnerName:      "Alice",
 					InitialBalance: "1000.00",
@@ -251,9 +250,9 @@ func main() {
 			Event: eventsourcing.Event{
 				ID:          "evt-2",
 				AggregateID: "acc-alice-001",
-				EventType:   accountv1.MoneyDepositedEventType,
+				EventType:   accountdomainv1.MoneyDepositedEventType,
 				Version:     2,
-				Data:        mustMarshal(&accountv1.MoneyDepositedEvent{
+				Data: mustMarshal(&accountdomainv1.MoneyDepositedEvent{
 					AccountId:  "acc-alice-001",
 					Amount:     "500.00",
 					NewBalance: "1500.00",
@@ -265,9 +264,9 @@ func main() {
 			Event: eventsourcing.Event{
 				ID:          "evt-3",
 				AggregateID: "acc-alice-001",
-				EventType:   accountv1.MoneyWithdrawnEventType,
+				EventType:   accountdomainv1.MoneyWithdrawnEventType,
 				Version:     3,
-				Data:        mustMarshal(&accountv1.MoneyWithdrawnEvent{
+				Data: mustMarshal(&accountdomainv1.MoneyWithdrawnEvent{
 					AccountId:  "acc-alice-001",
 					Amount:     "200.00",
 					NewBalance: "1300.00",
@@ -279,9 +278,9 @@ func main() {
 			Event: eventsourcing.Event{
 				ID:          "evt-4",
 				AggregateID: "acc-alice-001",
-				EventType:   accountv1.MoneyDepositedEventType,
+				EventType:   accountdomainv1.MoneyDepositedEventType,
 				Version:     4,
-				Data:        mustMarshal(&accountv1.MoneyDepositedEvent{
+				Data: mustMarshal(&accountdomainv1.MoneyDepositedEvent{
 					AccountId:  "acc-alice-001",
 					Amount:     "700.00",
 					NewBalance: "2000.00",
@@ -293,9 +292,9 @@ func main() {
 			Event: eventsourcing.Event{
 				ID:          "evt-5",
 				AggregateID: "acc-alice-001",
-				EventType:   accountv1.AccountClosedEventType,
+				EventType:   accountdomainv1.AccountClosedEventType,
 				Version:     5,
-				Data:        mustMarshal(&accountv1.AccountClosedEvent{
+				Data: mustMarshal(&accountdomainv1.AccountClosedEvent{
 					AccountId:    "acc-alice-001",
 					FinalBalance: "2000.00",
 					Timestamp:    1234567930,
@@ -348,7 +347,7 @@ func main() {
 	fmt.Println()
 	fmt.Println("Usage pattern:")
 	fmt.Println("  eventsourcing.NewProjectionBuilder(\"name\").")
-	fmt.Println("    On(accountv1.OnAccountOpened(...)).")
+	fmt.Println("    On(accountdomainv1.OnAccountOpened(...)).")
 	fmt.Println("    On(orderv1.OnOrderPlaced(...)).")
 	fmt.Println("    On(userv1.OnUserRegistered(...)).")
 	fmt.Println("    Build()")

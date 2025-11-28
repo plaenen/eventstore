@@ -208,7 +208,7 @@ package main
 import (
     "log"
 
-    natsserver "github.com/plaenen/eventstore/pkg/infrastructure/nats"
+    natsserver "github.com/plaenen/eventstore/pkg/embeddednats"
     "github.com/plaenen/eventstore/pkg/security/tls"
 )
 
@@ -243,7 +243,7 @@ import (
     "log"
 
     natscqrs "github.com/plaenen/eventstore/pkg/cqrs/nats"
-    natsserver "github.com/plaenen/eventstore/pkg/infrastructure/nats"
+    natsserver "github.com/plaenen/eventstore/pkg/embeddednats"
     "github.com/plaenen/eventstore/pkg/security/tls"
 )
 
@@ -380,7 +380,7 @@ transport, err := natscqrs.NewTransport(&natscqrs.TransportConfig{
 
 ```go
 import (
-    natsserver "github.com/plaenen/eventstore/pkg/infrastructure/nats"
+    natsserver "github.com/plaenen/eventstore/pkg/embeddednats"
 )
 
 // Method 1: Using WithTLSConfig

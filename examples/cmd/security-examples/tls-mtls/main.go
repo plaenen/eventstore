@@ -14,7 +14,7 @@ import (
 	"path/filepath"
 	"time"
 
-	natsserver "github.com/plaenen/eventstore/pkg/infrastructure/nats"
+	natsserver "github.com/plaenen/eventstore/pkg/embeddednats"
 	"github.com/plaenen/eventstore/pkg/security/tls"
 
 	"github.com/nats-io/nats.go"

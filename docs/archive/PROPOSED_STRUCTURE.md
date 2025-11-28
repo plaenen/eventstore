@@ -361,7 +361,7 @@ subscriber.Subscribe(ctx, "events.account.*", func(ctx context.Context, event *d
 ### Testing with Embedded NATS
 ```go
 import (
-    infraNats "github.com/plaenen/eventstore/pkg/infrastructure/nats"
+    infraNats "github.com/plaenen/eventstore/pkg/embeddednats"
 )
 
 srv, _ := infraNats.StartEmbeddedServer()

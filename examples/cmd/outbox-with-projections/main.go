@@ -9,10 +9,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
+	infranats "github.com/plaenen/eventstore/pkg/embeddednats"
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"github.com/plaenen/eventstore/pkg/eventsourcing/store/sqlite"
-	infranats "github.com/plaenen/eventstore/pkg/infrastructure/nats"
 	natseventbus "github.com/plaenen/eventstore/pkg/messaging/nats"
 	"github.com/plaenen/eventstore/pkg/runner"
 	"github.com/plaenen/eventstore/pkg/runtime/embeddednats"
@@ -175,7 +174,7 @@ func main() {
 			`)
 			return err
 		}).
-		On(accountv1.OnAccountOpened(func(ctx context.Context, event *accountv1.AccountOpenedEvent, envelope *eventsourcing.EventEnvelope) error {
+		On(accountdomainv1.OnAccountOpened(func(ctx context.Context, event *accountdomainv1.AccountOpenedEvent, envelope *eventsourcing.EventEnvelope) error {
 			projectionEventCount.Add(1)
 			fmt.Printf("   📊 Projection: AccountOpened - %s (%s) = %s\n",
 				event.OwnerName, event.AccountId, event.InitialBalance)
@@ -187,7 +186,7 @@ func main() {
 			`, event.AccountId, event.OwnerName, event.InitialBalance, envelope.Version, event.Timestamp)
 			return err
 		})).
-		On(accountv1.OnMoneyDeposited(func(ctx context.Context, event *accountv1.MoneyDepositedEvent, envelope *eventsourcing.EventEnvelope) error {
+		On(accountdomainv1.OnMoneyDeposited(func(ctx context.Context, event *accountdomainv1.MoneyDepositedEvent, envelope *eventsourcing.EventEnvelope) error {
 			projectionEventCount.Add(1)
 			fmt.Printf("   📊 Projection: MoneyDeposited - %s + %s = %s\n",
 				event.AccountId, event.Amount, event.NewBalance)
@@ -200,7 +199,7 @@ func main() {
 			`, event.NewBalance, envelope.Version, event.Timestamp, event.AccountId)
 			return err
 		})).
-		On(accountv1.OnMoneyWithdrawn(func(ctx context.Context, event *accountv1.MoneyWithdrawnEvent, envelope *eventsourcing.EventEnvelope) error {
+		On(accountdomainv1.OnMoneyWithdrawn(func(ctx context.Context, event *accountdomainv1.MoneyWithdrawnEvent, envelope *eventsourcing.EventEnvelope) error {
 			projectionEventCount.Add(1)
 			fmt.Printf("   📊 Projection: MoneyWithdrawn - %s - %s = %s\n",
 				event.AccountId, event.Amount, event.NewBalance)
@@ -408,7 +407,7 @@ func main() {
 // Helper functions to create events
 
 func createAccountOpenedEvent(accountID, ownerName, initialBalance string) *eventsourcing.Event {
-	payload := &accountv1.AccountOpenedEvent{
+	payload := &accountdomainv1.AccountOpenedEvent{
 		AccountId:      accountID,
 		OwnerName:      ownerName,
 		InitialBalance: initialBalance,
@@ -421,7 +420,7 @@ func createAccountOpenedEvent(accountID, ownerName, initialBalance string) *even
 		ID:            uuid.New().String(),
 		AggregateID:   accountID,
 		AggregateType: "Account",
-		EventType:     "account.v1.AccountOpenedEvent",
+		EventType:     "account.domain.v1.AccountOpenedEvent",
 		Version:       1,
 		Timestamp:     time.Now(),
 		Data:          data,
@@ -430,7 +429,7 @@ func createAccountOpenedEvent(accountID, ownerName, initialBalance string) *even
 }
 
 func createMoneyDepositedEvent(accountID, amount, newBalance string, version int64) *eventsourcing.Event {
-	payload := &accountv1.MoneyDepositedEvent{
+	payload := &accountdomainv1.MoneyDepositedEvent{
 		AccountId:  accountID,
 		Amount:     amount,
 		NewBalance: newBalance,
@@ -443,7 +442,7 @@ func createMoneyDepositedEvent(accountID, amount, newBalance string, version int
 		ID:            uuid.New().String(),
 		AggregateID:   accountID,
 		AggregateType: "Account",
-		EventType:     "account.v1.MoneyDepositedEvent",
+		EventType:     "account.domain.v1.MoneyDepositedEvent",
 		Version:       version,
 		Timestamp:     time.Now(),
 		Data:          data,
@@ -452,7 +451,7 @@ func createMoneyDepositedEvent(accountID, amount, newBalance string, version int
 }
 
 func createMoneyWithdrawnEvent(accountID, amount, newBalance string, version int64) *eventsourcing.Event {
-	payload := &accountv1.MoneyWithdrawnEvent{
+	payload := &accountdomainv1.MoneyWithdrawnEvent{
 		AccountId:  accountID,
 		Amount:     amount,
 		NewBalance: newBalance,
@@ -465,7 +464,7 @@ func createMoneyWithdrawnEvent(accountID, amount, newBalance string, version int
 		ID:            uuid.New().String(),
 		AggregateID:   accountID,
 		AggregateType: "Account",
-		EventType:     "account.v1.MoneyWithdrawnEvent",
+		EventType:     "account.domain.v1.MoneyWithdrawnEvent",
 		Version:       version,
 		Timestamp:     time.Now(),
 		Data:          data,

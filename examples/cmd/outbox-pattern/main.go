@@ -8,10 +8,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
+	infranats "github.com/plaenen/eventstore/pkg/embeddednats"
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"github.com/plaenen/eventstore/pkg/eventsourcing/store/sqlite"
-	infranats "github.com/plaenen/eventstore/pkg/infrastructure/nats"
 	natseventbus "github.com/plaenen/eventstore/pkg/messaging/nats"
 	"github.com/plaenen/eventstore/pkg/runner"
 	"github.com/plaenen/eventstore/pkg/runtime/embeddednats"
@@ -322,7 +321,7 @@ func main() {
 // Helper functions to create events
 
 func createAccountOpenedEvent(accountID, ownerName, initialBalance string) *eventsourcing.Event {
-	payload := &accountv1.AccountOpenedEvent{
+	payload := &accountdomainv1.AccountOpenedEvent{
 		AccountId:      accountID,
 		OwnerName:      ownerName,
 		InitialBalance: initialBalance,
@@ -335,7 +334,7 @@ func createAccountOpenedEvent(accountID, ownerName, initialBalance string) *even
 		ID:            uuid.New().String(),
 		AggregateID:   accountID,
 		AggregateType: "Account",
-		EventType:     "account.v1.AccountOpenedEvent",
+		EventType:     "account.domain.v1.AccountOpenedEvent",
 		Version:       1,
 		Timestamp:     time.Now(),
 		Data:          data,
@@ -344,7 +343,7 @@ func createAccountOpenedEvent(accountID, ownerName, initialBalance string) *even
 }
 
 func createMoneyDepositedEvent(accountID, amount, newBalance string, version int64) *eventsourcing.Event {
-	payload := &accountv1.MoneyDepositedEvent{
+	payload := &accountdomainv1.MoneyDepositedEvent{
 		AccountId:  accountID,
 		Amount:     amount,
 		NewBalance: newBalance,
@@ -357,7 +356,7 @@ func createMoneyDepositedEvent(accountID, amount, newBalance string, version int
 		ID:            uuid.New().String(),
 		AggregateID:   accountID,
 		AggregateType: "Account",
-		EventType:     "account.v1.MoneyDepositedEvent",
+		EventType:     "account.domain.v1.MoneyDepositedEvent",
 		Version:       version,
 		Timestamp:     time.Now(),
 		Data:          data,
@@ -366,7 +365,7 @@ func createMoneyDepositedEvent(accountID, amount, newBalance string, version int
 }
 
 func createMoneyWithdrawnEvent(accountID, amount, newBalance string, version int64) *eventsourcing.Event {
-	payload := &accountv1.MoneyWithdrawnEvent{
+	payload := &accountdomainv1.MoneyWithdrawnEvent{
 		AccountId:  accountID,
 		Amount:     amount,
 		NewBalance: newBalance,
@@ -379,7 +378,7 @@ func createMoneyWithdrawnEvent(accountID, amount, newBalance string, version int
 		ID:            uuid.New().String(),
 		AggregateID:   accountID,
 		AggregateType: "Account",
-		EventType:     "account.v1.MoneyWithdrawnEvent",
+		EventType:     "account.domain.v1.MoneyWithdrawnEvent",
 		Version:       version,
 		Timestamp:     time.Now(),
 		Data:          data,

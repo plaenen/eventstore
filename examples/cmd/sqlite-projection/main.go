@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"log"
 
-	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
+	accountdomainv1 "github.com/plaenen/eventstore/examples/pb/account/domain/v1"
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"github.com/plaenen/eventstore/pkg/eventsourcing/store/sqlite"
 	"google.golang.org/protobuf/proto"
@@ -82,7 +82,7 @@ func main() {
 			return err
 		}).
 		// Register event handlers - transactions handled automatically!
-		On(accountv1.OnAccountOpened(func(ctx context.Context, event *accountv1.AccountOpenedEvent, envelope *eventsourcing.EventEnvelope) error {
+		On(accountdomainv1.OnAccountOpened(func(ctx context.Context, event *accountdomainv1.AccountOpenedEvent, envelope *eventsourcing.EventEnvelope) error {
 			fmt.Printf("   ✨ AccountOpened: %s (Owner: %s)\n", event.AccountId, event.OwnerName)
 
 			// Get transaction from context - automatically provided!
@@ -99,7 +99,7 @@ func main() {
 			return err
 			// Transaction commit and checkpoint update happen automatically!
 		})).
-		On(accountv1.OnMoneyDeposited(func(ctx context.Context, event *accountv1.MoneyDepositedEvent, envelope *eventsourcing.EventEnvelope) error {
+		On(accountdomainv1.OnMoneyDeposited(func(ctx context.Context, event *accountdomainv1.MoneyDepositedEvent, envelope *eventsourcing.EventEnvelope) error {
 			fmt.Printf("   💵 MoneyDeposited: Amount %s\n", event.Amount)
 
 			tx, _ := sqlite.TxFromContext(ctx)
@@ -115,7 +115,7 @@ func main() {
 
 			return err
 		})).
-		On(accountv1.OnMoneyWithdrawn(func(ctx context.Context, event *accountv1.MoneyWithdrawnEvent, envelope *eventsourcing.EventEnvelope) error {
+		On(accountdomainv1.OnMoneyWithdrawn(func(ctx context.Context, event *accountdomainv1.MoneyWithdrawnEvent, envelope *eventsourcing.EventEnvelope) error {
 			fmt.Printf("   💸 MoneyWithdrawn: Amount %s\n", event.Amount)
 
 			tx, _ := sqlite.TxFromContext(ctx)
@@ -130,7 +130,7 @@ func main() {
 
 			return err
 		})).
-		On(accountv1.OnAccountClosed(func(ctx context.Context, event *accountv1.AccountClosedEvent, envelope *eventsourcing.EventEnvelope) error {
+		On(accountdomainv1.OnAccountClosed(func(ctx context.Context, event *accountdomainv1.AccountClosedEvent, envelope *eventsourcing.EventEnvelope) error {
 			fmt.Printf("   🔒 AccountClosed\n")
 
 			tx, _ := sqlite.TxFromContext(ctx)
@@ -167,9 +167,9 @@ func main() {
 			Event: eventsourcing.Event{
 				ID:          "evt-1",
 				AggregateID: "acc-bob-001",
-				EventType:   accountv1.AccountOpenedEventType,
+				EventType:   accountdomainv1.AccountOpenedEventType,
 				Version:     1,
-				Data:        mustMarshal(&accountv1.AccountOpenedEvent{
+				Data: mustMarshal(&accountdomainv1.AccountOpenedEvent{
 					AccountId:      "acc-bob-001",
 					OwnerName:      "Bob",
 					InitialBalance: "5000.00",
@@ -181,9 +181,9 @@ func main() {
 			Event: eventsourcing.Event{
 				ID:          "evt-2",
 				AggregateID: "acc-bob-001",
-				EventType:   accountv1.MoneyDepositedEventType,
+				EventType:   accountdomainv1.MoneyDepositedEventType,
 				Version:     2,
-				Data:        mustMarshal(&accountv1.MoneyDepositedEvent{
+				Data: mustMarshal(&accountdomainv1.MoneyDepositedEvent{
 					AccountId:  "acc-bob-001",
 					Amount:     "1000.00",
 					NewBalance: "6000.00",
@@ -195,9 +195,9 @@ func main() {
 			Event: eventsourcing.Event{
 				ID:          "evt-3",
 				AggregateID: "acc-bob-001",
-				EventType:   accountv1.MoneyWithdrawnEventType,
+				EventType:   accountdomainv1.MoneyWithdrawnEventType,
 				Version:     3,
-				Data:        mustMarshal(&accountv1.MoneyWithdrawnEvent{
+				Data: mustMarshal(&accountdomainv1.MoneyWithdrawnEvent{
 					AccountId:  "acc-bob-001",
 					Amount:     "500.00",
 					NewBalance: "5500.00",
@@ -209,9 +209,9 @@ func main() {
 			Event: eventsourcing.Event{
 				ID:          "evt-4",
 				AggregateID: "acc-bob-001",
-				EventType:   accountv1.MoneyDepositedEventType,
+				EventType:   accountdomainv1.MoneyDepositedEventType,
 				Version:     4,
-				Data:        mustMarshal(&accountv1.MoneyDepositedEvent{
+				Data: mustMarshal(&accountdomainv1.MoneyDepositedEvent{
 					AccountId:  "acc-bob-001",
 					Amount:     "2000.00",
 					NewBalance: "7500.00",
@@ -223,9 +223,9 @@ func main() {
 			Event: eventsourcing.Event{
 				ID:          "evt-5",
 				AggregateID: "acc-bob-001",
-				EventType:   accountv1.AccountClosedEventType,
+				EventType:   accountdomainv1.AccountClosedEventType,
 				Version:     5,
-				Data:        mustMarshal(&accountv1.AccountClosedEvent{
+				Data: mustMarshal(&accountdomainv1.AccountClosedEvent{
 					AccountId:    "acc-bob-001",
 					FinalBalance: "7500.00",
 					Timestamp:    1234567930,
@@ -299,7 +299,7 @@ func main() {
 	fmt.Println("Usage pattern:")
 	fmt.Println("  sqlite.NewSQLiteProjectionBuilder(name, db, checkpointStore, eventStore).")
 	fmt.Println("    WithSchema(func(ctx, db) error { ... }).")
-	fmt.Println("    On(accountv1.OnAccountOpened(func(ctx, event, envelope) error {")
+	fmt.Println("    On(accountdomainv1.OnAccountOpened(func(ctx, event, envelope) error {")
 	fmt.Println("      tx, _ := sqlite.TxFromContext(ctx)")
 	fmt.Println("      _, err := tx.Exec(\"INSERT ...\")")
 	fmt.Println("      return err")
