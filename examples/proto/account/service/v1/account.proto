@@ -1,0 +1,163 @@
+syntax = "proto3";
+
+package account.service.v1;
+
+option go_package = "github.com/plaenen/eventstore/examples/pb/account/service/v1;accountservicev1";
+
+import "eventsourcing/options.proto";
+import "cqrs/options.proto";
+import "account/domain/v1/account.proto";
+
+// ============================================================================
+// Service Definitions
+// ============================================================================
+
+// AccountCommandService handles write operations (commands)
+service AccountCommandService {
+  // CQRS options - for transport infrastructure
+  option (cqrs.service) = {
+    service_type: SERVICE_TYPE_COMMAND
+    generate_client: true
+  };
+
+  // OpenAccount creates a new bank account
+  rpc OpenAccount(OpenAccountCommand) returns (OpenAccountResponse);
+
+  // Deposit adds money to an account
+  rpc Deposit(DepositCommand) returns (DepositResponse);
+
+  // Withdraw removes money from an account
+  rpc Withdraw(WithdrawCommand) returns (WithdrawResponse);
+
+  // CloseAccount closes an existing account
+  rpc CloseAccount(CloseAccountCommand) returns (CloseAccountResponse);
+}
+
+// AccountQueryService handles read operations (queries)
+service AccountQueryService {
+  // CQRS options - for transport infrastructure
+  option (cqrs.service) = {
+    service_type: SERVICE_TYPE_QUERY
+    generate_client: true
+  };
+
+  // GetAccount retrieves account details by ID
+  rpc GetAccount(GetAccountRequest) returns (AccountView);
+
+  // ListAccounts retrieves all accounts with pagination
+  rpc ListAccounts(ListAccountsRequest) returns (ListAccountsResponse);
+
+  // GetAccountBalance retrieves just the balance
+  rpc GetAccountBalance(GetAccountBalanceRequest) returns (BalanceView);
+
+  // GetAccountHistory retrieves transaction history
+  rpc GetAccountHistory(GetAccountHistoryRequest) returns (AccountHistoryResponse);
+}
+
+// ============================================================================
+// Commands (Write Side)
+// ============================================================================
+
+message OpenAccountCommand {
+  string account_id = 1;
+  string owner_name = 2;
+  string initial_balance = 3; // Decimal as string
+}
+
+message OpenAccountResponse {
+  string account_id = 1;
+  int64 version = 2;
+}
+
+message DepositCommand {
+  string account_id = 1;
+  string amount = 2;
+}
+
+message DepositResponse {
+  string new_balance = 1;
+  int64 version = 2;
+}
+
+message WithdrawCommand {
+  string account_id = 1;
+  string amount = 2;
+}
+
+message WithdrawResponse {
+  string new_balance = 1;
+  int64 version = 2;
+}
+
+message CloseAccountCommand {
+  string account_id = 1;
+}
+
+message CloseAccountResponse {
+  string final_balance = 1;
+  int64 version = 2;
+}
+
+// ============================================================================
+// Queries (Read Side)
+// ============================================================================
+
+message GetAccountRequest {
+  string account_id = 1;
+}
+
+message AccountView {
+  string account_id = 1;
+  string owner_name = 2;
+  string balance = 3;
+  account.domain.v1.AccountStatus status = 4;
+  int64 version = 5;
+  int64 created_at = 6;
+  int64 updated_at = 7;
+}
+
+message ListAccountsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListAccountsResponse {
+  repeated AccountView accounts = 1;
+  string next_page_token = 2;
+  int32 total_count = 3;
+}
+
+message GetAccountBalanceRequest {
+  string account_id = 1;
+}
+
+message BalanceView {
+  string account_id = 1;
+  string balance = 2;
+  int64 version = 3;
+}
+
+message GetAccountHistoryRequest {
+  string account_id = 1;
+  int32 limit = 2;
+}
+
+message AccountHistoryResponse {
+  repeated TransactionView transactions = 1;
+}
+
+message TransactionView {
+  string transaction_id = 1;
+  TransactionType type = 2;
+  string amount = 3;
+  string balance_after = 4;
+  int64 timestamp = 5;
+}
+
+enum TransactionType {
+  TRANSACTION_TYPE_UNSPECIFIED = 0;
+  TRANSACTION_TYPE_OPENED = 1;
+  TRANSACTION_TYPE_DEPOSIT = 2;
+  TRANSACTION_TYPE_WITHDRAWAL = 3;
+  TRANSACTION_TYPE_CLOSED = 4;
+}

@@ -2,7 +2,7 @@
 // version: 0.0.1
 // Server service for v1
 
-package accountv1
+package servicev1
 
 import (
 	"context"
@@ -36,16 +36,16 @@ func NewCqrsAccountCommandServiceServer(server cqrs.Server, handler CqrsAccountC
 
 // Start registers handlers and starts the server
 func (s *CqrsAccountCommandServiceServer) Start(ctx context.Context) error {
-	if err := s.server.RegisterHandler("account.v1.AccountCommandService.OpenAccount", s.handleOpenAccount); err != nil {
+	if err := s.server.RegisterHandler("account.service.v1.AccountCommandService.OpenAccount", s.handleOpenAccount); err != nil {
 		return fmt.Errorf("failed to register OpenAccount: %w", err)
 	}
-	if err := s.server.RegisterHandler("account.v1.AccountCommandService.Deposit", s.handleDeposit); err != nil {
+	if err := s.server.RegisterHandler("account.service.v1.AccountCommandService.Deposit", s.handleDeposit); err != nil {
 		return fmt.Errorf("failed to register Deposit: %w", err)
 	}
-	if err := s.server.RegisterHandler("account.v1.AccountCommandService.Withdraw", s.handleWithdraw); err != nil {
+	if err := s.server.RegisterHandler("account.service.v1.AccountCommandService.Withdraw", s.handleWithdraw); err != nil {
 		return fmt.Errorf("failed to register Withdraw: %w", err)
 	}
-	if err := s.server.RegisterHandler("account.v1.AccountCommandService.CloseAccount", s.handleCloseAccount); err != nil {
+	if err := s.server.RegisterHandler("account.service.v1.AccountCommandService.CloseAccount", s.handleCloseAccount); err != nil {
 		return fmt.Errorf("failed to register CloseAccount: %w", err)
 	}
 
@@ -121,16 +121,16 @@ func NewCqrsAccountQueryServiceServer(server cqrs.Server, handler CqrsAccountQue
 
 // Start registers handlers and starts the server
 func (s *CqrsAccountQueryServiceServer) Start(ctx context.Context) error {
-	if err := s.server.RegisterHandler("account.v1.AccountQueryService.GetAccount", s.handleGetAccount); err != nil {
+	if err := s.server.RegisterHandler("account.service.v1.AccountQueryService.GetAccount", s.handleGetAccount); err != nil {
 		return fmt.Errorf("failed to register GetAccount: %w", err)
 	}
-	if err := s.server.RegisterHandler("account.v1.AccountQueryService.ListAccounts", s.handleListAccounts); err != nil {
+	if err := s.server.RegisterHandler("account.service.v1.AccountQueryService.ListAccounts", s.handleListAccounts); err != nil {
 		return fmt.Errorf("failed to register ListAccounts: %w", err)
 	}
-	if err := s.server.RegisterHandler("account.v1.AccountQueryService.GetAccountBalance", s.handleGetAccountBalance); err != nil {
+	if err := s.server.RegisterHandler("account.service.v1.AccountQueryService.GetAccountBalance", s.handleGetAccountBalance); err != nil {
 		return fmt.Errorf("failed to register GetAccountBalance: %w", err)
 	}
-	if err := s.server.RegisterHandler("account.v1.AccountQueryService.GetAccountHistory", s.handleGetAccountHistory); err != nil {
+	if err := s.server.RegisterHandler("account.service.v1.AccountQueryService.GetAccountHistory", s.handleGetAccountHistory); err != nil {
 		return fmt.Errorf("failed to register GetAccountHistory: %w", err)
 	}
 

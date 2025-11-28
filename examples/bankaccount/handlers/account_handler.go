@@ -6,33 +6,34 @@ import (
 	"time"
 
 	exampledomain "github.com/plaenen/eventstore/examples/bankaccount/domain"
-	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
+	accountdomainv1 "github.com/plaenen/eventstore/examples/pb/account/domain/v1"
+	accountservicev1 "github.com/plaenen/eventstore/examples/pb/account/service/v1"
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"github.com/shopspring/decimal"
 )
 
 // AccountHandler implements CQRS handler interfaces for commands and queries
 type AccountHandler struct {
-	repo *accountv1.AccountRepository
+	repo *accountdomainv1.AccountRepository
 }
 
 // NewAccountHandler creates a new unified account handler
-func NewAccountHandler(repo *accountv1.AccountRepository) *AccountHandler {
+func NewAccountHandler(repo *accountdomainv1.AccountRepository) *AccountHandler {
 	return &AccountHandler{
 		repo: repo,
 	}
 }
 
 // Ensure AccountHandler implements the CQRS interfaces
-var _ accountv1.CqrsAccountCommandServiceHandler = (*AccountHandler)(nil)
-var _ accountv1.CqrsAccountQueryServiceHandler = (*AccountHandler)(nil)
+var _ accountservicev1.CqrsAccountCommandServiceHandler = (*AccountHandler)(nil)
+var _ accountservicev1.CqrsAccountQueryServiceHandler = (*AccountHandler)(nil)
 
 // ============================================================================
 // Commands
 // ============================================================================
 
 // OpenAccount handles the OpenAccount command
-func (h *AccountHandler) OpenAccount(ctx context.Context, cmd *accountv1.OpenAccountCommand) (*accountv1.OpenAccountResponse, error) {
+func (h *AccountHandler) OpenAccount(ctx context.Context, cmd *accountservicev1.OpenAccountCommand) (*accountservicev1.OpenAccountResponse, error) {
 	// Validate command
 	if cmd.AccountId == "" {
 		return nil, fmt.Errorf("account ID is required")
@@ -52,7 +53,7 @@ func (h *AccountHandler) OpenAccount(ctx context.Context, cmd *accountv1.OpenAcc
 	agg := exampledomain.NewAccount(cmd.AccountId)
 
 	// Create and emit event using type-safe helper
-	event := &accountv1.AccountOpenedEvent{
+	event := &accountdomainv1.AccountOpenedEvent{
 		AccountId:      cmd.AccountId,
 		OwnerName:      cmd.OwnerName,
 		InitialBalance: cmd.InitialBalance,
@@ -62,7 +63,7 @@ func (h *AccountHandler) OpenAccount(ctx context.Context, cmd *accountv1.OpenAcc
 	// Use generated type-safe Apply method with unique constraint
 	// Note: Metadata can be extracted from context if needed using standard Go context patterns
 	if err := agg.ApplyAccountOpenedEvent(event,
-		accountv1.WithUniqueConstraints(eventsourcing.UniqueConstraint{
+		accountdomainv1.WithUniqueConstraints(eventsourcing.UniqueConstraint{
 			IndexName: "account_id",
 			Value:     cmd.AccountId,
 			Operation: eventsourcing.ConstraintClaim,
@@ -76,14 +77,14 @@ func (h *AccountHandler) OpenAccount(ctx context.Context, cmd *accountv1.OpenAcc
 		return nil, fmt.Errorf("failed to save account: %w", err)
 	}
 
-	return &accountv1.OpenAccountResponse{
+	return &accountservicev1.OpenAccountResponse{
 		AccountId: cmd.AccountId,
 		Version:   agg.Version(),
 	}, nil
 }
 
 // Deposit handles the Deposit command
-func (h *AccountHandler) Deposit(ctx context.Context, cmd *accountv1.DepositCommand) (*accountv1.DepositResponse, error) {
+func (h *AccountHandler) Deposit(ctx context.Context, cmd *accountservicev1.DepositCommand) (*accountservicev1.DepositResponse, error) {
 	// Validate command
 	if cmd.AccountId == "" {
 		return nil, fmt.Errorf("account ID is required")
@@ -94,12 +95,12 @@ func (h *AccountHandler) Deposit(ctx context.Context, cmd *accountv1.DepositComm
 		return nil, fmt.Errorf("amount must be a positive number")
 	}
 
-	var response *accountv1.DepositResponse
+	var response *accountservicev1.DepositResponse
 
 	// Retry on concurrency conflicts
-	err = h.repo.RetryOnConflict(cmd.AccountId, 3, func(agg *accountv1.AccountAggregate) error {
+	err = h.repo.RetryOnConflict(cmd.AccountId, 3, func(agg *accountdomainv1.AccountAggregate) error {
 		// Check account is open
-		if agg.Status != accountv1.AccountStatus_ACCOUNT_STATUS_OPEN {
+		if agg.Status != accountdomainv1.AccountStatus_ACCOUNT_STATUS_OPEN {
 			return fmt.Errorf("cannot deposit to a closed account")
 		}
 
@@ -108,7 +109,7 @@ func (h *AccountHandler) Deposit(ctx context.Context, cmd *accountv1.DepositComm
 		newBalance := currentBalance.Add(amount)
 
 		// Create and emit event using type-safe helper
-		event := &accountv1.MoneyDepositedEvent{
+		event := &accountdomainv1.MoneyDepositedEvent{
 			AccountId:  cmd.AccountId,
 			Amount:     cmd.Amount,
 			NewBalance: newBalance.String(),
@@ -126,7 +127,7 @@ func (h *AccountHandler) Deposit(ctx context.Context, cmd *accountv1.DepositComm
 		}
 
 		// Store response for return
-		response = &accountv1.DepositResponse{
+		response = &accountservicev1.DepositResponse{
 			NewBalance: newBalance.String(),
 			Version:    agg.Version(),
 		}
@@ -142,7 +143,7 @@ func (h *AccountHandler) Deposit(ctx context.Context, cmd *accountv1.DepositComm
 }
 
 // Withdraw handles the Withdraw command
-func (h *AccountHandler) Withdraw(ctx context.Context, cmd *accountv1.WithdrawCommand) (*accountv1.WithdrawResponse, error) {
+func (h *AccountHandler) Withdraw(ctx context.Context, cmd *accountservicev1.WithdrawCommand) (*accountservicev1.WithdrawResponse, error) {
 	// Validate command
 	if cmd.AccountId == "" {
 		return nil, fmt.Errorf("account ID is required")
@@ -153,12 +154,12 @@ func (h *AccountHandler) Withdraw(ctx context.Context, cmd *accountv1.WithdrawCo
 		return nil, fmt.Errorf("amount must be a positive number")
 	}
 
-	var response *accountv1.WithdrawResponse
+	var response *accountservicev1.WithdrawResponse
 
 	// Retry on concurrency conflicts
-	err = h.repo.RetryOnConflict(cmd.AccountId, 3, func(agg *accountv1.AccountAggregate) error {
+	err = h.repo.RetryOnConflict(cmd.AccountId, 3, func(agg *accountdomainv1.AccountAggregate) error {
 		// Check account is open
-		if agg.Status != accountv1.AccountStatus_ACCOUNT_STATUS_OPEN {
+		if agg.Status != accountdomainv1.AccountStatus_ACCOUNT_STATUS_OPEN {
 			return fmt.Errorf("cannot withdraw from a closed account")
 		}
 
@@ -172,7 +173,7 @@ func (h *AccountHandler) Withdraw(ctx context.Context, cmd *accountv1.WithdrawCo
 		}
 
 		// Create and emit event using type-safe helper
-		event := &accountv1.MoneyWithdrawnEvent{
+		event := &accountdomainv1.MoneyWithdrawnEvent{
 			AccountId:  cmd.AccountId,
 			Amount:     cmd.Amount,
 			NewBalance: newBalance.String(),
@@ -190,7 +191,7 @@ func (h *AccountHandler) Withdraw(ctx context.Context, cmd *accountv1.WithdrawCo
 		}
 
 		// Store response for return
-		response = &accountv1.WithdrawResponse{
+		response = &accountservicev1.WithdrawResponse{
 			NewBalance: newBalance.String(),
 			Version:    agg.Version(),
 		}
@@ -206,7 +207,7 @@ func (h *AccountHandler) Withdraw(ctx context.Context, cmd *accountv1.WithdrawCo
 }
 
 // CloseAccount handles the CloseAccount command
-func (h *AccountHandler) CloseAccount(ctx context.Context, cmd *accountv1.CloseAccountCommand) (*accountv1.CloseAccountResponse, error) {
+func (h *AccountHandler) CloseAccount(ctx context.Context, cmd *accountservicev1.CloseAccountCommand) (*accountservicev1.CloseAccountResponse, error) {
 	// Validate command
 	if cmd.AccountId == "" {
 		return nil, fmt.Errorf("account ID is required")
@@ -219,12 +220,12 @@ func (h *AccountHandler) CloseAccount(ctx context.Context, cmd *accountv1.CloseA
 	}
 
 	// Check account is not already closed
-	if agg.Status == accountv1.AccountStatus_ACCOUNT_STATUS_CLOSED {
+	if agg.Status == accountdomainv1.AccountStatus_ACCOUNT_STATUS_CLOSED {
 		return nil, fmt.Errorf("account is already closed")
 	}
 
 	// Create and emit event using type-safe helper
-	event := &accountv1.AccountClosedEvent{
+	event := &accountdomainv1.AccountClosedEvent{
 		AccountId:    cmd.AccountId,
 		FinalBalance: agg.Balance,
 		Timestamp:    time.Now().Unix(),
@@ -232,7 +233,7 @@ func (h *AccountHandler) CloseAccount(ctx context.Context, cmd *accountv1.CloseA
 
 	// Use generated type-safe Apply method with constraint release
 	if err := agg.ApplyAccountClosedEvent(event,
-		accountv1.WithUniqueConstraints(eventsourcing.UniqueConstraint{
+		accountdomainv1.WithUniqueConstraints(eventsourcing.UniqueConstraint{
 			IndexName: "account_id",
 			Value:     cmd.AccountId,
 			Operation: eventsourcing.ConstraintRelease,
@@ -246,7 +247,7 @@ func (h *AccountHandler) CloseAccount(ctx context.Context, cmd *accountv1.CloseA
 		return nil, fmt.Errorf("failed to save account: %w", err)
 	}
 
-	return &accountv1.CloseAccountResponse{
+	return &accountservicev1.CloseAccountResponse{
 		FinalBalance: agg.Balance,
 		Version:      agg.Version(),
 	}, nil
@@ -257,7 +258,7 @@ func (h *AccountHandler) CloseAccount(ctx context.Context, cmd *accountv1.CloseA
 // ============================================================================
 
 // GetAccount handles the GetAccount query
-func (h *AccountHandler) GetAccount(ctx context.Context, query *accountv1.GetAccountRequest) (*accountv1.AccountView, error) {
+func (h *AccountHandler) GetAccount(ctx context.Context, query *accountservicev1.GetAccountRequest) (*accountservicev1.AccountView, error) {
 	if query.AccountId == "" {
 		return nil, fmt.Errorf("account ID is required")
 	}
@@ -269,7 +270,7 @@ func (h *AccountHandler) GetAccount(ctx context.Context, query *accountv1.GetAcc
 	}
 
 	// Convert to view
-	return &accountv1.AccountView{
+	return &accountservicev1.AccountView{
 		AccountId: agg.AccountId,
 		OwnerName: agg.OwnerName,
 		Balance:   agg.Balance,
@@ -279,17 +280,17 @@ func (h *AccountHandler) GetAccount(ctx context.Context, query *accountv1.GetAcc
 }
 
 // ListAccounts handles the ListAccounts query
-func (h *AccountHandler) ListAccounts(ctx context.Context, query *accountv1.ListAccountsRequest) (*accountv1.ListAccountsResponse, error) {
+func (h *AccountHandler) ListAccounts(ctx context.Context, query *accountservicev1.ListAccountsRequest) (*accountservicev1.ListAccountsResponse, error) {
 	// For now, return empty list (would need proper read model implementation)
-	return &accountv1.ListAccountsResponse{
-		Accounts:      []*accountv1.AccountView{},
+	return &accountservicev1.ListAccountsResponse{
+		Accounts:      []*accountservicev1.AccountView{},
 		NextPageToken: "",
 		TotalCount:    0,
 	}, nil
 }
 
 // GetAccountBalance handles the GetAccountBalance query
-func (h *AccountHandler) GetAccountBalance(ctx context.Context, query *accountv1.GetAccountBalanceRequest) (*accountv1.BalanceView, error) {
+func (h *AccountHandler) GetAccountBalance(ctx context.Context, query *accountservicev1.GetAccountBalanceRequest) (*accountservicev1.BalanceView, error) {
 	if query.AccountId == "" {
 		return nil, fmt.Errorf("account ID is required")
 	}
@@ -300,7 +301,7 @@ func (h *AccountHandler) GetAccountBalance(ctx context.Context, query *accountv1
 		return nil, fmt.Errorf("account not found: %w", err)
 	}
 
-	return &accountv1.BalanceView{
+	return &accountservicev1.BalanceView{
 		AccountId: agg.AccountId,
 		Balance:   agg.Balance,
 		Version:   agg.Version(),
@@ -308,9 +309,9 @@ func (h *AccountHandler) GetAccountBalance(ctx context.Context, query *accountv1
 }
 
 // GetAccountHistory handles the GetAccountHistory query
-func (h *AccountHandler) GetAccountHistory(ctx context.Context, query *accountv1.GetAccountHistoryRequest) (*accountv1.AccountHistoryResponse, error) {
+func (h *AccountHandler) GetAccountHistory(ctx context.Context, query *accountservicev1.GetAccountHistoryRequest) (*accountservicev1.AccountHistoryResponse, error) {
 	// For now, return empty history (would need proper event store query)
-	return &accountv1.AccountHistoryResponse{
-		Transactions: []*accountv1.TransactionView{},
+	return &accountservicev1.AccountHistoryResponse{
+		Transactions: []*accountservicev1.TransactionView{},
 	}, nil
 }

@@ -3,7 +3,7 @@
 package domain
 
 import (
-	accountv1 "github.com/plaenen/eventstore/examples/pb/account/v1"
+	accountdomainv1 "github.com/plaenen/eventstore/examples/pb/account/domain/v1"
 )
 
 // AccountAppliers implements the AccountEventApplier interface.
@@ -19,12 +19,12 @@ func NewAccountAppliers() *AccountAppliers {
 
 // NewAccount creates a new Account aggregate with appliers already injected.
 // This is the domain-level factory that handles dependency injection.
-func NewAccount(id string) *accountv1.AccountAggregate {
-	return accountv1.NewAccount(id, NewAccountAppliers())
+func NewAccount(id string) *accountdomainv1.AccountAggregate {
+	return accountdomainv1.NewAccount(id, NewAccountAppliers())
 }
 
 // ApplyAccountOpenedEvent applies the AccountOpenedEvent to the aggregate state.
-func (ap *AccountAppliers) ApplyAccountOpenedEvent(agg *accountv1.AccountAggregate, e *accountv1.AccountOpenedEvent) error {
+func (ap *AccountAppliers) ApplyAccountOpenedEvent(agg *accountdomainv1.AccountAggregate, e *accountdomainv1.AccountOpenedEvent) error {
 	agg.AccountId = e.AccountId
 	agg.OwnerName = e.OwnerName
 
@@ -48,24 +48,24 @@ func (ap *AccountAppliers) ApplyAccountOpenedEvent(agg *accountv1.AccountAggrega
 		agg.CreatedAt = e.Timestamp // Use timestamp as fallback
 	}
 
-	agg.Status = accountv1.AccountStatus_ACCOUNT_STATUS_OPEN
+	agg.Status = accountdomainv1.AccountStatus_ACCOUNT_STATUS_OPEN
 	return nil
 }
 
 // ApplyMoneyDepositedEvent applies the MoneyDepositedEvent to the aggregate state.
-func (ap *AccountAppliers) ApplyMoneyDepositedEvent(agg *accountv1.AccountAggregate, e *accountv1.MoneyDepositedEvent) error {
+func (ap *AccountAppliers) ApplyMoneyDepositedEvent(agg *accountdomainv1.AccountAggregate, e *accountdomainv1.MoneyDepositedEvent) error {
 	agg.Balance = e.NewBalance
 	return nil
 }
 
 // ApplyMoneyWithdrawnEvent applies the MoneyWithdrawnEvent to the aggregate state.
-func (ap *AccountAppliers) ApplyMoneyWithdrawnEvent(agg *accountv1.AccountAggregate, e *accountv1.MoneyWithdrawnEvent) error {
+func (ap *AccountAppliers) ApplyMoneyWithdrawnEvent(agg *accountdomainv1.AccountAggregate, e *accountdomainv1.MoneyWithdrawnEvent) error {
 	agg.Balance = e.NewBalance
 	return nil
 }
 
 // ApplyAccountClosedEvent applies the AccountClosedEvent to the aggregate state.
-func (ap *AccountAppliers) ApplyAccountClosedEvent(agg *accountv1.AccountAggregate, e *accountv1.AccountClosedEvent) error {
-	agg.Status = accountv1.AccountStatus_ACCOUNT_STATUS_CLOSED
+func (ap *AccountAppliers) ApplyAccountClosedEvent(agg *accountdomainv1.AccountAggregate, e *accountdomainv1.AccountClosedEvent) error {
+	agg.Status = accountdomainv1.AccountStatus_ACCOUNT_STATUS_CLOSED
 	return nil
 }
