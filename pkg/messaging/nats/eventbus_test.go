@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
-	natsserver "github.com/plaenen/eventstore/pkg/infrastructure/nats"
+	natsserver "github.com/plaenen/eventstore/pkg/embeddednats"
 	natspkg "github.com/plaenen/eventstore/pkg/messaging/nats"
 )
 

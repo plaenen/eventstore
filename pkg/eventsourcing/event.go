@@ -219,6 +219,9 @@ type EventBus interface {
 
 // EventFilter defines criteria for filtering events.
 type EventFilter struct {
+	// TenantIDs filters by tenant ID (empty = all tenants)
+	TenantIDs []string
+
 	// AggregateTypes filters by aggregate type (empty = all types)
 	AggregateTypes []string
 

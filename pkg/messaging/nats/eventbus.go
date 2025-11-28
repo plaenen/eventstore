@@ -40,6 +40,15 @@ type Config struct {
 
 	// MaxBytes is the maximum bytes the stream can store
 	MaxBytes int64
+
+	// User is the NATS username (optional)
+	User string
+
+	// Password is the NATS password (optional)
+	Password string
+
+	// SkipStreamCreation skips ensuring the stream exists (useful for restricted users)
+	SkipStreamCreation bool
 }
 
 // DefaultConfig returns sensible defaults for NATS event bus.
@@ -55,8 +64,14 @@ func DefaultConfig() Config {
 
 // NewEventBus creates a new NATS-based event bus.
 func NewEventBus(config Config) (*EventBus, error) {
+	// Connect options
+	opts := []nats.Option{}
+	if config.User != "" {
+		opts = append(opts, nats.UserInfo(config.User, config.Password))
+	}
+
 	// Connect to NATS
-	nc, err := nats.Connect(config.URL)
+	nc, err := nats.Connect(config.URL, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to NATS: %w", err)
 	}
@@ -76,9 +91,11 @@ func NewEventBus(config Config) (*EventBus, error) {
 	}
 
 	// Create or update stream
-	if err := bus.ensureStream(config); err != nil {
-		nc.Close()
-		return nil, fmt.Errorf("failed to ensure stream: %w", err)
+	if !config.SkipStreamCreation {
+		if err := bus.ensureStream(config); err != nil {
+			nc.Close()
+			return nil, fmt.Errorf("failed to ensure stream: %w", err)
+		}
 	}
 
 	return bus, nil
@@ -147,8 +164,13 @@ func (b *EventBus) Publish(events []*eventsourcing.Event) error {
 			return fmt.Errorf("failed to serialize event %s: %w", event.ID, err)
 		}
 
-		// Determine subject based on aggregate type and event type
-		subject := fmt.Sprintf("events.%s.%s", event.AggregateType, event.EventType)
+		// Determine subject based on tenant, aggregate type and event type
+		// Format: events.{tenant}.{aggregate}.{event}
+		tenantID := event.Metadata.TenantID
+		if tenantID == "" {
+			tenantID = "default"
+		}
+		subject := fmt.Sprintf("events.%s.%s.%s", tenantID, event.AggregateType, event.EventType)
 
 		// Publish to JetStream with event ID as message ID (deduplication)
 		_, err = b.js.Publish(subject, eventJSON, nats.MsgId(event.ID))
@@ -193,7 +215,7 @@ func (b *EventBus) Subscribe(
 		AckPolicy:         nats.AckExplicitPolicy,
 		AckWait:           30 * time.Second,
 		MaxDeliver:        10,
-		MaxAckPending:     1, // Only 1 unacked message at a time across ALL instances (maintains ordering)
+		MaxAckPending:     1,              // Only 1 unacked message at a time across ALL instances (maintains ordering)
 		InactiveThreshold: 24 * time.Hour, // Prevent auto-deletion
 		FilterSubject:     subject,
 	}
@@ -209,47 +231,66 @@ func (b *EventBus) Subscribe(
 		if err := b.validateSequence(config.StartSequence); err != nil {
 			return nil, fmt.Errorf("invalid start sequence: %w", err)
 		}
-	} else {
-		// StartSequence == 0 means deliver new messages only
-		consumerConfig.DeliverPolicy = nats.DeliverNewPolicy
 	}
 
-	// Try to create consumer, or update/recreate if it already exists
-	_, err := b.js.AddConsumer(b.streamName, consumerConfig)
+	// Check if consumer already exists
+	existing, err := b.js.ConsumerInfo(b.streamName, consumerName)
 	if err != nil {
-		// Check if consumer already exists (check error message since there's no specific error type)
-		errMsg := err.Error()
-		if strings.Contains(errMsg, "already exists") || strings.Contains(errMsg, "already in use") {
-			// Consumer exists - check if we need to recreate it due to immutable field changes
-			existing, infoErr := b.js.ConsumerInfo(b.streamName, consumerName)
-			if infoErr != nil {
-				return nil, fmt.Errorf("failed to get existing consumer info for %s: %w", consumerName, infoErr)
+		// If error is not "consumer not found", return error
+		if !strings.Contains(err.Error(), "consumer not found") {
+			// It might be that the stream doesn't exist yet (shouldn't happen due to ensureStream)
+			// or some other error. Try to create it anyway if it's just not found.
+			// But for now, let's assume if it errors it might not exist.
+			return nil, fmt.Errorf("failed to get consumer info for %s: %w", consumerName, err)
+		}
+		// If consumer not found, existing remains nil, and we proceed to create it.
+		existing = nil
+	}
+
+	if existing != nil {
+		// Consumer exists - check if we need to recreate it
+		// Check if immutable fields changed (DeliverPolicy, FilterSubject)
+		needsRecreate := existing.Config.DeliverPolicy != consumerConfig.DeliverPolicy ||
+			existing.Config.FilterSubject != consumerConfig.FilterSubject
+
+		if needsRecreate {
+			fmt.Printf("[DEBUG] Recreating consumer %s. Old subject: %s, New subject: %s\n",
+				consumerName, existing.Config.FilterSubject, consumerConfig.FilterSubject)
+
+			// Must delete and recreate consumer due to immutable field change
+			if delErr := b.js.DeleteConsumer(b.streamName, consumerName); delErr != nil {
+				return nil, fmt.Errorf("failed to delete consumer %s for recreation: %w", consumerName, delErr)
 			}
 
-			// Check if DeliverPolicy changed (immutable field)
-			// Note: Other immutable fields include FilterSubject, but we don't change that
-			needsRecreate := existing.Config.DeliverPolicy != consumerConfig.DeliverPolicy
-
-			if needsRecreate {
-				// Must delete and recreate consumer due to immutable field change
-				if delErr := b.js.DeleteConsumer(b.streamName, consumerName); delErr != nil {
-					return nil, fmt.Errorf("failed to delete consumer %s for recreation: %w", consumerName, delErr)
-				}
-
-				// Recreate with new configuration
-				_, err = b.js.AddConsumer(b.streamName, consumerConfig)
-				if err != nil {
-					return nil, fmt.Errorf("failed to recreate consumer %s: %w", consumerName, err)
-				}
-			} else {
-				// Safe to update (only mutable fields changed)
-				_, err = b.js.UpdateConsumer(b.streamName, consumerConfig)
-				if err != nil {
-					return nil, fmt.Errorf("failed to update existing consumer %s: %w", consumerName, err)
-				}
-			}
+			// Reset existing to nil so we create it below
+			existing = nil
 		} else {
+			// Safe to update (only mutable fields changed)
+			_, err = b.js.UpdateConsumer(b.streamName, consumerConfig)
+			if err != nil {
+				return nil, fmt.Errorf("failed to update existing consumer %s: %w", consumerName, err)
+			}
+			// Updated successfully
+		}
+	}
+
+	// Create consumer if it doesn't exist (or was deleted above)
+	if existing == nil {
+		fmt.Printf("[DEBUG] Creating consumer %s with FilterSubject: '%s'\n", consumerName, consumerConfig.FilterSubject)
+		_, err := b.js.AddConsumer(b.streamName, consumerConfig)
+		if err != nil {
 			return nil, fmt.Errorf("failed to create consumer %s: %w", consumerName, err)
+		}
+	}
+
+	fmt.Printf("[DEBUG] Subscribing to %s with consumer %s (Subject: %s)\n", subject, consumerName, consumerConfig.FilterSubject)
+
+	// Check what the server has
+	info, _ := b.js.ConsumerInfo(b.streamName, consumerName)
+	if info != nil {
+		fmt.Printf("[DEBUG] Server has FilterSubject: '%s'\n", info.Config.FilterSubject)
+		if info.Config.FilterSubject != subject {
+			fmt.Printf("[DEBUG] MISMATCH! '%s' != '%s'\n", info.Config.FilterSubject, subject)
 		}
 	}
 
@@ -257,42 +298,42 @@ func (b *EventBus) Subscribe(
 	sub, err := b.js.Subscribe(
 		subject,
 		func(msg *nats.Msg) {
-		// Deserialize event
-		event, err := b.deserializeEvent(msg.Data)
-		if err != nil {
-			// Log error and nack
-			msg.Nak()
-			return
-		}
+			// Deserialize event
+			event, err := b.deserializeEvent(msg.Data)
+			if err != nil {
+				// Log error and nack
+				msg.Nak()
+				return
+			}
 
-		// Get NATS metadata
-		meta, err := msg.Metadata()
-		if err != nil {
-			// Metadata unavailable (shouldn't happen with JetStream)
-			msg.Nak()
-			return
-		}
+			// Get NATS metadata
+			meta, err := msg.Metadata()
+			if err != nil {
+				// Metadata unavailable (shouldn't happen with JetStream)
+				msg.Nak()
+				return
+			}
 
-		// Create event envelope with NATS metadata
-		envelope := &eventsourcing.EventEnvelope{
-			Event: *event,
-			NATSMetadata: &eventsourcing.NATSMetadata{
-				StreamSequence:   meta.Sequence.Stream,
-				ConsumerSequence: meta.Sequence.Consumer,
-				Timestamp:        meta.Timestamp,
-				NumDelivered:     meta.NumDelivered,
-			},
-		}
+			// Create event envelope with NATS metadata
+			envelope := &eventsourcing.EventEnvelope{
+				Event: *event,
+				NATSMetadata: &eventsourcing.NATSMetadata{
+					StreamSequence:   meta.Sequence.Stream,
+					ConsumerSequence: meta.Sequence.Consumer,
+					Timestamp:        meta.Timestamp,
+					NumDelivered:     meta.NumDelivered,
+				},
+			}
 
-		// Call handler
-		if err := handler(envelope); err != nil {
-			// Handler failed, nack for retry
-			msg.Nak()
-			return
-		}
+			// Call handler
+			if err := handler(envelope); err != nil {
+				// Handler failed, nack for retry
+				msg.Nak()
+				return
+			}
 
-		// Handler succeeded, ack
-		msg.Ack()
+			// Handler succeeded, ack
+			msg.Ack()
 		},
 		nats.Bind(b.streamName, consumerName),
 		nats.ManualAck(),
@@ -339,20 +380,28 @@ func (b *EventBus) validateSequence(sequence uint64) error {
 
 // buildSubject builds a NATS subject from an event filter.
 func (b *EventBus) buildSubject(filter eventsourcing.EventFilter) string {
-	if len(filter.AggregateTypes) == 0 && len(filter.EventTypes) == 0 {
-		return "events.>" // All events
+	// Default to wildcard for all parts if empty
+	tenant := "*"
+	aggregate := "*"
+	event := ">"
+
+	// If specific tenants are requested
+	if len(filter.TenantIDs) == 1 {
+		tenant = filter.TenantIDs[0]
 	}
 
-	if len(filter.AggregateTypes) == 1 && len(filter.EventTypes) == 0 {
-		return fmt.Sprintf("events.%s.>", filter.AggregateTypes[0])
+	// If specific aggregates are requested
+	if len(filter.AggregateTypes) == 1 {
+		aggregate = filter.AggregateTypes[0]
 	}
 
-	if len(filter.AggregateTypes) == 1 && len(filter.EventTypes) == 1 {
-		return fmt.Sprintf("events.%s.%s", filter.AggregateTypes[0], filter.EventTypes[0])
+	// If specific events are requested
+	if len(filter.EventTypes) == 1 {
+		event = filter.EventTypes[0]
 	}
 
-	// For complex filters, subscribe to all and filter in handler
-	return "events.>"
+	// Construct subject: events.{tenant}.{aggregate}.{event}
+	return fmt.Sprintf("events.%s.%s.%s", tenant, aggregate, event)
 }
 
 // serializeEvent serializes an event to JSON.

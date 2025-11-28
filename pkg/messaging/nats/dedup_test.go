@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
-	natsserver "github.com/plaenen/eventstore/pkg/infrastructure/nats"
+	natsserver "github.com/plaenen/eventstore/pkg/embeddednats"
 )
 
 // TestNATSDeduplicationRaw tests NATS JetStream deduplication directly

@@ -8,8 +8,8 @@ import (
 	"log/slog"
 	"time"
 
+	nats "github.com/plaenen/eventstore/pkg/embeddednats"
 	natseventbus "github.com/plaenen/eventstore/pkg/messaging/nats"
-	"github.com/plaenen/eventstore/pkg/infrastructure/nats"
 	"github.com/plaenen/eventstore/pkg/observability"
 	"github.com/plaenen/eventstore/pkg/runner"
 	"go.opentelemetry.io/otel/attribute"
