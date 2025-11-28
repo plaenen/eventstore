@@ -1,4 +1,4 @@
-package nats
+package embeddednats
 
 import (
 	"fmt"
@@ -116,6 +116,23 @@ func WithServerName(name string) Option {
 	}
 }
 
+// WithMonitoring enables the HTTP monitoring endpoint on the specified port.
+// Useful for Prometheus exporters or direct monitoring.
+func WithMonitoring(port int) Option {
+	return func(opts *server.Options) {
+		opts.HTTPPort = port
+	}
+}
+
+// WithJetStreamLimits sets the maximum memory and storage usage for JetStream.
+// maxMemory and maxStore are in bytes. Use -1 for unlimited (default).
+func WithJetStreamLimits(maxMemory, maxStore int64) Option {
+	return func(opts *server.Options) {
+		opts.JetStreamMaxMemory = maxMemory
+		opts.JetStreamMaxStore = maxStore
+	}
+}
+
 // WithTLSConfig configures TLS for the NATS server.
 // This enables encrypted connections to the server.
 //
@@ -174,6 +191,14 @@ func WithTLS(certFile, keyFile, caFile string) Option {
 func WithMutualTLS(certFile, keyFile, caFile string) Option {
 	tlsConfig := tls.MutualTLSConfig(certFile, keyFile, caFile)
 	return WithTLSConfig(tlsConfig)
+}
+
+// WithUsers configures the NATS server with a list of users and their permissions.
+// This is used for testing authentication and authorization.
+func WithUsers(users []*server.User) Option {
+	return func(opts *server.Options) {
+		opts.Users = users
+	}
 }
 
 // StartEmbeddedServer starts an embedded NATS server with JetStream enabled.
@@ -235,6 +260,17 @@ func (e *EmbeddedServer) Server() *server.Server {
 // URL returns the connection URL for the embedded server.
 func (e *EmbeddedServer) URL() string {
 	return e.url
+}
+
+// Health checks if the server is ready for connections.
+func (e *EmbeddedServer) Health() error {
+	if e.server == nil {
+		return fmt.Errorf("server not initialized")
+	}
+	if !e.server.ReadyForConnections(100 * time.Millisecond) {
+		return fmt.Errorf("server not ready for connections")
+	}
+	return nil
 }
 
 // Shutdown stops the embedded server gracefully with a timeout.

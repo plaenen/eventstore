@@ -7,7 +7,7 @@ import (
 	"time"
 
 	natsclient "github.com/nats-io/nats.go"
-	infranatsnats "github.com/plaenen/eventstore/pkg/infrastructure/nats"
+	infranatsnats "github.com/plaenen/eventstore/pkg/embeddednats"
 	"github.com/plaenen/eventstore/pkg/runner"
 	"github.com/plaenen/eventstore/pkg/runtime/embeddednats"
 )

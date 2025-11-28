@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/plaenen/eventstore/pkg/infrastructure/nats"
+	nats "github.com/plaenen/eventstore/pkg/embeddednats"
 	"github.com/plaenen/eventstore/pkg/observability"
 	"github.com/plaenen/eventstore/pkg/runner"
 	"go.opentelemetry.io/otel/attribute"

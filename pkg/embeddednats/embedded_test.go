@@ -1,4 +1,4 @@
-package nats
+package embeddednats
 
 import (
 	"sync"
@@ -127,7 +127,6 @@ func TestEmbeddedServer_StartAndShutdown(t *testing.T) {
 	})
 }
 
-
 func TestConcurrentShutdowns(t *testing.T) {
 	t.Run("concurrent shutdown calls don't panic", func(t *testing.T) {
 		srv, err := StartEmbeddedServer()
@@ -219,4 +218,3 @@ func BenchmarkEmbeddedServer_Shutdown(b *testing.B) {
 		srv.Shutdown()
 	}
 }
-
