@@ -95,9 +95,9 @@ func main() {
 		),
 	)
 
-	r := runner.New(
+	r := runner.New[any](
 		[]runner.Service{natsService},
-		runner.WithLogger(logger),
+		runner.WithLogger[any](logger),
 	)
 
 	runCtx, cancel := context.WithCancel(ctx)

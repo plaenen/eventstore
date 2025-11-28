@@ -32,21 +32,21 @@ type HealthChecker interface {
 
 // ConfigurableService is an optional interface that services can implement
 // to receive configuration updates at runtime.
-type ConfigurableService interface {
+type ConfigurableService[T any] interface {
 	Service
 
 	// UpdateConfig is called when configuration changes.
 	// The service should apply the new configuration without restarting.
 	// Return an error if the configuration cannot be applied.
-	UpdateConfig(ctx context.Context, config interface{}) error
+	UpdateConfig(ctx context.Context, config T) error
 }
 
 // ConfigValidator is an optional interface that services can implement
 // to validate configuration before it's applied.
-type ConfigValidator interface {
-	ConfigurableService
+type ConfigValidator[T any] interface {
+	ConfigurableService[T]
 
 	// ValidateConfig validates configuration without applying it.
 	// Return an error if the configuration is invalid.
-	ValidateConfig(config interface{}) error
+	ValidateConfig(config T) error
 }

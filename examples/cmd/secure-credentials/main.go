@@ -160,9 +160,9 @@ func main() {
 		),
 	)
 
-	runnerInstance := runner.New(
+	runnerInstance := runner.New[any](
 		[]runner.Service{natsService},
-		runner.WithLogger(runner.NewNoopLogger()),
+		runner.WithLogger[any](runner.NewNoopLogger()),
 	)
 
 	errCh := make(chan error, 1)

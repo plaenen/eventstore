@@ -80,11 +80,11 @@ func main() {
 	// 2. Create Runner with Service
 	fmt.Println("2️⃣  Creating runner with the service...")
 
-	r := runner.New(
+	r := runner.New[any](
 		[]runner.Service{natsService},
-		runner.WithLogger(logger),
-		runner.WithShutdownTimeout(10*time.Second),
-		runner.WithStartupTimeout(30*time.Second),
+		runner.WithLogger[any](logger),
+		runner.WithShutdownTimeout[any](10*time.Second),
+		runner.WithStartupTimeout[any](30*time.Second),
 	)
 
 	fmt.Println("   ✅ Runner configured")
