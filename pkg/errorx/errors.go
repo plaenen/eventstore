@@ -3,6 +3,8 @@ package errorx
 import (
 	"errors"
 	"fmt"
+	"io"
+	"runtime"
 )
 
 // Error Classification:
@@ -332,4 +334,96 @@ func Wrapf(err error, format string, args ...interface{}) error {
 	}
 	message := fmt.Sprintf(format, args...)
 	return fmt.Errorf("%s: %w", message, err)
+}
+
+// Join returns an error that wraps the given errors.
+// Any nil error values are discarded.
+// Join returns nil if errs contains no non-nil values.
+// The error formats as the concatenation of the strings obtained
+// by calling the Error method of each element of errs, with a newline
+// between each string.
+func Join(errs ...error) error {
+	return errors.Join(errs...)
+}
+
+// ============================================================================
+// Stack Traces
+// ============================================================================
+
+// withStack annotates an error with a stack trace.
+type withStack struct {
+	error
+	*stack
+}
+
+func (w *withStack) Unwrap() error { return w.error }
+
+func (w *withStack) Format(s fmt.State, verb rune) {
+	switch verb {
+	case 'v':
+		if s.Flag('+') {
+			fmt.Fprintf(s, "%+v", w.error)
+			w.stack.Format(s, verb)
+			return
+		}
+		fallthrough
+	case 's':
+		io.WriteString(s, w.error.Error())
+	case 'q':
+		fmt.Fprintf(s, "%q", w.error.Error())
+	}
+}
+
+// WithStack annotates err with a stack trace at the point WithStack was called.
+// If err is nil, WithStack returns nil.
+func WithStack(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &withStack{
+		err,
+		callers(),
+	}
+}
+
+// stack represents a stack of program counters.
+type stack []uintptr
+
+func callers() *stack {
+	const depth = 32
+	var pcs [depth]uintptr
+	n := runtime.Callers(3, pcs[:])
+	var st stack = pcs[0:n]
+	return &st
+}
+
+func (s *stack) Format(st fmt.State, verb rune) {
+	switch verb {
+	case 'v':
+		switch {
+		case st.Flag('+'):
+			for _, pc := range *s {
+				f := runtime.FuncForPC(pc)
+				fmt.Fprintf(st, "\n%+v", f.Name())
+				file, line := f.FileLine(pc)
+				fmt.Fprintf(st, "\n\t%s:%d", file, line)
+			}
+		}
+	}
+}
+
+// StackTrace returns the stack trace for an error if it has one.
+// It searches the error chain for an error that implements the StackTrace interface.
+func StackTrace(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	// Check if it's our withStack type directly or wrapped
+	var stackErr *withStack
+	if errors.As(err, &stackErr) {
+		return fmt.Sprintf("%+v", stackErr.stack)
+	}
+
+	return ""
 }

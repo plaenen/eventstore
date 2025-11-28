@@ -139,6 +139,42 @@ if errorx.IsRetryable(err) {
 }
 ```
 
+### Stack Traces
+
+Annotate errors with stack traces for debugging system failures.
+
+```go
+func WithStack(err error) error
+func StackTrace(err error) string
+
+// Usage
+if err := db.Query(); err != nil {
+    // Add stack trace at the point of error
+    return errorx.WithStack(err)
+}
+
+// Print stack trace
+fmt.Printf("%+v", err)
+```
+
+### Multi-Errors
+
+Combine multiple errors into a single error.
+
+```go
+func Join(errs ...error) error
+
+// Usage
+var errs []error
+if err := doSomething(); err != nil {
+    errs = append(errs, err)
+}
+if err := doSomethingElse(); err != nil {
+    errs = append(errs, err)
+}
+return errorx.Join(errs...)
+```
+
 ## Structured Error Types
 
 For errors that need additional context, use structured error types.
@@ -480,4 +516,12 @@ Error encountered
 
    // Avoid
    if err == errorx.ErrNotFound { }
+   ```
+
+7. **Add Stack Traces at System Boundaries**
+   When a system error occurs (e.g., DB failure), add a stack trace before returning it up the stack.
+   ```go
+   if err != nil {
+       return errorx.WithStack(err)
+   }
    ```
