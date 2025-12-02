@@ -12,6 +12,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io/fs"
 
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
 	"github.com/plaenen/eventstore/pkg/eventsourcing/store/sqlite"
@@ -31,14 +32,8 @@ func NewMyCustomProjectionSQLiteBuilder(name string, db *sql.DB, checkpointStore
 }
 
 // WithMigrations registers a migrations directory
-func (b *MyCustomProjectionSQLiteBuilder) WithMigrations(migrationsFS interface{}, path string) *MyCustomProjectionSQLiteBuilder {
-	// We use interface{} for fs to avoid importing io/fs if not needed, but sqlite builder expects fs.FS
-	// Let's assume user passes fs.FS
-	if fs, ok := migrationsFS.(interface {
-		Open(string) (interface{}, error)
-	}); ok {
-		b.builder.WithMigrations(fs, path)
-	}
+func (b *MyCustomProjectionSQLiteBuilder) WithMigrations(migrationsFS fs.FS, path string) *MyCustomProjectionSQLiteBuilder {
+	b.builder.WithMigrations(migrationsFS, path)
 	return b
 }
 

@@ -13,7 +13,6 @@ import (
 	"fmt"
 
 	"github.com/plaenen/eventstore/pkg/eventsourcing"
-	"github.com/plaenen/eventstore/pkg/eventsourcing/store"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -66,5 +65,39 @@ func (b *MyCustomProjectionBuilder) OnReset(resetFunc func(context.Context) erro
 
 // Build creates the projection
 func (b *MyCustomProjectionBuilder) Build() eventsourcing.Projection {
-	return eventsourcing.NewProjection(b.name, b.handlers, b.resetFunc)
+	return &MyCustomProjectionProjection{
+		name:      b.name,
+		handlers:  b.handlers,
+		resetFunc: b.resetFunc,
+	}
+}
+
+// MyCustomProjectionProjection implements eventsourcing.Projection with type-safe handlers
+type MyCustomProjectionProjection struct {
+	name      string
+	handlers  map[string]func(context.Context, *eventsourcing.EventEnvelope) error
+	resetFunc func(context.Context) error
+}
+
+// Name returns the projection name
+func (p *MyCustomProjectionProjection) Name() string {
+	return p.name
+}
+
+// Handle dispatches events to registered typed handlers
+func (p *MyCustomProjectionProjection) Handle(ctx context.Context, envelope *eventsourcing.EventEnvelope) error {
+	handler, exists := p.handlers[envelope.EventType]
+	if !exists {
+		// No handler registered for this event type - skip it
+		return nil
+	}
+	return handler(ctx, envelope)
+}
+
+// Reset resets the projection state
+func (p *MyCustomProjectionProjection) Reset(ctx context.Context) error {
+	if p.resetFunc == nil {
+		return nil // No reset function registered
+	}
+	return p.resetFunc(ctx)
 }
