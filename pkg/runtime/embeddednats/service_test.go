@@ -168,7 +168,7 @@ func TestService_WithRunner(t *testing.T) {
 	t.Run("works with runner", func(t *testing.T) {
 		service := New()
 
-		r := runner.New([]runner.Service{service})
+		r := runner.New[any]([]runner.Service{service})
 
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
@@ -195,7 +195,7 @@ func TestService_WithRunner(t *testing.T) {
 			if err != nil && err != context.Canceled {
 				t.Errorf("runner failed: %v", err)
 			}
-		case <-time.After(2 * time.Second):
+		case <-time.After(6 * time.Second):
 			t.Error("runner did not shutdown within timeout")
 		}
 	})

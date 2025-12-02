@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package eventsourcing.projections.v1;
+
+option go_package = "github.com/plaenen/eventstore/examples/proto/projections/v1;projectionsv1";
+
+import "eventsourcing/options.proto";
+import "account/domain/v1/account.proto";
+import "subscription/v1/events.proto";
+
+message MyCustomProjection {
+  option (eventsourcing.projection) = true;
+  option (eventsourcing.projection_events) = "account.domain.v1.AccountOpenedEvent";
+  option (eventsourcing.projection_events) = "subscription.v1.SubscriptionCreatedEvent";
+}

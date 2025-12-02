@@ -233,6 +233,22 @@ var file_eventsourcing_options_proto_extTypes = []protoimpl.ExtensionInfo{
 		Tag:           "bytes,50004,opt,name=event",
 		Filename:      "eventsourcing/options.proto",
 	},
+	{
+		ExtendedType:  (*descriptorpb.MessageOptions)(nil),
+		ExtensionType: (*bool)(nil),
+		Field:         50005,
+		Name:          "eventsourcing.projection",
+		Tag:           "varint,50005,opt,name=projection",
+		Filename:      "eventsourcing/options.proto",
+	},
+	{
+		ExtendedType:  (*descriptorpb.MessageOptions)(nil),
+		ExtensionType: ([]string)(nil),
+		Field:         50006,
+		Name:          "eventsourcing.projection_events",
+		Tag:           "bytes,50006,rep,name=projection_events",
+		Filename:      "eventsourcing/options.proto",
+	},
 }
 
 // Extension fields to descriptorpb.ServiceOptions.
@@ -247,6 +263,10 @@ var (
 	E_AggregateRoot = &file_eventsourcing_options_proto_extTypes[1]
 	// optional eventsourcing.EventOptions event = 50004;
 	E_Event = &file_eventsourcing_options_proto_extTypes[2]
+	// optional bool projection = 50005;
+	E_Projection = &file_eventsourcing_options_proto_extTypes[3]
+	// repeated string projection_events = 50006;
+	E_ProjectionEvents = &file_eventsourcing_options_proto_extTypes[4]
 )
 
 var File_eventsourcing_options_proto protoreflect.FileDescriptor
@@ -265,7 +285,11 @@ const file_eventsourcing_options_proto_rawDesc = "" +
 	"\x0eaggregate_name\x18\x01 \x01(\tR\raggregateName:Z\n" +
 	"\aservice\x12\x1f.google.protobuf.ServiceOptions\x18҆\x03 \x01(\v2\x1d.eventsourcing.ServiceOptionsR\aservice:m\n" +
 	"\x0eaggregate_root\x12\x1f.google.protobuf.MessageOptions\x18ӆ\x03 \x01(\v2#.eventsourcing.AggregateRootOptionsR\raggregateRoot:T\n" +
-	"\x05event\x12\x1f.google.protobuf.MessageOptions\x18Ԇ\x03 \x01(\v2\x1b.eventsourcing.EventOptionsR\x05eventB1Z/github.com/plaenen/eventstore/pkg/eventsourcingb\x06proto3"
+	"\x05event\x12\x1f.google.protobuf.MessageOptions\x18Ԇ\x03 \x01(\v2\x1b.eventsourcing.EventOptionsR\x05event:A\n" +
+	"\n" +
+	"projection\x12\x1f.google.protobuf.MessageOptions\x18Ն\x03 \x01(\bR\n" +
+	"projection:N\n" +
+	"\x11projection_events\x12\x1f.google.protobuf.MessageOptions\x18ֆ\x03 \x03(\tR\x10projectionEventsB1Z/github.com/plaenen/eventstore/pkg/eventsourcingb\x06proto3"
 
 var (
 	file_eventsourcing_options_proto_rawDescOnce sync.Once
@@ -291,13 +315,15 @@ var file_eventsourcing_options_proto_depIdxs = []int32{
 	3, // 0: eventsourcing.service:extendee -> google.protobuf.ServiceOptions
 	4, // 1: eventsourcing.aggregate_root:extendee -> google.protobuf.MessageOptions
 	4, // 2: eventsourcing.event:extendee -> google.protobuf.MessageOptions
-	0, // 3: eventsourcing.service:type_name -> eventsourcing.ServiceOptions
-	1, // 4: eventsourcing.aggregate_root:type_name -> eventsourcing.AggregateRootOptions
-	2, // 5: eventsourcing.event:type_name -> eventsourcing.EventOptions
-	6, // [6:6] is the sub-list for method output_type
-	6, // [6:6] is the sub-list for method input_type
-	3, // [3:6] is the sub-list for extension type_name
-	0, // [0:3] is the sub-list for extension extendee
+	4, // 3: eventsourcing.projection:extendee -> google.protobuf.MessageOptions
+	4, // 4: eventsourcing.projection_events:extendee -> google.protobuf.MessageOptions
+	0, // 5: eventsourcing.service:type_name -> eventsourcing.ServiceOptions
+	1, // 6: eventsourcing.aggregate_root:type_name -> eventsourcing.AggregateRootOptions
+	2, // 7: eventsourcing.event:type_name -> eventsourcing.EventOptions
+	8, // [8:8] is the sub-list for method output_type
+	8, // [8:8] is the sub-list for method input_type
+	5, // [5:8] is the sub-list for extension type_name
+	0, // [0:5] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
 }
 
@@ -313,7 +339,7 @@ func file_eventsourcing_options_proto_init() {
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_eventsourcing_options_proto_rawDesc), len(file_eventsourcing_options_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   3,
-			NumExtensions: 3,
+			NumExtensions: 5,
 			NumServices:   0,
 		},
 		GoTypes:           file_eventsourcing_options_proto_goTypes,

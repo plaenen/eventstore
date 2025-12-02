@@ -75,8 +75,9 @@ extend google.protobuf.ServiceOptions {
   ServiceOptions service = 50002;
 }
 
-// Extend message options
 extend google.protobuf.MessageOptions {
   AggregateRootOptions aggregate_root = 50003;
   EventOptions event = 50004;
+  bool projection = 50005;
+  repeated string projection_events = 50006;
 }

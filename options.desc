@@ -1,0 +1,19 @@
+
+�
+eventsourcing/options.protoeventsourcing google/protobuf/descriptor.proto"�
+ServiceOptions%
+aggregate_name (	RaggregateName4
+aggregate_root_message (	RaggregateRootMessage+
+aggregate_handler (RaggregateHandler"N
+AggregateRootOptions
+id_field (	RidField
+	type_name (	RtypeName"5
+EventOptions%
+aggregate_name (	RaggregateName:Z
+service.google.protobuf.ServiceOptions҆ (2.eventsourcing.ServiceOptionsRservice:m
+aggregate_root.google.protobuf.MessageOptionsӆ (2#.eventsourcing.AggregateRootOptionsRaggregateRoot:T
+event.google.protobuf.MessageOptionsԆ (2.eventsourcing.EventOptionsRevent:A
+
+projection.google.protobuf.MessageOptionsՆ (R
+projection:N
+projection_events.google.protobuf.MessageOptionsֆ (	RprojectionEventsB1Z/github.com/plaenen/eventstore/pkg/eventsourcingbproto3
