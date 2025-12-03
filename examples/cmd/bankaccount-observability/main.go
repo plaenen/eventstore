@@ -171,9 +171,9 @@ func main() {
 
 	// 4. Create Repository and Handler
 	fmt.Println("4️⃣  Creating repository and handler...")
-	appliers := domain.NewAccountAppliers()
-	repo := accountdomainv1.NewAccountRepository(eventStore, func(id string) *accountdomainv1.AccountAggregate {
-		return accountdomainv1.NewAccount(id, appliers)
+
+	repo := accountdomainv1.NewAccountRepository[*accountdomainv1.AccountAggregateBase](eventStore, func(id string) *accountdomainv1.AccountAggregateBase {
+		return domain.NewAccount(id)
 	})
 	handler := handlers.NewAccountHandler(repo)
 	fmt.Println("   ✅ Ready")

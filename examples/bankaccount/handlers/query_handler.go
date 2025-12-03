@@ -11,11 +11,11 @@ import (
 
 // AccountQueryHandler implements the AccountQueryServiceHandler interface
 type AccountQueryHandler struct {
-	repo *accountdomainv1.AccountRepository
+	repo *accountdomainv1.AccountRepository[*accountdomainv1.AccountAggregateBase]
 }
 
 // NewAccountQueryHandler creates a new query handler
-func NewAccountQueryHandler(repo *accountdomainv1.AccountRepository) *AccountQueryHandler {
+func NewAccountQueryHandler(repo *accountdomainv1.AccountRepository[*accountdomainv1.AccountAggregateBase]) *AccountQueryHandler {
 	return &AccountQueryHandler{
 		repo: repo,
 	}
@@ -35,10 +35,10 @@ func (h *AccountQueryHandler) GetAccount(ctx context.Context, query *accountserv
 
 	// Convert to view
 	return &accountservicev1.AccountView{
-		AccountId: agg.AccountId,
-		OwnerName: agg.OwnerName,
-		Balance:   agg.Balance,
-		Status:    agg.Status,
+		AccountId: agg.State.AccountId,
+		OwnerName: agg.State.OwnerName,
+		Balance:   agg.State.Balance,
+		Status:    agg.State.Status,
 		Version:   agg.Version(),
 	}, nil
 }
@@ -66,8 +66,8 @@ func (h *AccountQueryHandler) GetAccountBalance(ctx context.Context, query *acco
 	}
 
 	return &accountservicev1.BalanceView{
-		AccountId: agg.AccountId,
-		Balance:   agg.Balance,
+		AccountId: agg.State.AccountId,
+		Balance:   agg.State.Balance,
 		Version:   agg.Version(),
 	}, nil
 }

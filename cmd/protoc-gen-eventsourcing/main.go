@@ -176,25 +176,25 @@ func generateAggregates(g *protogen.GeneratedFile, file *protogen.File) {
 	aggregates := findAggregates(file)
 
 	for _, agg := range aggregates {
-		aggregateType := agg.TypeName + "Aggregate"
+		aggregateType := agg.TypeName + "AggregateBase"
 
-		g.P("// ", aggregateType, " is the aggregate root for ", agg.TypeName, " domain")
+		g.P("// ", aggregateType, " is the base aggregate root for ", agg.TypeName, " domain")
 		g.P("// It embeds the proto-defined ", agg.MessageName, " for state management")
 		g.P("type ", aggregateType, " struct {")
 		g.P("	eventsourcing.AggregateRoot")
-		g.P("	*", agg.MessageName)
+		g.P("	State *", agg.MessageName)
 		g.P("	applier ", agg.TypeName, "EventApplier  // Injected dependency for event application")
 		g.P("}")
 		g.P()
 
 		// Constructor
-		g.P("// New", agg.TypeName, " creates a new ", aggregateType, " instance")
+		g.P("// New", agg.TypeName, "AggregateBase creates a new ", aggregateType, " instance")
 		g.P("// The applier parameter defines how events modify aggregate state")
 		g.P("// Implement ", agg.TypeName, "EventApplier in your domain layer")
-		g.P("func New", agg.TypeName, "(id string, applier ", agg.TypeName, "EventApplier) *", aggregateType, " {")
+		g.P("func New", agg.TypeName, "AggregateBase(id string, applier ", agg.TypeName, "EventApplier) *", aggregateType, " {")
 		g.P("	return &", aggregateType, "{")
 		g.P("		AggregateRoot: eventsourcing.NewAggregateRoot(id, \"", agg.TypeName, "\"),")
-		g.P("		", agg.MessageName, ": &", agg.MessageName, "{},")
+		g.P("		State:         &", agg.MessageName, "{},")
 		g.P("		applier:       applier,")
 		g.P("	}")
 		g.P("}")
@@ -203,37 +203,31 @@ func generateAggregates(g *protogen.GeneratedFile, file *protogen.File) {
 		// Snapshot support
 		g.P("// MarshalSnapshot serializes the aggregate state for snapshots")
 		g.P("func (a *", aggregateType, ") MarshalSnapshot() ([]byte, error) {")
-		g.P("	return proto.Marshal(a.", agg.MessageName, ")")
+		g.P("	return proto.Marshal(a.State)")
 		g.P("}")
 		g.P()
 
+		// UnmarshalSnapshot deserializes the aggregate state from snapshots
 		g.P("// UnmarshalSnapshot deserializes the aggregate state from snapshots")
 		g.P("func (a *", aggregateType, ") UnmarshalSnapshot(data []byte) error {")
-		g.P("	a.", agg.MessageName, " = &", agg.MessageName, "{}")
-		g.P("	if err := proto.Unmarshal(data, a.", agg.MessageName, "); err != nil {")
+		g.P("	a.State = &", agg.MessageName, "{}")
+		g.P("	if err := proto.Unmarshal(data, a.State); err != nil {")
 		g.P("		return err")
 		g.P("	}")
 		g.P()
 		g.P("	// UPCAST HOOK: If aggregate implements SnapshotUpcaster, upgrade old snapshots")
 		g.P("	if upcaster, ok := interface{}(a).(eventsourcing.SnapshotUpcaster); ok {")
-		g.P("		a.", agg.MessageName, " = upcaster.UpcastSnapshot(a.", agg.MessageName, ").(*", agg.MessageName, ")")
+		g.P("		a.State = upcaster.UpcastSnapshot(a.State).(*", agg.MessageName, ")")
 		g.P("	}")
 		g.P()
 		g.P("	return nil")
 		g.P("}")
 		g.P()
 
-		// Helper to get ID from aggregate
-		g.P("// ID returns the aggregate ID")
-		g.P("func (a *", aggregateType, ") ID() string {")
-		g.P("	return a.", agg.IDFieldGo)
-		g.P("}")
-		g.P()
-
-		// Helper to get Type
-		g.P("// Type returns the aggregate type name")
-		g.P("func (a *", aggregateType, ") Type() string {")
-		g.P("	return \"", agg.TypeName, "\"")
+		// GetState helper for interface satisfaction
+		g.P("// GetState returns the internal state")
+		g.P("func (a *", aggregateType, ") GetState() *", agg.MessageName, " {")
+		g.P("	return a.State")
 		g.P("}")
 		g.P()
 	}
@@ -249,7 +243,7 @@ func generateEventAppliers(g *protogen.GeneratedFile, file *protogen.File, gen *
 	aggregates := findAggregates(file)
 
 	for _, agg := range aggregates {
-		aggregateType := agg.TypeName + "Aggregate"
+		aggregateType := agg.TypeName + "AggregateBase"
 		events := findEventsForAggregate(gen, agg.TypeName)
 
 		if len(events) == 0 {
@@ -312,14 +306,14 @@ func generateEventAppliers(g *protogen.GeneratedFile, file *protogen.File, gen *
 			methodName := "Apply" + evt.MessageName
 			g.P("// func (ap *AccountAppliers) ", methodName, "(agg *accountv1.", aggregateType, ", e *accountv1.", evt.MessageName, ") error {")
 			g.P("//     // Update aggregate state")
-			g.P("//     agg.", agg.IDFieldGo, " = e.", agg.IDFieldGo)
+			g.P("//     agg.State.", agg.IDFieldGo, " = e.", agg.IDFieldGo)
 			g.P("//     return nil")
 			g.P("// }")
 			g.P("//")
 		}
 		g.P("// Then inject when creating aggregates:")
 		g.P("//   applier := &domain.AccountAppliers{}")
-		g.P("//   agg := accountv1.New", agg.TypeName, "(id, applier)")
+		g.P("//   agg := accountv1.New", agg.TypeName, "AggregateBase(id, applier)")
 		g.P("// ============================================================================")
 		g.P()
 
@@ -395,11 +389,17 @@ func generateEventAppliers(g *protogen.GeneratedFile, file *protogen.File, gen *
 			g.P("// ", methodName, " applies the ", evt.MessageName, " with type safety and optional configuration")
 			g.P("// This eliminates the need to manually specify event type strings")
 			g.P("func (a *", aggregateType, ") ", methodName, "(event *", evt.MessageName, ", opts ...ApplyEventOption) error {")
+			g.P("	// 1. Apply to in-memory state immediately")
+			g.P("	if err := a.ApplyEvent(event); err != nil {")
+			g.P("		return err")
+			g.P("	}")
+			g.P()
 			g.P("	options := &ApplyEventOptions{}")
 			g.P("	for _, opt := range opts {")
 			g.P("		opt(options)")
 			g.P("	}")
 			g.P()
+			g.P("	// 2. Record for persistence")
 			g.P("	if len(options.Constraints) > 0 {")
 			g.P("		return a.AggregateRoot.ApplyChangeWithConstraints(")
 			g.P("			event,")
@@ -427,24 +427,33 @@ func generateRepository(g *protogen.GeneratedFile, file *protogen.File, gen *pro
 	aggregates := findAggregates(file)
 
 	for _, agg := range aggregates {
-		aggregateType := agg.TypeName + "Aggregate"
+		aggregateType := agg.TypeName + "Aggregate" // Interface name
 		repoName := agg.TypeName + "Repository"
 
+		// Generate Aggregate Interface
+		g.P("// ", aggregateType, " defines the interface for ", agg.TypeName, " aggregates")
+		g.P("// Your domain aggregate must implement this interface")
+		g.P("type ", aggregateType, " interface {")
+		g.P("	eventsourcing.Aggregate")
+		g.P("	GetState() *", agg.MessageName)
+		g.P("}")
+		g.P()
+
 		g.P("// ", repoName, " provides persistence for ", agg.TypeName)
-		g.P("type ", repoName, " struct {")
-		g.P("	*store.BaseRepository[*", aggregateType, "]")
+		g.P("type ", repoName, "[T ", aggregateType, "] struct {")
+		g.P("	*store.BaseRepository[T]")
 		g.P("}")
 		g.P()
 
 		g.P("// New", repoName, " creates a new repository")
 		g.P("// factory: function to create new aggregate instances (should inject appliers)")
-		g.P("func New", repoName, "(eventStore eventsourcing.EventStore, factory func(string) *", aggregateType, ") *", repoName, " {")
-		g.P("	return &", repoName, "{")
-		g.P("		BaseRepository: store.NewRepository[*", aggregateType, "](")
+		g.P("func New", repoName, "[T ", aggregateType, "](eventStore eventsourcing.EventStore, factory func(string) T) *", repoName, "[T] {")
+		g.P("	return &", repoName, "[T]{")
+		g.P("		BaseRepository: store.NewRepository[T](")
 		g.P("			eventStore,")
 		g.P(`			"`, agg.TypeName, `",`)
 		g.P("			factory,")
-		g.P("			func(agg *", aggregateType, ", event *eventsourcing.Event) error {")
+		g.P("			func(agg T, event *eventsourcing.Event) error {")
 		g.P("				// Deserialize and apply event")
 		g.P("				msg, err := deserializeEvent", agg.TypeName, "(event)")
 		g.P("				if err != nil {")

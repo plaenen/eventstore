@@ -15,11 +15,11 @@ import (
 
 // AccountCommandHandler implements the AccountCommandServiceHandler interface
 type AccountCommandHandler struct {
-	repo *accountdomainv1.AccountRepository
+	repo *accountdomainv1.AccountRepository[*accountdomainv1.AccountAggregateBase]
 }
 
 // NewAccountCommandHandler creates a new command handler
-func NewAccountCommandHandler(repo *accountdomainv1.AccountRepository) *AccountCommandHandler {
+func NewAccountCommandHandler(repo *accountdomainv1.AccountRepository[*accountdomainv1.AccountAggregateBase]) *AccountCommandHandler {
 	return &AccountCommandHandler{
 		repo: repo,
 	}
@@ -90,14 +90,14 @@ func (h *AccountCommandHandler) Deposit(ctx context.Context, cmd *accountservice
 	var response *accountservicev1.DepositResponse
 
 	// Retry on concurrency conflicts
-	err = h.repo.RetryOnConflict(cmd.AccountId, 3, func(agg *accountdomainv1.AccountAggregate) error {
+	err = h.repo.RetryOnConflict(cmd.AccountId, 3, func(agg *accountdomainv1.AccountAggregateBase) error {
 		// Check account is open
-		if agg.Status != accountdomainv1.AccountStatus_ACCOUNT_STATUS_OPEN {
+		if agg.State.Status != accountdomainv1.AccountStatus_ACCOUNT_STATUS_OPEN {
 			return fmt.Errorf("ACCOUNT_CLOSED: Cannot deposit to a closed account")
 		}
 
 		// Calculate new balance
-		currentBalance, _ := decimal.NewFromString(agg.Balance)
+		currentBalance, _ := decimal.NewFromString(agg.State.Balance)
 		newBalance := currentBalance.Add(amount)
 
 		// Create and emit event using type-safe helper
@@ -149,14 +149,14 @@ func (h *AccountCommandHandler) Withdraw(ctx context.Context, cmd *accountservic
 	var response *accountservicev1.WithdrawResponse
 
 	// Retry on concurrency conflicts
-	err = h.repo.RetryOnConflict(cmd.AccountId, 3, func(agg *accountdomainv1.AccountAggregate) error {
+	err = h.repo.RetryOnConflict(cmd.AccountId, 3, func(agg *accountdomainv1.AccountAggregateBase) error {
 		// Check account is open
-		if agg.Status != accountdomainv1.AccountStatus_ACCOUNT_STATUS_OPEN {
+		if agg.State.Status != accountdomainv1.AccountStatus_ACCOUNT_STATUS_OPEN {
 			return fmt.Errorf("ACCOUNT_CLOSED: Cannot withdraw from a closed account")
 		}
 
 		// Calculate new balance
-		currentBalance, _ := decimal.NewFromString(agg.Balance)
+		currentBalance, _ := decimal.NewFromString(agg.State.Balance)
 		newBalance := currentBalance.Sub(amount)
 
 		// Check for sufficient funds
@@ -212,14 +212,14 @@ func (h *AccountCommandHandler) CloseAccount(ctx context.Context, cmd *accountse
 	}
 
 	// Check account is not already closed
-	if agg.Status == accountdomainv1.AccountStatus_ACCOUNT_STATUS_CLOSED {
+	if agg.State.Status == accountdomainv1.AccountStatus_ACCOUNT_STATUS_CLOSED {
 		return nil, protocol.ErrConflict("Account is already closed")
 	}
 
 	// Create and emit event using type-safe helper
 	event := &accountdomainv1.AccountClosedEvent{
 		AccountId:    cmd.AccountId,
-		FinalBalance: agg.Balance,
+		FinalBalance: agg.State.Balance,
 		Timestamp:    time.Now().Unix(),
 	}
 
@@ -240,7 +240,7 @@ func (h *AccountCommandHandler) CloseAccount(ctx context.Context, cmd *accountse
 	}
 
 	return &accountservicev1.CloseAccountResponse{
-		FinalBalance: agg.Balance,
+		FinalBalance: agg.State.Balance,
 		Version:      agg.Version(),
 	}, nil
 }

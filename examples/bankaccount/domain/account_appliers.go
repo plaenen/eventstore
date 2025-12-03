@@ -19,53 +19,53 @@ func NewAccountAppliers() *AccountAppliers {
 
 // NewAccount creates a new Account aggregate with appliers already injected.
 // This is the domain-level factory that handles dependency injection.
-func NewAccount(id string) *accountdomainv1.AccountAggregate {
-	return accountdomainv1.NewAccount(id, NewAccountAppliers())
+func NewAccount(id string) *accountdomainv1.AccountAggregateBase {
+	return accountdomainv1.NewAccountAggregateBase(id, NewAccountAppliers())
 }
 
 // ApplyAccountOpenedEvent applies the AccountOpenedEvent to the aggregate state.
-func (ap *AccountAppliers) ApplyAccountOpenedEvent(agg *accountdomainv1.AccountAggregate, e *accountdomainv1.AccountOpenedEvent) error {
-	agg.AccountId = e.AccountId
-	agg.OwnerName = e.OwnerName
+func (ap *AccountAppliers) ApplyAccountOpenedEvent(agg *accountdomainv1.AccountAggregateBase, e *accountdomainv1.AccountOpenedEvent) error {
+	agg.State.AccountId = e.AccountId
+	agg.State.OwnerName = e.OwnerName
 
 	// Handle both old and new field names for backward compatibility
 	if e.OpeningAmount != "" {
-		agg.Balance = e.OpeningAmount // V2: New field
+		agg.State.Balance = e.OpeningAmount // V2: New field
 	} else {
-		agg.Balance = e.InitialBalance // V1: Old field (deprecated)
+		agg.State.Balance = e.InitialBalance // V1: Old field (deprecated)
 	}
 
 	// Handle new fields with defaults
 	if e.Currency != "" {
-		agg.Currency = e.Currency
+		agg.State.Currency = e.Currency
 	} else {
-		agg.Currency = "USD" // Default currency
+		agg.State.Currency = "USD" // Default currency
 	}
 
 	if e.CreatedAt != 0 {
-		agg.CreatedAt = e.CreatedAt
+		agg.State.CreatedAt = e.CreatedAt
 	} else {
-		agg.CreatedAt = e.Timestamp // Use timestamp as fallback
+		agg.State.CreatedAt = e.Timestamp // Use timestamp as fallback
 	}
 
-	agg.Status = accountdomainv1.AccountStatus_ACCOUNT_STATUS_OPEN
+	agg.State.Status = accountdomainv1.AccountStatus_ACCOUNT_STATUS_OPEN
 	return nil
 }
 
 // ApplyMoneyDepositedEvent applies the MoneyDepositedEvent to the aggregate state.
-func (ap *AccountAppliers) ApplyMoneyDepositedEvent(agg *accountdomainv1.AccountAggregate, e *accountdomainv1.MoneyDepositedEvent) error {
-	agg.Balance = e.NewBalance
+func (ap *AccountAppliers) ApplyMoneyDepositedEvent(agg *accountdomainv1.AccountAggregateBase, e *accountdomainv1.MoneyDepositedEvent) error {
+	agg.State.Balance = e.NewBalance
 	return nil
 }
 
 // ApplyMoneyWithdrawnEvent applies the MoneyWithdrawnEvent to the aggregate state.
-func (ap *AccountAppliers) ApplyMoneyWithdrawnEvent(agg *accountdomainv1.AccountAggregate, e *accountdomainv1.MoneyWithdrawnEvent) error {
-	agg.Balance = e.NewBalance
+func (ap *AccountAppliers) ApplyMoneyWithdrawnEvent(agg *accountdomainv1.AccountAggregateBase, e *accountdomainv1.MoneyWithdrawnEvent) error {
+	agg.State.Balance = e.NewBalance
 	return nil
 }
 
 // ApplyAccountClosedEvent applies the AccountClosedEvent to the aggregate state.
-func (ap *AccountAppliers) ApplyAccountClosedEvent(agg *accountdomainv1.AccountAggregate, e *accountdomainv1.AccountClosedEvent) error {
-	agg.Status = accountdomainv1.AccountStatus_ACCOUNT_STATUS_CLOSED
+func (ap *AccountAppliers) ApplyAccountClosedEvent(agg *accountdomainv1.AccountAggregateBase, e *accountdomainv1.AccountClosedEvent) error {
+	agg.State.Status = accountdomainv1.AccountStatus_ACCOUNT_STATUS_CLOSED
 	return nil
 }
