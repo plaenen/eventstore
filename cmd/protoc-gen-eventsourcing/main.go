@@ -664,9 +664,6 @@ func findEventsForAggregate(gen *protogen.Plugin, aggregateName string) []*Event
 	// Search across ALL files in the plugin (supports events in separate proto files)
 	for _, file := range gen.Files {
 		for _, msg := range file.Messages {
-			if !strings.HasSuffix(string(msg.Desc.Name()), "Event") {
-				continue
-			}
 
 			// Check for event option (required in new design)
 			opts := getEventOptions(msg)

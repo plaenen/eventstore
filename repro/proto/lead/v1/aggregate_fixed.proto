@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package lead.v1;
+
+import "eventsourcing/options.proto";
+
+option go_package = "github.com/plaenen/eventstore/repro/pb/lead/v1;leadv1";
+
+message LeadFixed {
+  option (eventsourcing.aggregate_root) = {
+    id_field: "id"
+  };
+  string id = 1;
+}
+
+message LeadCapturedEvent {
+  option (eventsourcing.event) = {aggregate_name: "LeadFixed"};
+  string id = 1;
+}

@@ -1,0 +1,83 @@
+syntax = "proto3";
+
+package eventsourcing;
+
+option go_package = "github.com/plaenen/eventstore/pkg/eventsourcing";
+
+import "google/protobuf/descriptor.proto";
+
+// =============================================================================
+// EVENT SOURCING PROTO OPTIONS
+// =============================================================================
+// Design principles:
+// 1. Single source of truth - service declares aggregate and root message
+// 2. Convention over configuration - minimal required annotations
+// 3. Developer control - business logic (constraints, field mapping) in code, not proto
+// 4. Tooling enablement - explicit event marking for projection SDK generation
+//
+// Event Evolution Strategy:
+// - Use protobuf field evolution (deprecated fields, new optional fields)
+// - Developer implements ApplyEvent methods handling all field variations
+// - Optional: Developer can provide custom EventUpcaster for complex transformations
+// - See: https://protobuf.dev/programming-guides/proto3/#updating
+// =============================================================================
+
+// ServiceOptions declares which aggregate a service operates on
+// This is the PRIMARY source of truth for aggregate association
+message ServiceOptions {
+  // REQUIRED: The name of the aggregate this service operates on
+  // Example: "Account", "Order", "User"
+  string aggregate_name = 1;
+
+  // REQUIRED: The proto message name that represents the aggregate root
+  // Example: "Account" (refers to message Account)
+  // This allows the generator to find the aggregate root message even across multiple files
+  string aggregate_root_message = 2;
+
+  // OPTIONAL: Generate handler interface for aggregate methods with functional options
+  // When true, generates {AggregateName}Handler interface with MethodOption support
+  // Example: AccountHandler interface with methods receiving ...eventsourcing.MethodOption
+  // This enables passing authentication, tracing, and other cross-cutting concerns
+  // Default: false
+  bool aggregate_handler = 3;
+}
+
+// AggregateRootOptions marks a proto message as an aggregate root
+// This is the ONLY option needed on the aggregate state message
+message AggregateRootOptions {
+  // REQUIRED: The field name that contains the aggregate ID
+  // Example: "account_id", "order_id", "user_id"
+  string id_field = 1;
+
+  // OPTIONAL: Override the aggregate type name (defaults to message name)
+  // Usually not needed unless message name differs from aggregate name
+  string type_name = 2;
+}
+
+// EventOptions marks a message as an event and associates it with an aggregate
+// This is REQUIRED for all events to enable:
+// - Projection SDK generation
+// - Event catalog/discovery
+// - Cross-file event organization
+//
+// Field Mapping & State Updates:
+// - NO field_mapping option - developer handles in ApplyEvent implementation
+// - NO applies_to_state option - developer controls which fields update
+// - More flexible, explicit, and testable
+message EventOptions {
+  // REQUIRED: The aggregate this event belongs to
+  // Must match the aggregate_name from the service
+  string aggregate_name = 1;
+}
+
+// Extend service options
+extend google.protobuf.ServiceOptions {
+  ServiceOptions service = 50002;
+}
+
+extend google.protobuf.MessageOptions {
+  AggregateRootOptions aggregate_root = 50003;
+  EventOptions event = 50004;
+  bool projection = 50005;
+  repeated string projection_events = 50006;
+}
