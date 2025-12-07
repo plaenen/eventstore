@@ -32,7 +32,7 @@ import (
 	"github.com/plaenen/eventstore/pkg/cqrs"
 )
 
-var version = "0.0.1"
+var version = "0.0.2"
 
 func main() {
 	protogen.Options{}.Run(func(gen *protogen.Plugin) error {

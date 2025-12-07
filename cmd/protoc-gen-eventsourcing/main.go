@@ -57,7 +57,7 @@ import (
 	eventsourcing "github.com/plaenen/eventstore/pkg/eventsourcing"
 )
 
-var version = "v0.1.0"
+var version = "v0.1.1"
 
 func main() {
 	protogen.Options{}.Run(func(gen *protogen.Plugin) error {
